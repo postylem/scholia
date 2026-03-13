@@ -266,7 +266,11 @@ class ScholiaServer:
         site = web.TCPSite(runner, self.host, self.port)
         await site.start()
 
-        url = f"http://{self.host}:{self.port}"
+        if self.port == 0:
+            actual_port = site._server.sockets[0].getsockname()[1]
+        else:
+            actual_port = self.port
+        url = f"http://{self.host}:{actual_port}"
         print(f"Scholia serving {self.doc_path.name} at {url}")
         print("Press Ctrl+C to stop")
 

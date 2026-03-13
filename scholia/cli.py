@@ -87,6 +87,31 @@ def cmd_comment(args):
     print(f"Comment created: {ann['id']}")
 
 
+def _load_instruction_template() -> str:
+    """Load the bundled agent instruction template."""
+    template_path = Path(__file__).parent / "data" / "agent-instructions.md"
+    return template_path.read_text(encoding="utf-8")
+
+
+def cmd_init(args):
+    if args.glob:
+        base = Path.home()
+    else:
+        base = Path.cwd()
+
+    path = base / (args.path or ".claude/skills/scholia.md")
+
+    if path.exists() and not args.force:
+        print(f"Already exists: {path}")
+        print("Use --force to overwrite.")
+        return
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_load_instruction_template(), encoding="utf-8")
+    print(f"Wrote {path}")
+    print("This file teaches your AI coding agent how to use scholia.")
+
+
 def cmd_resolve(args):
     resolved = resolve(args.doc, args.id)
     print(f"Resolved {resolved['id']}")
@@ -132,6 +157,14 @@ def main():
     p_comment.add_argument("text", help="Comment text")
     p_comment.add_argument("--creator", default=None)
 
+    # init
+    p_init = sub.add_parser("init", help="Write AI agent instructions into project")
+    p_init.add_argument("path", nargs="?", default=None,
+                         help="Target path (default: .claude/skills/scholia.md)")
+    p_init.add_argument("--force", action="store_true", help="Overwrite existing file")
+    p_init.add_argument("--global", dest="glob", action="store_true",
+                         help="Write to home directory instead of project")
+
     # resolve
     p_resolve = sub.add_parser("resolve", help="Resolve a thread")
     p_resolve.add_argument("doc", help="Markdown document path")
@@ -149,6 +182,7 @@ def main():
         "reply": cmd_reply,
         "list": cmd_list,
         "comment": cmd_comment,
+        "init": cmd_init,
         "resolve": cmd_resolve,
         "unresolve": cmd_unresolve,
     }
