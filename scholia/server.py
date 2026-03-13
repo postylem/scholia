@@ -33,6 +33,7 @@ def _check_pandoc():
 
 _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
+_FRAGMENT_TEMPLATE = str(Path(__file__).parent / "pandoc-fragment.html")
 
 
 def _has_footnotes(md_text: str) -> bool:
@@ -54,6 +55,7 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         "--metadata=link-citations:true",
         "--from=markdown+tex_math_single_backslash",
         "--to=html5",
+        "--template=" + _FRAGMENT_TEMPLATE,
     ]
     if sidenotes:
         cmd.extend(["--lua-filter", _SIDENOTE_FILTER])
@@ -99,6 +101,7 @@ async def build_page(doc_path: Path, template: str, sidenotes: bool = False) -> 
     page = template.replace("{{TITLE}}", title)
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_default_creator()))
+    page = page.replace("{{DOC_PATH}}", json.dumps(str(doc_path)))
     page = page.replace("{{SIDENOTES_ENABLED}}", json.dumps(sidenotes))
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments))
     page = page.replace("{{STATE_JSON}}", json.dumps(state))

@@ -37,6 +37,8 @@
   --s-highlight: rgba(255, 220, 100, 0.35);
   --s-highlight-active: rgba(255, 200, 50, 0.55);
   --s-border: #ddd;
+  --s-header-open: #f5f3eb;
+  --s-header-resolved: #f0f0f0;
   --s-radius: 4px;
   --s-body: et-book, Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif;
   --s-mono: Consolas, 'Liberation Mono', Menlo, Monaco, Courier, monospace;
@@ -60,6 +62,8 @@ body.scholia-dark {
   --s-highlight: rgba(255, 220, 100, 0.15);
   --s-highlight-active: rgba(255, 200, 50, 0.3);
   --s-border: #444;
+  --s-header-open: #35332a;
+  --s-header-resolved: #303030;
   --s-mono: Consolas, 'Liberation Mono', Menlo, Monaco, Courier, monospace;
 }
 
@@ -119,6 +123,27 @@ body {
 #scholia-doc h1, #scholia-doc h2, #scholia-doc h3,
 #scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
   width: 60%;
+}
+
+/* ── Title block ───────────────────────────────────── */
+
+#title-block-header {
+  width: 100% !important;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--s-border);
+}
+#title-block-header .title { margin-bottom: 0.2rem; }
+#title-block-header .subtitle {
+  font-size: 1.2rem;
+  color: var(--s-text-dim);
+  margin-top: 0;
+}
+#title-block-header .author,
+#title-block-header .date {
+  font-size: 0.9rem;
+  color: var(--s-text-dim);
+  margin: 0.15rem 0;
 }
 
 /* ── Sidenotes (Tufte-style) ────────────────────────── */
@@ -391,6 +416,11 @@ input.margin-toggle { display: none; }
   gap: 0.4rem;
   cursor: pointer;
   user-select: none;
+  background: var(--s-header-open);
+  border-radius: var(--s-radius) var(--s-radius) 0 0;
+}
+.scholia-card.scholia-resolved .scholia-card-header {
+  background: var(--s-header-resolved);
 }
 
 .scholia-anchor-text {
@@ -400,7 +430,6 @@ input.margin-toggle { display: none; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-style: italic;
 }
 
 .scholia-unread-dot {
@@ -421,7 +450,6 @@ input.margin-toggle { display: none; }
 
 .scholia-thread {
   padding: 0 0.65rem 0.65rem;
-  border-top: 1px solid var(--s-border);
   max-height: 60vh;
   overflow-y: auto;
 }
@@ -650,18 +678,23 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
 
 /* ── Orphan cards ──────────────────────────────────── */
 
+.scholia-orphan-divider {
+  border: none;
+  border-top: 1px solid var(--s-border);
+  height: 0;
+}
+
 .scholia-card.scholia-orphan { opacity: 0.6; }
-.scholia-card.scholia-orphan .scholia-anchor-text { text-decoration: line-through; }
 .scholia-orphan-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.1em;
-  height: 1.1em;
+  width: 1.3em;
+  height: 1.3em;
   border-radius: 50%;
-  border: 1px solid var(--s-unread);
-  color: var(--s-unread);
-  font-size: 0.6rem;
+  border: 1px solid var(--s-text-dim);
+  color: var(--s-text-dim);
+  font-size: 0.65rem;
   font-weight: 700;
   cursor: help;
   flex-shrink: 0;
@@ -675,20 +708,6 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
 
 /* ── Resolve button ────────────────────────────────── */
 
-.scholia-btn-resolve, .scholia-btn-unresolve {
-  font-size: 0.65rem;
-  color: var(--s-text-dim);
-  background: none;
-  border: 1px solid var(--s-border);
-  border-radius: 3px;
-  padding: 0.1rem 0.4rem;
-  cursor: pointer;
-  font-family: var(--s-sans);
-}
-.scholia-btn-resolve:hover, .scholia-btn-unresolve:hover {
-  border-color: var(--s-accent);
-  color: var(--s-accent);
-}
 
 /* (mark-unread is now handled by .scholia-read-toggle) */
 
@@ -707,10 +726,15 @@ mark.scholia-highlight.scholia-pulse {
 
 .scholia-reply-input {
   display: flex;
+  align-items: stretch;
   gap: 0.3rem;
-  margin-top: 0.4rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid #eee;
+  margin: 0 -0.65rem -0.65rem;
+  padding: 0.4rem 0.65rem 0.65rem;
+  background: var(--s-header-open);
+  border-radius: 0 0 var(--s-radius) var(--s-radius);
+}
+.scholia-card.scholia-resolved .scholia-reply-input {
+  background: var(--s-header-resolved);
 }
 .scholia-reply-input textarea {
   flex: 1;
@@ -729,15 +753,31 @@ mark.scholia-highlight.scholia-pulse {
   border-color: var(--s-accent);
 }
 .scholia-reply-input button {
-  align-self: flex-end;
   background: var(--s-accent);
   color: #fff;
   border: none;
   border-radius: 3px;
-  padding: 0.25rem 0.5rem;
+  padding: 0 0.5rem;
   font-size: 0.72rem;
   cursor: pointer;
   font-family: var(--s-sans);
+}
+
+.scholia-btn-resolve {
+  background: none !important;
+  color: var(--s-text-dim) !important;
+  border: 1px solid var(--s-border) !important;
+}
+.scholia-btn-resolve:hover {
+  border-color: var(--s-accent) !important;
+  color: var(--s-accent) !important;
+}
+.scholia-btn-unresolve {
+  background: var(--s-text-dim) !important;
+  color: var(--s-card) !important;
+}
+.scholia-btn-unresolve:hover {
+  background: var(--s-text) !important;
 }
 
 /* ── Resolved card styling ─────────────────────────── */
@@ -785,7 +825,7 @@ mark.scholia-highlight.scholia-pulse {
   font-size: 0.7rem;
   color: var(--s-text-dim);
   text-align: center;
-  z-index: 10;
+  z-index: 99;
   cursor: pointer;
   display: none;
 }
@@ -793,7 +833,6 @@ mark.scholia-highlight.scholia-pulse {
   color: var(--s-accent);
 }
 .scholia-offscreen-above {
-  top: 0;
   border-bottom: 1px solid var(--s-border);
 }
 .scholia-offscreen-below {
@@ -820,6 +859,24 @@ mark.scholia-highlight.scholia-pulse {
   border-bottom: 1px solid var(--s-border);
   font-family: var(--s-sans);
   font-size: 0.72rem;
+}
+
+.scholia-toolbar-path {
+  margin-right: auto;
+  font-size: 0.72rem;
+  color: var(--s-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scholia-toolbar-brand {
+  font-size: 0.72rem;
+  color: var(--s-text-dim);
+  opacity: 0.5;
+  margin-right: 0.5rem;
+  font-style: italic;
+  letter-spacing: 0.03em;
 }
 
 .scholia-toolbar-btn {

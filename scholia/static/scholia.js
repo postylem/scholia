@@ -79,6 +79,22 @@
   function renderToolbar() {
     toolbarEl.innerHTML = '';
 
+    var docPath = window.__SCHOLIA_DOC_PATH__ || '';
+    var pathLabel = document.createElement('span');
+    pathLabel.className = 'scholia-toolbar-path';
+    // Show parent dir + filename for context without being too long
+    var parts = docPath.replace(/\\/g, '/').split('/');
+    pathLabel.textContent = parts.length > 1
+      ? parts.slice(-2).join('/')
+      : parts[parts.length - 1] || '';
+    pathLabel.title = docPath;
+    toolbarEl.appendChild(pathLabel);
+
+    var brand = document.createElement('span');
+    brand.className = 'scholia-toolbar-brand';
+    brand.textContent = 'scholia';
+    toolbarEl.appendChild(brand);
+
     var themeBtn = document.createElement('button');
     themeBtn.className = 'scholia-toolbar-btn' + (darkMode ? ' active' : '');
     themeBtn.textContent = darkMode ? 'Dark' : 'Light';
@@ -444,6 +460,7 @@
     var anchorSpan = document.createElement('span');
     anchorSpan.className = 'scholia-anchor-text';
     anchorSpan.textContent = '\u201c' + anchorText.slice(0, 50) + (anchorText.length > 50 ? '\u2026' : '') + '\u201d';
+    if (anchorText.length > 50) anchorSpan.title = anchorText;
     header.appendChild(anchorSpan);
 
     // Orphan icon
@@ -574,10 +591,7 @@
 
     thread.appendChild(replyRow);
 
-    // Thread footer: resolve/unresolve
-    var footer = document.createElement('div');
-    footer.className = 'scholia-new-comment-actions';
-
+    // Resolve/unresolve button in the reply row
     if (status === 'open') {
       var resolveBtn = document.createElement('button');
       resolveBtn.className = 'scholia-btn-resolve';
@@ -586,7 +600,7 @@
         e.stopPropagation();
         wsSend({ type: 'resolve', annotation_id: ann.id });
       });
-      footer.appendChild(resolveBtn);
+      replyRow.appendChild(resolveBtn);
     } else if (status === 'resolved') {
       var unresolveBtn = document.createElement('button');
       unresolveBtn.className = 'scholia-btn-unresolve';
@@ -595,10 +609,9 @@
         e.stopPropagation();
         wsSend({ type: 'unresolve', annotation_id: ann.id });
       });
-      footer.appendChild(unresolveBtn);
+      replyRow.appendChild(unresolveBtn);
     }
 
-    thread.appendChild(footer);
     card.appendChild(thread);
 
     // Click header to expand/collapse
@@ -699,10 +712,10 @@
           icon.className = 'scholia-orphan-icon';
           icon.textContent = '?';
           icon.title = 'Anchor text not found in document';
-          // Insert after anchor text span
+          // Insert before anchor text span
           var anchorSpan = headerEl.querySelector('.scholia-anchor-text');
-          if (anchorSpan && anchorSpan.nextSibling) {
-            headerEl.insertBefore(icon, anchorSpan.nextSibling);
+          if (anchorSpan) {
+            headerEl.insertBefore(icon, anchorSpan);
           } else {
             headerEl.appendChild(icon);
           }
@@ -871,7 +884,27 @@
       currentY = top + (shouldExpand ? entry.expandedH : entry.collapsedH) + 4;
     }
 
-    // Orphan cards after all positioned ones (respect user overrides)
+    // Remove stale divider if no orphans this render
+    var staleDivider = sidebarEl.querySelector('.scholia-orphan-divider');
+    if (staleDivider && (orphans.length === 0 || positioned.length === 0)) {
+      staleDivider.remove();
+    }
+
+    // Orphan cards after all positioned ones, with divider
+    if (orphans.length > 0 && positioned.length > 0) {
+      currentY += 16;
+      var divider = sidebarEl.querySelector('.scholia-orphan-divider');
+      if (!divider) {
+        divider = document.createElement('div');
+        divider.className = 'scholia-orphan-divider';
+        sidebarEl.appendChild(divider);
+      }
+      divider.style.position = 'absolute';
+      divider.style.left = '0.75rem';
+      divider.style.right = '0.75rem';
+      divider.style.top = currentY + 'px';
+      currentY += divider.offsetHeight + 16;
+    }
     for (var o = 0; o < orphans.length; o++) {
       var oId = orphans[o].dataset.annotationId;
       var oThread = orphans[o].querySelector('.scholia-thread');
@@ -1202,17 +1235,19 @@
     }
     var cards = sidebarEl.querySelectorAll('.scholia-card');
     var viewH = window.innerHeight;
+    var toolbarH = toolbarEl.offsetHeight || 0;
     var above = 0, aboveOrph = 0, below = 0, belowOrph = 0;
 
     for (var i = 0; i < cards.length; i++) {
       var r = cards[i].getBoundingClientRect();
       var isOrph = cards[i].classList.contains('scholia-orphan');
-      if (r.bottom < 0) { above++; if (isOrph) aboveOrph++; }
+      if (r.bottom < toolbarH) { above++; if (isOrph) aboveOrph++; }
       else if (r.top > viewH) { below++; if (isOrph) belowOrph++; }
     }
 
     // Align indicators with sidebar
     var sr = sidebarEl.getBoundingClientRect();
+    aboveIndicator.style.top = toolbarH + 'px';
     aboveIndicator.style.left = sr.left + 'px';
     aboveIndicator.style.width = sr.width + 'px';
     belowIndicator.style.left = sr.left + 'px';
