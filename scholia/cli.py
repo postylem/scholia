@@ -1,14 +1,23 @@
-"""CLI: scholia start/reply/list/comment commands."""
+"""CLI: scholia start/reply/list/comment/resolve/unresolve commands."""
 
 import argparse
 import asyncio
 import sys
+from datetime import datetime
+from pathlib import Path
 
-from scholia.comments import append_comment, append_reply, list_open, load_comments
-from scholia.server import ScholiaServer
+from scholia.comments import (
+    append_comment,
+    append_reply,
+    list_open,
+    load_comments,
+    resolve,
+    unresolve,
+)
 
 
 def cmd_start(args):
+    from scholia.server import ScholiaServer
     server = ScholiaServer(args.doc, host=args.host, port=args.port)
     try:
         asyncio.run(server.start())
@@ -22,10 +31,37 @@ def cmd_reply(args):
 
 
 def cmd_list(args):
-    if args.open:
+    # Parse --since if provided
+    since = None
+    if args.since:
+        try:
+            since = datetime.fromisoformat(args.since)
+        except ValueError:
+            try:
+                since = datetime.strptime(args.since, "%Y-%m-%d")
+            except ValueError:
+                print(f"Error: invalid date format '{args.since}', use YYYY-MM-DD", file=sys.stderr)
+                sys.exit(1)
+
+    # Get comments based on --open/--all flags
+    if args.all or args.since:
+        items = load_comments(args.doc)
+    elif args.open:
         items = list_open(args.doc)
     else:
-        items = load_comments(args.doc)
+        items = list_open(args.doc)
+
+    # Apply --since filter
+    if since:
+        filtered = []
+        for ann in items:
+            ann_time = ann.get("modified") or ann.get("created", "")
+            try:
+                if datetime.fromisoformat(ann_time) >= since:
+                    filtered.append(ann)
+            except (ValueError, TypeError):
+                filtered.append(ann)  # include if we can't parse
+        items = filtered
 
     if not items:
         print("No comments.")
@@ -50,6 +86,16 @@ def cmd_comment(args):
     print(f"Comment created: {ann['id']}")
 
 
+def cmd_resolve(args):
+    resolved = resolve(args.doc, args.id)
+    print(f"Resolved {resolved['id']}")
+
+
+def cmd_unresolve(args):
+    unresolved = unresolve(args.doc, args.id)
+    print(f"Unresolved {unresolved['id']}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="scholia",
@@ -58,7 +104,8 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
 
     # start
-    p_start = sub.add_parser("start", help="Start annotation server")
+    p_start = sub.add_parser("start", help="Start annotation server",
+                                description="Start annotation server")
     p_start.add_argument("doc", help="Markdown document path")
     p_start.add_argument("--host", default="127.0.0.1")
     p_start.add_argument("--port", type=int, default=8088)
@@ -74,6 +121,8 @@ def main():
     p_list = sub.add_parser("list", help="List annotations")
     p_list.add_argument("doc", help="Markdown document path")
     p_list.add_argument("--open", action="store_true", help="Only show open annotations")
+    p_list.add_argument("--all", action="store_true", help="Show all including resolved")
+    p_list.add_argument("--since", help="Show annotations since date (YYYY-MM-DD)")
 
     # comment
     p_comment = sub.add_parser("comment", help="Add a new comment")
@@ -82,6 +131,16 @@ def main():
     p_comment.add_argument("text", help="Comment text")
     p_comment.add_argument("--creator", default="human")
 
+    # resolve
+    p_resolve = sub.add_parser("resolve", help="Resolve a thread")
+    p_resolve.add_argument("doc", help="Markdown document path")
+    p_resolve.add_argument("id", help="Annotation ID")
+
+    # unresolve
+    p_unresolve = sub.add_parser("unresolve", help="Unresolve a thread")
+    p_unresolve.add_argument("doc", help="Markdown document path")
+    p_unresolve.add_argument("id", help="Annotation ID")
+
     args = parser.parse_args()
 
     handlers = {
@@ -89,8 +148,21 @@ def main():
         "reply": cmd_reply,
         "list": cmd_list,
         "comment": cmd_comment,
+        "resolve": cmd_resolve,
+        "unresolve": cmd_unresolve,
     }
-    handlers[args.command](args)
+
+    try:
+        handlers[args.command](args)
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
