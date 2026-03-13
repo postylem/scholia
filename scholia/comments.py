@@ -114,3 +114,47 @@ def append_reply(
 def list_open(doc_path: str | Path) -> list[dict]:
     """List annotations with open status."""
     return [c for c in load_comments(doc_path) if c.get("scholia:status") == "open"]
+
+
+def resolve(doc_path: str | Path, annotation_id: str) -> dict:
+    """Mark an annotation as resolved."""
+    comments = load_comments(doc_path)
+    ann = None
+    for c in comments:
+        if c["id"] == annotation_id:
+            ann = c
+            break
+    if ann is None:
+        raise ValueError(f"Annotation {annotation_id} not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    ann["scholia:status"] = "resolved"
+    ann["scholia:resolvedAt"] = now
+    ann["modified"] = now
+
+    path = annotation_path(doc_path)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ann) + "\n")
+    return ann
+
+
+def unresolve(doc_path: str | Path, annotation_id: str) -> dict:
+    """Mark an annotation as open again."""
+    comments = load_comments(doc_path)
+    ann = None
+    for c in comments:
+        if c["id"] == annotation_id:
+            ann = c
+            break
+    if ann is None:
+        raise ValueError(f"Annotation {annotation_id} not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    ann["scholia:status"] = "open"
+    ann.pop("scholia:resolvedAt", None)
+    ann["modified"] = now
+
+    path = annotation_path(doc_path)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ann) + "\n")
+    return ann
