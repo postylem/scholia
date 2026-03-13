@@ -1,6 +1,10 @@
 # Scholia
 
-Collaborative document annotation for human-AI dialogue. Write in your editor, comment in the browser, review with your AI assistant.
+Write rich text in your editor, review the rendered version with an AI assistant via live comments in the margins on your browser.
+
+Think of marginal annotations scribbled in the margins of manuscripts by medieval scholars. Such [*scholia*](https://en.wikipedia.org/wiki/Scholia) could be clarifications, corrections, and arguments threaded alongside the original text. This is for doing that, but with an AI interlocutor.
+
+![Scholia screenshot](docs/demo_screenshot.png)
 
 ## Prerequisites
 
