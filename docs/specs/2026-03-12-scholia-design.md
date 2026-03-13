@@ -3,6 +3,7 @@
 **Date:** 2026-03-12
 **Status:** Beta v0.1 design
 **Author:** V + Claude
+**Builds on:** NA. First version.
 
 ## 1. Problem
 

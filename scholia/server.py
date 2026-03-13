@@ -26,20 +26,27 @@ def _check_pandoc():
         )
 
 
+_SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
+
+
 def _render_pandoc_sync(doc_path: Path) -> str:
     """Render markdown to HTML fragment using Pandoc (blocking)."""
     result = subprocess.run(
         [
             "pandoc",
             "--katex",
-            "--highlight-style=pygments",
+            "--citeproc",
+            "--section-divs",
+            "--syntax-highlighting=pygments",
+            "--lua-filter", _SIDENOTE_FILTER,
             "--from=markdown+tex_math_single_backslash",
-            "--to=html",
+            "--to=html5",
         ],
         input=doc_path.read_text(encoding="utf-8"),
         capture_output=True,
         text=True,
         check=True,
+        cwd=str(doc_path.parent),  # resolve relative bibliography paths
     )
     return result.stdout
 
