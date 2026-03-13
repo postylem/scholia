@@ -1,5 +1,6 @@
 ---
 title: "Time and Order in Distributed Systems"
+subtitle: "An example document"
 author: V
 date: 2026-03-12
 bibliography: references.bib
@@ -13,7 +14,7 @@ process has its own local notion of time, and these clocks drift.
 
 ## Happens-Before
 
-The *happens-before* relation $\rightarrow$ is a partial order on events:
+The *happens-before* relation $\rightarrow$ is a partial order^[A *partial order* is a binary relation that is reflexive ($a \leq a$), antisymmetric ($a \leq b$ and $b \leq a$ imply $a = b$), and transitive ($a \leq b$ and $b \leq c$ imply $a \leq c$). Unlike a *total* order, not every pair of elements need be comparable.] on events:
 
 - If $a$ and $b$ are events in the same process and $a$ comes before $b$, then
   $a \rightarrow b$.
@@ -21,13 +22,13 @@ The *happens-before* relation $\rightarrow$ is a partial order on events:
   then $a \rightarrow b$.
 - If $a \rightarrow b$ and $b \rightarrow c$, then $a \rightarrow c$.
 
-Events $a$ and $b$ are *concurrent* (written $a \| b$) if neither $a
+Events $a$ and $b$ are *concurrent*^[Two events are *concurrent* when neither causally precedes the other --- there is no chain of messages connecting them. This does not mean they happen "at the same time" in any physical sense; it means the system has no evidence of their relative order.] (written $a \| b$) if neither $a
 \rightarrow b$ nor $b \rightarrow a$. This is not a pathological case --- it is
 the normal state of affairs in any system with more than one node.
 
 ## Logical Clocks
 
-A logical clock $C$ assigns a number $C(a)$ to each event $a$ such that:
+A logical clock^[A *logical clock* is not a clock in the wall-time sense. It is a counter that advances according to protocol rules, producing timestamps that respect causality rather than measuring elapsed time.] $C$ assigns a number $C(a)$ to each event $a$ such that:
 
 $$
 a \rightarrow b \implies C(a) < C(b)
@@ -71,7 +72,7 @@ distributed system, the analogous problem is reasoning about global state when
 message ordering is unstructured.
 
 The solution in both cases is to impose structure: structured control flow for
-sequential programs, and protocols (consensus, total-order broadcast) for
+sequential programs, and protocols (consensus, total-order broadcast^[*Total-order broadcast* is a communication primitive guaranteeing that all processes deliver the same set of messages in the same order. It is equivalent in power to consensus and forms the backbone of state-machine replication.]) for
 distributed systems.
 
 ## Further Reading

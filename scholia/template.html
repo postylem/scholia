@@ -9,12 +9,14 @@
   <link rel="stylesheet" href="/static/scholia.css">
 </head>
 <body>
+  <nav id="scholia-toolbar"></nav>
   <div id="scholia-container">
     <article id="scholia-doc">{{PANDOC_HTML}}</article>
     <aside id="scholia-sidebar"></aside>
   </div>
   <script>
   window.__SCHOLIA_CREATOR__ = {{CREATOR_NAME}};
+  window.__SCHOLIA_SIDENOTES__ = {{SIDENOTES_ENABLED}};
   window.__SCHOLIA_COMMENTS__ = {{COMMENTS_JSON}};
   window.__SCHOLIA_STATE__ = {{STATE_JSON}};
 </script>

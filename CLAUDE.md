@@ -40,6 +40,10 @@ When the human asks you to "look at the scholia" or review comments:
    - If it's minor/acknowledged: reply with a brief acknowledgement
 4. **Check for document changes**: if the human edited the `.md`, review the diff and comment on anything notable
 
+## Configuration
+
+- **`SCHOLIA_USERNAME`** env var sets the human creator name shown in comments. Falls back to system username if unset.
+
 ## Guidelines
 
 - **Never respond to resolved comments.** Resolved threads are closed — the human marked them done. Only work with open (unresolved) threads from `--open`.

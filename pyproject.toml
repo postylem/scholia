@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scholia"
-version = "0.2.0"
+version = "0.2.2"
 description = "Collaborative document annotation for human-AI dialogue"
 requires-python = ">=3.10"
 dependencies = [

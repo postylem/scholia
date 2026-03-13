@@ -2,6 +2,7 @@
 
 import getpass
 import json
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -9,11 +10,11 @@ from pathlib import Path
 
 
 def get_default_creator() -> str:
-    """Return the system username for use as the default human creator name."""
-    try:
-        return getpass.getuser()
-    except Exception:
-        return "human"
+    """Return the human creator name.
+
+    Checks SCHOLIA_USERNAME env var first, falls back to system username.
+    """
+    return os.environ.get("SCHOLIA_USERNAME") or getpass.getuser()
 
 
 def annotation_path(doc_path: str | Path) -> Path:

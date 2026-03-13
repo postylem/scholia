@@ -35,9 +35,13 @@ _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
 
 
-def _render_pandoc_sync(doc_path: Path) -> str:
+def _has_footnotes(md_text: str) -> bool:
+    """Check if markdown contains footnote syntax ([^...] or ^[...])."""
+    return bool(re.search(r"\[\^|\^\[", md_text))
+
+
+def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
     """Render markdown to HTML fragment using Pandoc (blocking)."""
-    # Use document's own CSL if specified in YAML, otherwise default to APA
     md_text = doc_path.read_text(encoding="utf-8")
     has_own_csl = re.search(r"^csl:", md_text, re.MULTILINE) is not None
 
@@ -47,12 +51,12 @@ def _render_pandoc_sync(doc_path: Path) -> str:
         "--citeproc",
         "--section-divs",
         "--syntax-highlighting=pygments",
-        "--lua-filter",
-        _SIDENOTE_FILTER,
         "--metadata=link-citations:true",
         "--from=markdown+tex_math_single_backslash",
         "--to=html5",
     ]
+    if sidenotes:
+        cmd.extend(["--lua-filter", _SIDENOTE_FILTER])
     if not has_own_csl:
         cmd.extend(["--csl", _DEFAULT_CSL])
 
@@ -67,10 +71,10 @@ def _render_pandoc_sync(doc_path: Path) -> str:
     return result.stdout
 
 
-async def render_pandoc(doc_path: Path) -> str:
+async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
     """Render markdown to HTML fragment without blocking the event loop."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _render_pandoc_sync, doc_path)
+    return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
 def _extract_title(markdown_text: str) -> str:
@@ -85,9 +89,9 @@ def _extract_title(markdown_text: str) -> str:
     return "Scholia"
 
 
-async def build_page(doc_path: Path, template: str) -> str:
+async def build_page(doc_path: Path, template: str, sidenotes: bool = False) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
-    html = await render_pandoc(doc_path)
+    html = await render_pandoc(doc_path, sidenotes=sidenotes)
     md_text = doc_path.read_text(encoding="utf-8")
     title = _extract_title(md_text)
     comments = load_comments(doc_path)
@@ -95,6 +99,7 @@ async def build_page(doc_path: Path, template: str) -> str:
     page = template.replace("{{TITLE}}", title)
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_default_creator()))
+    page = page.replace("{{SIDENOTES_ENABLED}}", json.dumps(sidenotes))
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments))
     page = page.replace("{{STATE_JSON}}", json.dumps(state))
     return page
@@ -109,12 +114,22 @@ class _FileChangeHandler(FileSystemEventHandler):
         self.loop = loop
         self.callback = callback
 
-    def on_modified(self, event):
-        changed = Path(event.src_path).resolve()
-        if changed == self.doc_path:
+    def _check_path(self, path: Path):
+        resolved = path.resolve()
+        if resolved == self.doc_path:
             self.loop.call_soon_threadsafe(self.callback, "doc")
-        elif changed == self.scholia_path:
+        elif resolved == self.scholia_path:
             self.loop.call_soon_threadsafe(self.callback, "comments")
+
+    def on_modified(self, event):
+        self._check_path(Path(event.src_path))
+
+    def on_created(self, event):
+        self._check_path(Path(event.src_path))
+
+    def on_moved(self, event):
+        # Atomic writes: temp file renamed over target
+        self._check_path(Path(event.dest_path))
 
 
 class ScholiaServer:
@@ -126,6 +141,9 @@ class ScholiaServer:
         self.host = host
         self.port = port
         self.ws_clients: set[web.WebSocketResponse] = set()
+        # Auto-detect sidenotes: on if doc has footnotes
+        md_text = self.doc_path.read_text(encoding="utf-8")
+        self.sidenotes_enabled = _has_footnotes(md_text)
         self.template = self._load_template()
         self.app = web.Application()
         self._setup_routes()
@@ -143,7 +161,9 @@ class ScholiaServer:
         self.app.router.add_static("/static/", static_dir)
 
     async def _handle_index(self, request):
-        page = await build_page(self.doc_path, self.template)
+        page = await build_page(
+            self.doc_path, self.template, sidenotes=self.sidenotes_enabled
+        )
         return web.Response(text=page, content_type="text/html")
 
     async def _handle_ws(self, request):
@@ -184,6 +204,9 @@ class ScholiaServer:
                 resolve(self.doc_path, msg["annotation_id"])
             elif msg_type == "unresolve":
                 unresolve(self.doc_path, msg["annotation_id"])
+            elif msg_type == "toggle_sidenotes":
+                self.sidenotes_enabled = msg["enabled"]
+                await self._broadcast("doc")
             elif msg_type == "mark_read":
                 mark_read(self.doc_path, msg["annotation_id"])
             elif msg_type == "mark_unread":
@@ -196,8 +219,14 @@ class ScholiaServer:
 
     async def _broadcast(self, msg_type: str):
         if msg_type == "doc":
-            html = await render_pandoc(self.doc_path)
-            payload = json.dumps({"type": "doc_update", "html": html})
+            html = await render_pandoc(
+                self.doc_path, sidenotes=self.sidenotes_enabled
+            )
+            payload = json.dumps({
+                "type": "doc_update",
+                "html": html,
+                "sidenotes": self.sidenotes_enabled,
+            })
         else:
             comments = load_comments(self.doc_path)
             payload = json.dumps({"type": "comments_update", "comments": comments})

@@ -43,6 +43,26 @@
   --s-sans: 'Gill Sans', 'Gill Sans MT', Calibri, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
+/* ── Dark mode ─────────────────────────────────────── */
+
+body.scholia-dark {
+  --s-bg: #1a1a1a;
+  --s-surface: #232323;
+  --s-card: #2a2a2a;
+  --s-card-hover: #333;
+  --s-text: #ccc;
+  --s-text-dim: #888;
+  --s-accent: #7ba7c9;
+  --s-accent-dim: rgba(123, 167, 201, 0.15);
+  --s-human: #6cc76c;
+  --s-ai: #7da8d2;
+  --s-unread: #d55;
+  --s-highlight: rgba(255, 220, 100, 0.15);
+  --s-highlight-active: rgba(255, 200, 50, 0.3);
+  --s-border: #444;
+  --s-mono: Consolas, 'Liberation Mono', Menlo, Monaco, Courier, monospace;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
@@ -372,17 +392,12 @@ input.margin-toggle { display: none; }
   font-style: italic;
 }
 
-.scholia-badge {
-  font-size: 0.6rem;
+.scholia-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: var(--s-unread);
-  color: #fff;
-  padding: 0.1rem 0.4rem;
-  border-radius: 3px;
-  white-space: nowrap;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .scholia-msg-count {
@@ -415,8 +430,41 @@ input.margin-toggle { display: none; }
   margin-bottom: 0.1rem;
 }
 
-.scholia-human .scholia-message-meta { color: var(--s-human); }
-.scholia-ai .scholia-message-meta { color: var(--s-ai); }
+/* Per-user meta colors are set inline via JS userColor() */
+
+/* ── Read/unread toggle on AI messages ────────────── */
+
+.scholia-message-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scholia-read-toggle {
+  font-size: 0.58rem;
+  font-family: var(--s-sans);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--s-text-dim);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.scholia-read-toggle:hover { color: var(--s-accent); }
+.scholia-read-toggle-unread {
+  color: var(--s-unread);
+  font-weight: 700;
+}
+.scholia-ai {
+  background: rgba(74, 111, 165, 0.06);
+  border-radius: 3px;
+  margin-left: -0.3rem;
+  margin-right: -0.3rem;
+  padding-left: 0.3rem;
+  padding-right: 0.3rem;
+}
 
 .scholia-message-body {
   font-size: 0.8rem;
@@ -631,18 +679,7 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   color: var(--s-accent);
 }
 
-/* ── Mark unread button ────────────────────────────── */
-
-.scholia-btn-mark-unread {
-  font-size: 0.6rem;
-  color: var(--s-text-dim);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  font-family: var(--s-sans);
-}
-.scholia-btn-mark-unread:hover { color: var(--s-accent); }
+/* (mark-unread is now handled by .scholia-read-toggle) */
 
 /* ── Anchor pulse animation ────────────────────────── */
 
@@ -782,3 +819,122 @@ mark.scholia-highlight.scholia-pulse {
 .scholia-citation-tooltip a { color: var(--s-accent); }
 .scholia-citation-tooltip .csl-left-margin { font-weight: 600; }
 .scholia-citation-tooltip .csl-right-inline { display: inline; }
+
+/* ── Toolbar ───────────────────────────────────────── */
+
+#scholia-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.75rem;
+  background: var(--s-surface);
+  border-bottom: 1px solid var(--s-border);
+  font-family: var(--s-sans);
+  font-size: 0.72rem;
+}
+
+.scholia-toolbar-btn {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: var(--s-text-dim);
+  font-family: var(--s-sans);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.scholia-toolbar-btn:hover {
+  color: var(--s-text);
+  border-color: var(--s-accent);
+}
+.scholia-toolbar-btn.active {
+  background: var(--s-accent);
+  color: #fff;
+  border-color: var(--s-accent);
+}
+
+/* ── Sidebar hide/show ─────────────────────────────── */
+
+#scholia-container {
+  transition: grid-template-columns 0.3s ease;
+}
+#scholia-sidebar {
+  transition: padding 0.3s ease, opacity 0.3s ease, border-color 0.3s ease;
+}
+#scholia-container.scholia-sidebar-hidden {
+  grid-template-columns: 1fr 0px;
+}
+#scholia-container.scholia-sidebar-hidden #scholia-sidebar {
+  overflow: hidden;
+  padding: 0;
+  opacity: 0;
+  border-left-color: transparent;
+  pointer-events: none;
+}
+
+/* Hide highlights when sidebar is hidden */
+#scholia-container.scholia-sidebar-hidden mark.scholia-highlight {
+  background: transparent !important;
+}
+
+/* ── No-sidenotes: widen content ───────────────────── */
+
+#scholia-doc.scholia-no-sidenotes > p,
+#scholia-doc.scholia-no-sidenotes > ul,
+#scholia-doc.scholia-no-sidenotes > ol,
+#scholia-doc.scholia-no-sidenotes > dl,
+#scholia-doc.scholia-no-sidenotes > blockquote,
+#scholia-doc.scholia-no-sidenotes > pre,
+#scholia-doc.scholia-no-sidenotes > figure,
+#scholia-doc.scholia-no-sidenotes > table,
+#scholia-doc.scholia-no-sidenotes > header,
+#scholia-doc.scholia-no-sidenotes > div.sourceCode,
+#scholia-doc.scholia-no-sidenotes section > p,
+#scholia-doc.scholia-no-sidenotes section > ul,
+#scholia-doc.scholia-no-sidenotes section > ol,
+#scholia-doc.scholia-no-sidenotes section > dl,
+#scholia-doc.scholia-no-sidenotes section > blockquote,
+#scholia-doc.scholia-no-sidenotes section > pre,
+#scholia-doc.scholia-no-sidenotes section > figure,
+#scholia-doc.scholia-no-sidenotes section > table,
+#scholia-doc.scholia-no-sidenotes section > div.sourceCode {
+  width: 90%;
+}
+#scholia-doc.scholia-no-sidenotes h1,
+#scholia-doc.scholia-no-sidenotes h2,
+#scholia-doc.scholia-no-sidenotes h3,
+#scholia-doc.scholia-no-sidenotes h4,
+#scholia-doc.scholia-no-sidenotes h5,
+#scholia-doc.scholia-no-sidenotes h6 {
+  width: 90%;
+}
+#scholia-doc.scholia-no-sidenotes pre {
+  width: 90%;
+}
+
+/* ── Dark mode overrides for hard-coded colors ─────── */
+
+body.scholia-dark .scholia-new-comment textarea,
+body.scholia-dark .scholia-reply-input textarea {
+  background: var(--s-surface);
+  color: var(--s-text);
+}
+body.scholia-dark .scholia-message-body { color: var(--s-text); }
+body.scholia-dark .scholia-message + .scholia-message { border-top-color: var(--s-border); }
+body.scholia-dark .scholia-reply-input { border-top-color: var(--s-border); }
+body.scholia-dark #scholia-doc blockquote { color: var(--s-text-dim); }
+body.scholia-dark .scholia-citation-tooltip {
+  background: var(--s-surface);
+  border-color: var(--s-border);
+}
+body.scholia-dark .scholia-code-copy {
+  background: var(--s-surface);
+}
+body.scholia-dark .scholia-toolbar-btn.active {
+  color: #fff;
+}
+body.scholia-dark .scholia-ai {
+  background: rgba(125, 168, 210, 0.1);
+}

@@ -12,10 +12,15 @@
   var state = window.__SCHOLIA_STATE__ || {};
   var docEl = document.getElementById('scholia-doc');
   var sidebarEl = document.getElementById('scholia-sidebar');
+  var containerEl = document.getElementById('scholia-container');
+  var toolbarEl = document.getElementById('scholia-toolbar');
   var highlights = new Map();   // annotation id → [mark elements]
   var orphanIds = new Set();
   var filterMode = 'open';      // 'open' or 'all'
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
+  var sidebarHidden = false;
+  var darkMode = false;
+  var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
 
   // ── WebSocket ──────────────────────────────────────
 
@@ -26,12 +31,16 @@
     ws.onmessage = function (e) {
       var msg = JSON.parse(e.data);
       if (msg.type === 'doc_update') {
+        if (msg.sidenotes !== undefined) {
+          sidenotesEnabled = msg.sidenotes;
+          docEl.classList.toggle('scholia-no-sidenotes', !sidenotesEnabled);
+          renderToolbar();
+        }
         docEl.innerHTML = msg.html;
         rerenderMath();
         decorateCodeBlocks();
         setupCitationTooltips();
-        reanchorAll();
-        positionCards();
+        if (!sidebarHidden) { reanchorAll(); positionCards(); }
       } else if (msg.type === 'comments_update') {
         comments = msg.comments;
         renderSidebar();
@@ -51,6 +60,68 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(obj));
     }
+  }
+
+  // ── Toolbar ──────────────────────────────────────────
+
+  function renderToolbar() {
+    toolbarEl.innerHTML = '';
+
+    var themeBtn = document.createElement('button');
+    themeBtn.className = 'scholia-toolbar-btn' + (darkMode ? ' active' : '');
+    themeBtn.textContent = darkMode ? 'Dark' : 'Light';
+    themeBtn.title = 'Toggle dark/light mode';
+    themeBtn.addEventListener('click', function () {
+      darkMode = !darkMode;
+      document.body.classList.toggle('scholia-dark', darkMode);
+      renderToolbar();
+    });
+    toolbarEl.appendChild(themeBtn);
+
+    var snBtn = document.createElement('button');
+    snBtn.className = 'scholia-toolbar-btn' + (sidenotesEnabled ? ' active' : '');
+    snBtn.textContent = 'Sidenotes';
+    snBtn.title = 'Toggle sidenote rendering (requires re-render)';
+    snBtn.addEventListener('click', function () {
+      sidenotesEnabled = !sidenotesEnabled;
+      docEl.classList.toggle('scholia-no-sidenotes', !sidenotesEnabled);
+      wsSend({ type: 'toggle_sidenotes', enabled: sidenotesEnabled });
+      renderToolbar();
+    });
+    toolbarEl.appendChild(snBtn);
+
+    var sbBtn = document.createElement('button');
+    sbBtn.className = 'scholia-toolbar-btn' + (!sidebarHidden ? ' active' : '');
+    sbBtn.textContent = sidebarHidden ? 'Show comments' : 'Comments';
+    sbBtn.title = 'Hide/show comment sidebar';
+    sbBtn.addEventListener('click', function () {
+      sidebarHidden = !sidebarHidden;
+      containerEl.classList.toggle('scholia-sidebar-hidden', sidebarHidden);
+      if (sidebarHidden) {
+        // Clear highlights and dismiss any pending form
+        clearAllHighlights();
+        dismissCommentPrompt();
+      } else {
+        reanchorAll();
+        positionCards();
+      }
+      renderToolbar();
+    });
+    toolbarEl.appendChild(sbBtn);
+  }
+
+  function clearAllHighlights() {
+    highlights.forEach(function (marks) {
+      for (var i = 0; i < marks.length; i++) {
+        var mark = marks[i];
+        var parent = mark.parentNode;
+        if (!parent) continue;
+        while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+        parent.removeChild(mark);
+      }
+    });
+    highlights.clear();
+    orphanIds.clear();
   }
 
   // ── Math rendering ─────────────────────────────────
@@ -184,6 +255,35 @@
     }
   }
 
+  // ── Per-user color ───────────────────────────────────
+
+  var userColorCache = {};
+
+  function userColor(name) {
+    if (name === 'ai') return 'var(--s-ai)';
+    if (userColorCache[name]) return userColorCache[name];
+    // djb2 hash → hue
+    var hash = 5381;
+    for (var i = 0; i < name.length; i++) {
+      hash = ((hash << 5) + hash + name.charCodeAt(i)) & 0x7fffffff;
+    }
+    var hue = hash % 360;
+    // Keep saturation/lightness in a readable range
+    var color = 'hsl(' + hue + ', 55%, 38%)';
+    userColorCache[name] = color;
+    return color;
+  }
+
+  // ── Auto-grow textarea ──────────────────────────────
+
+  function autoGrow(textarea, maxHeight) {
+    maxHeight = maxHeight || 150;
+    textarea.addEventListener('input', function () {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + 'px';
+    });
+  }
+
   // ── Unread detection ───────────────────────────────
 
   function isUnread(ann) {
@@ -207,6 +307,25 @@
       }
     }
     return false;
+  }
+
+  // ── Read/unread helpers ──────────────────────────────
+
+  function markRead(annId, card) {
+    wsSend({ type: 'mark_read', annotation_id: annId });
+    state[annId] = { lastReadAt: new Date().toISOString() };
+    if (card) {
+      card.classList.remove('scholia-unread');
+      var dot = card.querySelector('.scholia-unread-dot');
+      if (dot) dot.remove();
+    }
+  }
+
+  function markUnread(annId) {
+    wsSend({ type: 'mark_unread', annotation_id: annId });
+    state[annId] = { lastReadAt: null };
+    renderSidebar();
+    positionCards();
   }
 
   // ── Sidebar ────────────────────────────────────────
@@ -302,24 +421,12 @@
     var unread = isUnread(ann);
     if (unread) card.classList.add('scholia-unread');
 
-    // Determine unread badge text
-    var badgeText = '';
-    if (unread && bodies.length > 0) {
-      // Find the last unread message
-      var annState = state[ann.id];
-      var lastReadAt = annState && annState.lastReadAt;
-      var lastReadDate = lastReadAt ? new Date(lastReadAt) : null;
-      var lastUnreadMsg = null;
-      for (var u = bodies.length - 1; u >= 0; u--) {
-        if (!lastReadDate || (bodies[u].created && new Date(bodies[u].created) > lastReadDate)) {
-          lastUnreadMsg = bodies[u];
-          break;
-        }
-      }
-      if (lastUnreadMsg && lastUnreadMsg.creator && lastUnreadMsg.creator.name === 'ai') {
-        badgeText = 'AI reply';
-      } else if (lastUnreadMsg) {
-        badgeText = 'new reply';
+    // Track last AI message index for placing mark-unread button
+    var lastAiIdx = -1;
+    for (var b2 = bodies.length - 1; b2 >= 0; b2--) {
+      if (bodies[b2].creator && bodies[b2].creator.name === 'ai') {
+        lastAiIdx = b2;
+        break;
       }
     }
 
@@ -356,27 +463,11 @@
     countSpan.textContent = bodies.length;
     header.appendChild(countSpan);
 
-    // Unread badge
-    if (badgeText) {
-      var badge = document.createElement('span');
-      badge.className = 'scholia-badge';
-      badge.textContent = badgeText;
-      header.appendChild(badge);
-    }
-
-    // Mark unread button (visible when thread is read)
-    if (!unread && bodies.length > 0) {
-      var markUnreadBtn = document.createElement('button');
-      markUnreadBtn.className = 'scholia-btn-mark-unread';
-      markUnreadBtn.textContent = 'mark unread';
-      markUnreadBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        wsSend({ type: 'mark_unread', annotation_id: ann.id });
-        state[ann.id] = { lastReadAt: null };
-        renderSidebar();
-        positionCards();
-      });
-      header.appendChild(markUnreadBtn);
+    // Unread dot
+    if (unread) {
+      var dot = document.createElement('span');
+      dot.className = 'scholia-unread-dot';
+      header.appendChild(dot);
     }
 
     card.appendChild(header);
@@ -396,6 +487,7 @@
       var meta = document.createElement('div');
       meta.className = 'scholia-message-meta';
       meta.textContent = msgCreator;
+      meta.style.color = userColor(msgCreator);
       msgEl.appendChild(meta);
 
       var body = document.createElement('div');
@@ -403,6 +495,34 @@
       body.dataset.raw = msg.value;
       body.innerHTML = renderCommentBody(msg.value);
       msgEl.appendChild(body);
+
+      // Last AI message: read/unread toggle label in upper-right
+      if (j === lastAiIdx) {
+        var readLabel = document.createElement('button');
+        readLabel.className = 'scholia-read-toggle';
+        if (unread) {
+          readLabel.classList.add('scholia-read-toggle-unread');
+          readLabel.textContent = 'unread';
+        } else {
+          readLabel.textContent = 'mark unread';
+        }
+        readLabel.addEventListener('click', (function (theCard, theLabel) {
+          return function (e) {
+            e.stopPropagation();
+            if (theLabel.classList.contains('scholia-read-toggle-unread')) {
+              // Dismiss: mark read
+              markRead(ann.id, theCard);
+              theLabel.classList.remove('scholia-read-toggle-unread');
+              theLabel.textContent = 'mark unread';
+            } else {
+              // Re-mark as unread
+              markUnread(ann.id);
+            }
+          };
+        })(card, readLabel));
+        // Insert into meta row (upper-right)
+        meta.appendChild(readLabel);
+      }
 
       thread.appendChild(msgEl);
     }
@@ -414,6 +534,20 @@
     var replyTextarea = document.createElement('textarea');
     replyTextarea.placeholder = 'Reply\u2026';
     replyTextarea.rows = 1;
+    autoGrow(replyTextarea);
+    // Focusing the reply also marks as read
+    replyTextarea.addEventListener('focus', (function (theCard) {
+      return function () {
+        if (isUnread(ann)) {
+          markRead(ann.id, theCard);
+          var label = thread.querySelector('.scholia-read-toggle-unread');
+          if (label) {
+            label.classList.remove('scholia-read-toggle-unread');
+            label.textContent = 'mark unread';
+          }
+        }
+      };
+    })(card));
     replyRow.appendChild(replyTextarea);
 
     var replyBtn = document.createElement('button');
@@ -464,15 +598,6 @@
     header.addEventListener('click', function () {
       var wasExpanded = card.classList.contains('scholia-expanded');
       expandOverrides[ann.id] = !wasExpanded;
-
-      if (!wasExpanded) {
-        // About to expand: mark read
-        card.classList.remove('scholia-unread');
-        wsSend({ type: 'mark_read', annotation_id: ann.id });
-        state[ann.id] = { lastReadAt: new Date().toISOString() };
-        var existingBadge = card.querySelector('.scholia-badge');
-        if (existingBadge) existingBadge.remove();
-      }
 
       // Reposition all cards (sets expand state via positionCards)
       positionCards();
@@ -783,6 +908,7 @@
   var pendingSelector = null;
 
   docEl.addEventListener('mouseup', function () {
+    if (sidebarHidden) return;
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
 
@@ -826,6 +952,7 @@
     var textarea = document.createElement('textarea');
     textarea.placeholder = 'Add a comment\u2026';
     textarea.rows = 3;
+    autoGrow(textarea);
     form.appendChild(textarea);
 
     var actions = document.createElement('div');
@@ -922,7 +1049,7 @@
 
   // Forward keyboard to textarea when prompt is visible but not focused
   document.addEventListener('keydown', function (e) {
-    if (!pendingForm) return;
+    if (sidebarHidden || !pendingForm) return;
     var textarea = pendingForm.querySelector('textarea');
     if (!textarea || document.activeElement === textarea) return;
 
@@ -1064,6 +1191,11 @@
   }
 
   function updateOffscreenIndicators() {
+    if (sidebarHidden) {
+      aboveIndicator.style.display = 'none';
+      belowIndicator.style.display = 'none';
+      return;
+    }
     var cards = sidebarEl.querySelectorAll('.scholia-card');
     var viewH = window.innerHeight;
     var above = 0, aboveOrph = 0, below = 0, belowOrph = 0;
@@ -1114,6 +1246,10 @@
 
   // ── Init ───────────────────────────────────────────
 
+  // Set initial sidenotes CSS state
+  if (!sidenotesEnabled) docEl.classList.add('scholia-no-sidenotes');
+
+  renderToolbar();
   connectWS();
   renderSidebar();
 
