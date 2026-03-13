@@ -15,7 +15,10 @@ from scholia.comments import (
     append_comment,
     append_reply,
     load_comments,
+    resolve,
+    unresolve,
 )
+from scholia.state import load_state, mark_read, mark_unread
 
 
 def _check_pandoc():
@@ -61,8 +64,10 @@ async def build_page(doc_path: Path, template: str) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     html = await render_pandoc(doc_path)
     comments = load_comments(doc_path)
+    state = load_state(doc_path)
     page = template.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments))
+    page = page.replace("{{STATE_JSON}}", json.dumps(state))
     return page
 
 
@@ -119,17 +124,18 @@ class ScholiaServer:
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
-                    await self._handle_ws_message(msg.data)
+                    await self._handle_ws_message(msg.data, ws)
                 elif msg.type == web.WSMsgType.ERROR:
                     break
         finally:
             self.ws_clients.discard(ws)
         return ws
 
-    async def _handle_ws_message(self, data: str):
+    async def _handle_ws_message(self, data: str, ws: web.WebSocketResponse):
         try:
             msg = json.loads(data)
-            if msg["type"] == "new_comment":
+            msg_type = msg["type"]
+            if msg_type == "new_comment":
                 append_comment(
                     self.doc_path,
                     exact=msg["exact"],
@@ -138,15 +144,26 @@ class ScholiaServer:
                     body_text=msg["body"],
                     creator="human",
                 )
-            elif msg["type"] == "reply":
+            elif msg_type == "reply":
                 append_reply(
                     self.doc_path,
                     annotation_id=msg["annotation_id"],
                     body_text=msg["body"],
                     creator=msg.get("creator", "human"),
                 )
+            elif msg_type == "resolve":
+                resolve(self.doc_path, msg["annotation_id"])
+            elif msg_type == "unresolve":
+                unresolve(self.doc_path, msg["annotation_id"])
+            elif msg_type == "mark_read":
+                mark_read(self.doc_path, msg["annotation_id"])
+            elif msg_type == "mark_unread":
+                mark_unread(self.doc_path, msg["annotation_id"])
         except Exception as e:
-            print(f"warning: bad WebSocket message: {e}")
+            try:
+                await ws.send_json({"type": "error", "message": str(e)})
+            except Exception:
+                pass
 
     async def _broadcast(self, msg_type: str):
         if msg_type == "doc":

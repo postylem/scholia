@@ -13,7 +13,10 @@
     <article id="scholia-doc">{{PANDOC_HTML}}</article>
     <aside id="scholia-sidebar"></aside>
   </div>
-  <script>window.__SCHOLIA_COMMENTS__ = {{COMMENTS_JSON}};</script>
+  <script>
+  window.__SCHOLIA_COMMENTS__ = {{COMMENTS_JSON}};
+  window.__SCHOLIA_STATE__ = {{STATE_JSON}};
+</script>
   <script src="/static/vendor/dom-anchor-text-quote.js"></script>
   <script src="/static/scholia.js"></script>
 </body>
