@@ -1,0 +1,276 @@
+/* Scholia — dark-theme collaborative annotation UI */
+
+:root {
+  --s-bg: #1e1e2e;
+  --s-surface: #282840;
+  --s-card: #313150;
+  --s-card-hover: #3a3a5c;
+  --s-text: #cdd6f4;
+  --s-text-dim: #7f849c;
+  --s-accent: #89b4fa;
+  --s-accent-dim: rgba(137, 180, 250, 0.15);
+  --s-human: #a6e3a1;
+  --s-ai: #89b4fa;
+  --s-unread: #f38ba8;
+  --s-highlight: rgba(249, 226, 175, 0.2);
+  --s-highlight-active: rgba(249, 226, 175, 0.4);
+  --s-border: #45475a;
+  --s-radius: 6px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--s-bg);
+  color: var(--s-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+/* ── Layout ─────────────────────────────────────────── */
+
+#scholia-container {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  min-height: 100vh;
+}
+
+#scholia-doc {
+  padding: 2rem 3rem;
+  max-width: 52rem;
+  overflow-wrap: break-word;
+}
+
+/* ── Document typography ────────────────────────────── */
+
+#scholia-doc h1, #scholia-doc h2, #scholia-doc h3,
+#scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
+  color: #cba6f7;
+  margin-top: 1.5em;
+}
+#scholia-doc h1 {
+  font-size: 1.8rem;
+  border-bottom: 1px solid var(--s-border);
+  padding-bottom: 0.3rem;
+}
+#scholia-doc h2 { font-size: 1.4rem; }
+#scholia-doc h3 { font-size: 1.15rem; }
+
+#scholia-doc code {
+  background: var(--s-surface);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+#scholia-doc pre {
+  background: var(--s-surface);
+  padding: 1rem;
+  border-radius: var(--s-radius);
+  overflow-x: auto;
+  line-height: 1.45;
+}
+#scholia-doc pre code {
+  background: none;
+  padding: 0;
+}
+#scholia-doc blockquote {
+  border-left: 3px solid var(--s-accent);
+  margin-left: 0;
+  padding-left: 1rem;
+  color: var(--s-text-dim);
+}
+#scholia-doc a { color: var(--s-accent); }
+#scholia-doc table { border-collapse: collapse; margin: 1em 0; width: 100%; }
+#scholia-doc th, #scholia-doc td {
+  border: 1px solid var(--s-border);
+  padding: 0.4em 0.8em;
+  text-align: left;
+}
+#scholia-doc th { background: var(--s-surface); }
+#scholia-doc img { max-width: 100%; }
+#scholia-doc hr { border: none; border-top: 1px solid var(--s-border); margin: 2em 0; }
+
+/* ── Sidebar ────────────────────────────────────────── */
+
+#scholia-sidebar {
+  background: var(--s-surface);
+  border-left: 1px solid var(--s-border);
+  padding: 0.75rem;
+  overflow-y: auto;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+}
+
+.scholia-empty {
+  color: var(--s-text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+/* ── Cards ──────────────────────────────────────────── */
+
+.scholia-card {
+  background: var(--s-card);
+  border-radius: var(--s-radius);
+  margin-bottom: 0.5rem;
+  border: 1px solid transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.scholia-card:hover,
+.scholia-card.scholia-card-linked {
+  background: var(--s-card-hover);
+  border-color: var(--s-accent-dim);
+}
+
+.scholia-card-header {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scholia-anchor-text {
+  font-size: 0.8rem;
+  color: var(--s-text-dim);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.scholia-badge {
+  font-size: 0.65rem;
+  background: var(--s-unread);
+  color: var(--s-bg);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.scholia-msg-count {
+  font-size: 0.7rem;
+  color: var(--s-text-dim);
+  white-space: nowrap;
+}
+
+/* ── Thread ─────────────────────────────────────────── */
+
+.scholia-thread {
+  padding: 0 0.75rem 0.75rem;
+  border-top: 1px solid var(--s-border);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.scholia-message {
+  padding: 0.4rem 0;
+}
+.scholia-message + .scholia-message {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.scholia-message-meta {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.15rem;
+}
+
+.scholia-human .scholia-message-meta { color: var(--s-human); }
+.scholia-ai .scholia-message-meta { color: var(--s-ai); }
+
+.scholia-message-body {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* ── Document anchor highlights ─────────────────────── */
+
+mark.scholia-highlight {
+  background: var(--s-highlight);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: inherit;
+}
+mark.scholia-highlight.scholia-highlight-active,
+mark.scholia-highlight:hover {
+  background: var(--s-highlight-active);
+}
+
+/* ── New comment form ───────────────────────────────── */
+
+.scholia-new-comment {
+  background: var(--s-card);
+  border-radius: var(--s-radius);
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--s-accent);
+}
+
+.scholia-new-comment-anchor {
+  font-size: 0.8rem;
+  color: var(--s-text-dim);
+  font-style: italic;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scholia-new-comment textarea {
+  width: 100%;
+  background: var(--s-bg);
+  color: var(--s-text);
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.5rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
+  min-height: 3.5em;
+}
+.scholia-new-comment textarea:focus {
+  outline: none;
+  border-color: var(--s-accent);
+}
+
+.scholia-new-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.scholia-btn {
+  padding: 0.3rem 0.75rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.scholia-btn-cancel {
+  background: transparent;
+  color: var(--s-text-dim);
+}
+.scholia-btn-cancel:hover { color: var(--s-text); }
+.scholia-btn-submit {
+  background: var(--s-accent);
+  color: var(--s-bg);
+  font-weight: 600;
+}
+.scholia-btn-submit:hover { opacity: 0.9; }

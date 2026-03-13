@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scholia</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <link rel="stylesheet" href="/static/scholia.css">
+</head>
+<body>
+  <div id="scholia-container">
+    <article id="scholia-doc">{{PANDOC_HTML}}</article>
+    <aside id="scholia-sidebar"></aside>
+  </div>
+  <script>window.__SCHOLIA_COMMENTS__ = {{COMMENTS_JSON}};</script>
+  <script src="/static/vendor/dom-anchor-text-quote.js"></script>
+  <script src="/static/scholia.js"></script>
+</body>
+</html>
