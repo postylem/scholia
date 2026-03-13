@@ -6,6 +6,14 @@ Think of marginal annotations scribbled in the margins of manuscripts by medieva
 
 ![Scholia screenshot](docs/demo_screenshot.png)
 
+## How It Works
+
+- You edit some `<doc>.md` file in your editor
+- The browser shows a live-rendered view with a comment sidebar
+- Comments are stored in `<doc>.md.scholia.jsonl` (append-only, W3C Web Annotation format)
+- File changes are detected via watchdog and pushed to the browser via WebSocket
+- AI assistant reads and replies to comments via the CLI
+
 ## Prerequisites
 
 - Python 3.10+
@@ -13,29 +21,41 @@ Think of marginal annotations scribbled in the margins of manuscripts by medieva
 
 ## Install
 
+Install from GitHub directly
+
 ```bash
-# From source
+pipx install git+https://github.com/postylem/scholia.git
+```
+
+or clone this repo and install from source
+
+```bas
 pipx install .
 # or
 uv tool install .
-
-# From git
-pipx install git+https://github.com/<user>/scholia.git
 ```
 
-## Quick Start
+## Usage
+
+For some document `idea.md`:
 
 ```bash
 # Start the annotation server
-scholia start paper.md
-
-# Open http://127.0.0.1:8088 in your browser
-# Select text in the document to add comments
+scholia start idea.md
 ```
+
+- Open the rendered version in your browser
+- Select text in the document to add comment. Or edit the markdown for a live preview of changed to the main text. 
+- When you are ready, tell your agent to take a pass and respond to comments
+    ```
+    > take a look at the scholia for idea.md
+    ```
+    It should follow use the API to write replies to comment threads, or modify the main text. Replies and edits will show up live.  
+    
 
 ## AI Agent Setup
 
-Scholia works with any AI coding agent. Run `scholia init` to add review instructions to your project:
+Scholia works with any AI coding agent. Just run `scholia init` to add review instructions globally (recommended), or to your project:
 
 ```bash
 # Claude Code (default)
@@ -47,7 +67,7 @@ scholia init .cursor/rules/scholia.md
 # Codex
 scholia init AGENTS.md
 
-# opencode (https://opencode.ai/docs/skills/)
+# opencode
 scholia init .opencode/skills/scholia.md
 
 # Global install (always available, not per-project)
@@ -60,7 +80,7 @@ This writes a single markdown file containing the CLI commands and review workfl
 
 ```
 scholia start <doc.md>                    Start annotation server
-scholia start <doc.md> --port 0           Auto-pick a free port
+scholia start <doc.md> --port 888         Start server at specified port [Auto-pick a free port if none set]
 scholia list <doc.md> --open              List open comments
 scholia list <doc.md> --all               List all comments
 scholia reply <doc.md> <id> "text"        Reply to a comment
@@ -70,11 +90,3 @@ scholia unresolve <doc.md> <id>           Reopen a thread
 scholia init [path]                       Write agent instructions
 scholia init --global [path]              Write to home directory
 ```
-
-## How It Works
-
-- You edit `.md` files in your editor
-- The browser shows a live-rendered view with a comment sidebar
-- Comments are stored in `<doc>.md.scholia.jsonl` (append-only, W3C Web Annotation format)
-- File changes are detected via watchdog and pushed to the browser via WebSocket
-- Your AI assistant reads and replies to comments via the CLI
