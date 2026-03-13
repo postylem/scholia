@@ -14,3 +14,6 @@ dependencies = [
 
 [project.scripts]
 scholia = "scholia.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-aiohttp>=1.0"]
