@@ -7,6 +7,7 @@
   'use strict';
 
   var ws;
+  var creatorName = window.__SCHOLIA_CREATOR__ || 'human';
   var comments = window.__SCHOLIA_COMMENTS__ || [];
   var state = window.__SCHOLIA_STATE__ || {};
   var docEl = document.getElementById('scholia-doc');
@@ -14,6 +15,7 @@
   var highlights = new Map();   // annotation id → [mark elements]
   var orphanIds = new Set();
   var filterMode = 'open';      // 'open' or 'all'
+  var expandOverrides = {};     // annotation id → boolean (user manual toggle)
 
   // ── WebSocket ──────────────────────────────────────
 
@@ -27,6 +29,7 @@
         docEl.innerHTML = msg.html;
         rerenderMath();
         decorateCodeBlocks();
+        setupCitationTooltips();
         reanchorAll();
         positionCards();
       } else if (msg.type === 'comments_update') {
@@ -112,15 +115,92 @@
     }
   }
 
+  // ── Comment body rendering (inline code + KaTeX) ──
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderCommentBody(text) {
+    var out = '';
+    var i = 0;
+    var hasKatex = !!window.katex;
+
+    while (i < text.length) {
+      // Inline code: `...`
+      if (text[i] === '`') {
+        var end = text.indexOf('`', i + 1);
+        if (end !== -1) {
+          out += '<code>' + escapeHtml(text.slice(i + 1, end)) + '</code>';
+          i = end + 1;
+          continue;
+        }
+      }
+      // Display math: $$...$$
+      if (text[i] === '$' && text[i + 1] === '$') {
+        var end = text.indexOf('$$', i + 2);
+        if (end !== -1) {
+          var tex = text.slice(i + 2, end);
+          if (hasKatex) {
+            try { out += katex.renderToString(tex, { displayMode: true, throwOnError: false }); }
+            catch (e) { out += '<code>' + escapeHtml(tex) + '</code>'; }
+          } else {
+            out += '<code>' + escapeHtml(tex) + '</code>';
+          }
+          i = end + 2;
+          continue;
+        }
+      }
+      // Inline math: $...$
+      if (text[i] === '$') {
+        var end = text.indexOf('$', i + 1);
+        if (end !== -1 && end > i + 1) {
+          var tex = text.slice(i + 1, end);
+          if (hasKatex) {
+            try { out += katex.renderToString(tex, { displayMode: false, throwOnError: false }); }
+            catch (e) { out += '<code>' + escapeHtml(tex) + '</code>'; }
+          } else {
+            out += '<code>' + escapeHtml(tex) + '</code>';
+          }
+          i = end + 1;
+          continue;
+        }
+      }
+      // Plain text until next special char
+      var next = i + 1;
+      while (next < text.length && text[next] !== '$' && text[next] !== '`') next++;
+      out += escapeHtml(text.slice(i, next));
+      i = next;
+    }
+    return out;
+  }
+
+  function rerenderCommentBodies() {
+    if (!window.katex) return;
+    var bodies = sidebarEl.querySelectorAll('.scholia-message-body');
+    for (var i = 0; i < bodies.length; i++) {
+      var raw = bodies[i].dataset.raw;
+      if (raw !== undefined) bodies[i].innerHTML = renderCommentBody(raw);
+    }
+  }
+
   // ── Unread detection ───────────────────────────────
 
   function isUnread(ann) {
+    var bodies = ann.body || [];
+    if (bodies.length === 0) return false;
+
+    // If the last message is by a human (not AI), they've seen everything
+    var lastBody = bodies[bodies.length - 1];
+    var lastCreator = lastBody.creator && lastBody.creator.name;
+    if (lastCreator !== 'ai') return false;
+
+    // No read timestamp and last msg is not human → unread
     var annState = state[ann.id];
     var lastReadAt = annState && annState.lastReadAt;
     if (!lastReadAt) return true;
 
     var lastReadDate = new Date(lastReadAt);
-    var bodies = ann.body || [];
     for (var i = 0; i < bodies.length; i++) {
       if (bodies[i].created && new Date(bodies[i].created) > lastReadDate) {
         return true;
@@ -151,6 +231,7 @@
     openBtn.addEventListener('click', function () {
       filterMode = 'open';
       renderSidebar();
+      reanchorAll();
       positionCards();
     });
     controls.appendChild(openBtn);
@@ -161,6 +242,7 @@
     allBtn.addEventListener('click', function () {
       filterMode = 'all';
       renderSidebar();
+      reanchorAll();
       positionCards();
     });
     controls.appendChild(allBtn);
@@ -195,6 +277,7 @@
     var card = document.createElement('div');
     card.className = 'scholia-card';
     card.dataset.annotationId = ann.id;
+    var bodies = ann.body || [];
 
     var status = ann['scholia:status'] || 'open';
     if (status === 'open') card.classList.add('scholia-open');
@@ -205,12 +288,21 @@
       card.classList.add('scholia-orphan');
     }
 
+    // AI-replied detection: has any reply from AI
+    var hasAiReply = false;
+    for (var b = 0; b < bodies.length; b++) {
+      if (bodies[b].creator && bodies[b].creator.name === 'ai') {
+        hasAiReply = true;
+        break;
+      }
+    }
+    if (hasAiReply) card.classList.add('scholia-ai-replied');
+
     // Unread detection (timestamp-based)
     var unread = isUnread(ann);
     if (unread) card.classList.add('scholia-unread');
 
     // Determine unread badge text
-    var bodies = ann.body || [];
     var badgeText = '';
     if (unread && bodies.length > 0) {
       // Find the last unread message
@@ -241,12 +333,13 @@
     anchorSpan.textContent = '\u201c' + anchorText.slice(0, 50) + (anchorText.length > 50 ? '\u2026' : '') + '\u201d';
     header.appendChild(anchorSpan);
 
-    // Orphan label
+    // Orphan icon
     if (orphanIds.has(ann.id)) {
-      var orphanLabel = document.createElement('span');
-      orphanLabel.className = 'scholia-orphan-label';
-      orphanLabel.textContent = 'anchor not found';
-      header.appendChild(orphanLabel);
+      var orphanIcon = document.createElement('span');
+      orphanIcon.className = 'scholia-orphan-icon';
+      orphanIcon.textContent = '?';
+      orphanIcon.title = 'Anchor text not found in document';
+      header.appendChild(orphanIcon);
     }
 
     // Resolved label
@@ -296,17 +389,19 @@
     for (var j = 0; j < bodies.length; j++) {
       var msg = bodies[j];
       var msgEl = document.createElement('div');
-      var role = (msg.creator && msg.creator.name) || 'unknown';
+      var msgCreator = (msg.creator && msg.creator.name) || 'unknown';
+      var role = msgCreator === 'ai' ? 'ai' : 'human';
       msgEl.className = 'scholia-message scholia-' + role;
 
       var meta = document.createElement('div');
       meta.className = 'scholia-message-meta';
-      meta.textContent = role;
+      meta.textContent = msgCreator;
       msgEl.appendChild(meta);
 
       var body = document.createElement('div');
       body.className = 'scholia-message-body';
-      body.textContent = msg.value;
+      body.dataset.raw = msg.value;
+      body.innerHTML = renderCommentBody(msg.value);
       msgEl.appendChild(body);
 
       thread.appendChild(msgEl);
@@ -330,7 +425,7 @@
         type: 'reply',
         annotation_id: ann.id,
         body: text,
-        creator: 'human'
+        creator: creatorName
       });
       replyTextarea.value = '';
     });
@@ -367,36 +462,37 @@
 
     // Click header to expand/collapse
     header.addEventListener('click', function () {
-      var open = thread.style.display !== 'none';
-      thread.style.display = open ? 'none' : 'block';
-      card.classList.toggle('scholia-expanded', !open);
+      var wasExpanded = card.classList.contains('scholia-expanded');
+      expandOverrides[ann.id] = !wasExpanded;
 
-      if (!open) {
-        // Expanding: mark read
+      if (!wasExpanded) {
+        // About to expand: mark read
         card.classList.remove('scholia-unread');
         wsSend({ type: 'mark_read', annotation_id: ann.id });
         state[ann.id] = { lastReadAt: new Date().toISOString() };
-
-        // Remove badge if present
         var existingBadge = card.querySelector('.scholia-badge');
         if (existingBadge) existingBadge.remove();
+      }
 
-        // Scroll thread to bottom so latest message visible
+      // Reposition all cards (sets expand state via positionCards)
+      positionCards();
+
+      if (!wasExpanded) {
+        // Now expanded: scroll thread to bottom
         thread.scrollTop = thread.scrollHeight;
 
-        // Scroll to anchor in document + pulse
+        // Scroll page so anchor is ~10% from viewport top
         var marks = highlights.get(ann.id);
         if (marks && marks.length > 0) {
-          marks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+          var markPageY = marks[0].getBoundingClientRect().top + window.scrollY;
+          var targetScrollY = markPageY - window.innerHeight * 0.1;
+          window.scrollTo({ top: Math.max(0, targetScrollY), behavior: 'smooth' });
+
           setTimeout(function () {
-            for (var p = 0; p < marks.length; p++) {
-              marks[p].classList.add('scholia-pulse');
-            }
+            for (var p = 0; p < marks.length; p++) marks[p].classList.add('scholia-pulse');
           }, 300);
           setTimeout(function () {
-            for (var p = 0; p < marks.length; p++) {
-              marks[p].classList.remove('scholia-pulse');
-            }
+            for (var p = 0; p < marks.length; p++) marks[p].classList.remove('scholia-pulse');
           }, 900);
         }
       }
@@ -427,6 +523,11 @@
 
     for (var i = 0; i < comments.length; i++) {
       var ann = comments[i];
+      var status = ann['scholia:status'] || 'open';
+
+      // Skip resolved comments in 'open' filter mode
+      if (filterMode === 'open' && status === 'resolved') continue;
+
       var selector = ann.target && ann.target.selector;
       if (!selector || !selector.exact) {
         orphanIds.add(ann.id);
@@ -441,20 +542,42 @@
 
       var marks = wrapRange(range, ann.id);
       if (marks.length) {
+        // Resolved threads get a muted highlight style
+        if (status === 'resolved') {
+          for (var m = 0; m < marks.length; m++) {
+            marks[m].classList.add('scholia-highlight-resolved');
+          }
+        }
         highlights.set(ann.id, marks);
       } else {
         orphanIds.add(ann.id);
       }
     }
 
-    // Update orphan classes on existing cards
+    // Update orphan classes and icons on existing cards
     var cards = sidebarEl.querySelectorAll('.scholia-card');
     for (var c = 0; c < cards.length; c++) {
       var id = cards[c].dataset.annotationId;
+      var headerEl = cards[c].querySelector('.scholia-card-header');
+      var existingIcon = cards[c].querySelector('.scholia-orphan-icon');
       if (orphanIds.has(id)) {
         cards[c].classList.add('scholia-orphan');
+        if (!existingIcon && headerEl) {
+          var icon = document.createElement('span');
+          icon.className = 'scholia-orphan-icon';
+          icon.textContent = '?';
+          icon.title = 'Anchor text not found in document';
+          // Insert after anchor text span
+          var anchorSpan = headerEl.querySelector('.scholia-anchor-text');
+          if (anchorSpan && anchorSpan.nextSibling) {
+            headerEl.insertBefore(icon, anchorSpan.nextSibling);
+          } else {
+            headerEl.appendChild(icon);
+          }
+        }
       } else {
         cards[c].classList.remove('scholia-orphan');
+        if (existingIcon) existingIcon.remove();
       }
     }
   }
@@ -525,13 +648,31 @@
   }
 
   // ── Card positioning ───────────────────────────────
+  // Cards are absolutely positioned within the sidebar (position: relative)
+  // so they align vertically with their anchor highlights in the document.
+  // Both columns scroll together as part of the same page flow.
+  //
+  // Auto-expand: threads default to expanded unless that would push the
+  // next thread below its anchor. User manual toggles override auto logic.
 
   function positionCards() {
     var cards = sidebarEl.querySelectorAll('.scholia-card');
-    if (!cards.length) return;
+    if (!cards.length) { updateOffscreenIndicators(); return; }
 
-    var sidebarRect = sidebarEl.getBoundingClientRect();
-    var sidebarScrollTop = sidebarEl.scrollTop;
+    var sidebarTop = sidebarEl.getBoundingClientRect().top;
+
+    // Reserve space for controls and new-comment form
+    var controlsEl = sidebarEl.querySelector('.scholia-sidebar-controls');
+    var newCommentEl = document.getElementById('scholia-new-comment');
+    var minY = parseFloat(getComputedStyle(sidebarEl).paddingTop) || 0;
+    if (controlsEl) {
+      minY = controlsEl.getBoundingClientRect().bottom - sidebarTop;
+    }
+    if (newCommentEl) {
+      var ncBottom = newCommentEl.getBoundingClientRect().bottom - sidebarTop;
+      if (ncBottom > minY) minY = ncBottom;
+    }
+    minY += 4;
 
     var positioned = [];
     var orphans = [];
@@ -546,33 +687,75 @@
         continue;
       }
 
-      // Compute anchor Y relative to the sidebar's coordinate space
-      var markRect = marks[0].getBoundingClientRect();
-      var anchorY = markRect.top - sidebarRect.top + sidebarScrollTop;
-      positioned.push({ card: card, anchorY: anchorY });
+      var anchorY = marks[0].getBoundingClientRect().top - sidebarTop;
+      positioned.push({ card: card, annId: annId, anchorY: anchorY });
     }
 
-    // Sort by anchor Y position
     positioned.sort(function (a, b) { return a.anchorY - b.anchorY; });
 
-    // Position cards with push-down for overlaps
-    var currentY = 0;
-    for (var p = 0; p < positioned.length; p++) {
-      var entry = positioned[p];
-      var targetY = Math.max(entry.anchorY, currentY);
-      entry.card.style.position = 'relative';
-      entry.card.style.top = targetY + 'px';
-      entry.card.style.marginTop = '-' + entry.card.offsetHeight + 'px';
-      // Recalculate: after placing, the next card should start below this one
-      currentY = targetY + entry.card.offsetHeight + 4; // 4px gap
+    // Make all cards absolute so widths compute correctly
+    var allCards = positioned.map(function (p) { return p.card; }).concat(orphans);
+    for (var i = 0; i < allCards.length; i++) {
+      allCards[i].style.position = 'absolute';
+      allCards[i].style.left = '0.75rem';
+      allCards[i].style.right = '0.75rem';
+      allCards[i].style.margin = '0';
     }
 
-    // Orphan cards: reset position, grouped at bottom
-    for (var o = 0; o < orphans.length; o++) {
-      orphans[o].style.position = '';
-      orphans[o].style.top = '';
-      orphans[o].style.marginTop = '';
+    // Measure collapsed and expanded heights for each anchored card
+    for (var p = 0; p < positioned.length; p++) {
+      var entry = positioned[p];
+      var thread = entry.card.querySelector('.scholia-thread');
+      if (thread) {
+        var prev = thread.style.display;
+        thread.style.display = 'none';
+        entry.collapsedH = entry.card.offsetHeight;
+        thread.style.display = 'block';
+        entry.expandedH = entry.card.offsetHeight;
+        thread.style.display = prev;
+      } else {
+        entry.collapsedH = entry.card.offsetHeight;
+        entry.expandedH = entry.card.offsetHeight;
+      }
     }
+
+    // Forward pass: decide expand state and position
+    var currentY = minY;
+    for (var p = 0; p < positioned.length; p++) {
+      var entry = positioned[p];
+      var top = Math.max(entry.anchorY, currentY);
+      var thread = entry.card.querySelector('.scholia-thread');
+
+      var override = expandOverrides[entry.annId];
+      var shouldExpand;
+      if (override !== undefined) {
+        shouldExpand = override;
+      } else {
+        // Auto-expand unless it would push next card past its anchor
+        var nextAnchorY = (p + 1 < positioned.length) ? positioned[p + 1].anchorY : Infinity;
+        shouldExpand = (top + entry.expandedH + 4 <= nextAnchorY);
+      }
+
+      if (thread) thread.style.display = shouldExpand ? 'block' : 'none';
+      entry.card.classList.toggle('scholia-expanded', shouldExpand);
+
+      entry.card.style.top = top + 'px';
+      currentY = top + (shouldExpand ? entry.expandedH : entry.collapsedH) + 4;
+    }
+
+    // Orphan cards after all positioned ones (respect user overrides)
+    for (var o = 0; o < orphans.length; o++) {
+      var oId = orphans[o].dataset.annotationId;
+      var oThread = orphans[o].querySelector('.scholia-thread');
+      var oExpanded = expandOverrides[oId] === true;
+      if (oThread) oThread.style.display = oExpanded ? 'block' : 'none';
+      orphans[o].classList.toggle('scholia-expanded', oExpanded);
+      orphans[o].style.top = currentY + 'px';
+      currentY += orphans[o].offsetHeight + 4;
+    }
+
+    sidebarEl.style.minHeight = currentY + 'px';
+    updateOffscreenIndicators();
   }
 
   // ── Document hover → highlight linked card ─────────
@@ -590,6 +773,14 @@
   });
 
   // ── Text selection → new comment ───────────────────
+  // Flow: user selects text → lightweight prompt appears in sidebar aligned
+  // with the selection → native selection stays visible (no yellow highlight yet).
+  // If user clicks elsewhere or deselects, prompt disappears.
+  // If user clicks the prompt or starts typing, it activates: native selection
+  // is replaced with yellow highlight marks and the textarea gets focus.
+
+  var pendingForm = null;
+  var pendingSelector = null;
 
   docEl.addEventListener('mouseup', function () {
     var sel = window.getSelection();
@@ -598,23 +789,33 @@
     var range = sel.getRangeAt(0);
     if (!docEl.contains(range.commonAncestorContainer)) return;
 
-    // Ignore if selection is inside an existing form
-    if (range.commonAncestorContainer.closest &&
-        range.commonAncestorContainer.closest('#scholia-new-comment')) return;
+    // Ignore if inside the comment form
+    if (pendingForm && pendingForm.contains(range.commonAncestorContainer)) return;
 
     var selector = TextQuoteAnchor.fromRange(docEl, range);
     if (!selector.exact.trim()) return;
 
-    showCommentForm(selector);
+    // Position: at selection top, or viewport top if selection starts off-screen
+    var rangeRect = range.getBoundingClientRect();
+    var sidebarTop = sidebarEl.getBoundingClientRect().top;
+    var trueAnchorY = rangeRect.top - sidebarTop;
+    var initialY = Math.max(rangeRect.top, 0) - sidebarTop;
+    showCommentPrompt(selector, initialY, trueAnchorY);
   });
 
-  function showCommentForm(selector) {
-    var existing = document.getElementById('scholia-new-comment');
-    if (existing) existing.remove();
+  function showCommentPrompt(selector, initialY, trueAnchorY) {
+    dismissCommentPrompt();
+    pendingSelector = selector;
 
     var form = document.createElement('div');
     form.id = 'scholia-new-comment';
     form.className = 'scholia-new-comment';
+    form.style.position = 'absolute';
+    form.style.left = '0.75rem';
+    form.style.right = '0.75rem';
+    form.style.top = initialY + 'px';
+    form.style.margin = '0';
+    form.dataset.trueY = trueAnchorY;
 
     var anchorDiv = document.createElement('div');
     anchorDiv.className = 'scholia-new-comment-anchor';
@@ -633,8 +834,9 @@
     var cancelBtn = document.createElement('button');
     cancelBtn.className = 'scholia-btn scholia-btn-cancel';
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', function () {
-      form.remove();
+    cancelBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      dismissCommentPrompt();
       window.getSelection().removeAllRanges();
     });
     actions.appendChild(cancelBtn);
@@ -642,34 +844,273 @@
     var submitBtn = document.createElement('button');
     submitBtn.className = 'scholia-btn scholia-btn-submit';
     submitBtn.textContent = 'Comment';
-    submitBtn.addEventListener('click', function () {
+    submitBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
       var text = textarea.value.trim();
       if (!text) return;
-      wsSend({
-        type: 'new_comment',
-        exact: selector.exact,
-        prefix: selector.prefix,
-        suffix: selector.suffix,
-        body: text
-      });
-      form.remove();
-      window.getSelection().removeAllRanges();
+
+      var doSend = function () {
+        wsSend({
+          type: 'new_comment',
+          exact: pendingSelector.exact,
+          prefix: pendingSelector.prefix,
+          suffix: pendingSelector.suffix,
+          body: text
+        });
+        dismissCommentPrompt();
+        window.getSelection().removeAllRanges();
+      };
+
+      // Animate form to true anchor position if it was offset
+      var trueY = parseFloat(form.dataset.trueY);
+      var currentY = parseFloat(form.style.top);
+      if (Math.abs(trueY - currentY) > 1) {
+        form.style.transition = 'top 0.3s ease';
+        form.style.top = trueY + 'px';
+        setTimeout(doSend, 300);
+      } else {
+        doSend();
+      }
     });
     actions.appendChild(submitBtn);
 
     form.appendChild(actions);
+    sidebarEl.appendChild(form);
+    pendingForm = form;
 
-    // Insert at top of sidebar (after filter controls if present)
-    var controlsEl = sidebarEl.querySelector('.scholia-sidebar-controls');
-    if (controlsEl && controlsEl.nextSibling) {
-      sidebarEl.insertBefore(form, controlsEl.nextSibling);
-    } else if (controlsEl) {
-      sidebarEl.appendChild(form);
-    } else {
-      sidebarEl.insertBefore(form, sidebarEl.firstChild);
-    }
-    textarea.focus();
+    // When textarea gets focus (click or forwarded keypress), activate highlight
+    textarea.addEventListener('focus', function () {
+      if (!pendingSelector) return;
+      // Already activated?
+      if (highlights.has('__pending__')) return;
+      var r = TextQuoteAnchor.toRange(docEl, pendingSelector);
+      if (r) {
+        window.getSelection().removeAllRanges();
+        var marks = wrapRange(r, '__pending__');
+        highlights.set('__pending__', marks);
+      }
+    });
   }
+
+  function dismissCommentPrompt() {
+    if (pendingForm) {
+      pendingForm.remove();
+      pendingForm = null;
+    }
+    pendingSelector = null;
+    // Remove pending highlight marks
+    var marks = highlights.get('__pending__');
+    if (marks) {
+      for (var i = 0; i < marks.length; i++) {
+        var m = marks[i];
+        var p = m.parentNode;
+        if (p) {
+          while (m.firstChild) p.insertBefore(m.firstChild, m);
+          p.removeChild(m);
+        }
+      }
+      highlights.delete('__pending__');
+    }
+  }
+
+  // Dismiss on mousedown outside the form
+  document.addEventListener('mousedown', function (e) {
+    if (!pendingForm) return;
+    if (pendingForm.contains(e.target)) return;
+    dismissCommentPrompt();
+  });
+
+  // Forward keyboard to textarea when prompt is visible but not focused
+  document.addEventListener('keydown', function (e) {
+    if (!pendingForm) return;
+    var textarea = pendingForm.querySelector('textarea');
+    if (!textarea || document.activeElement === textarea) return;
+
+    if (e.key === 'Escape') {
+      dismissCommentPrompt();
+      window.getSelection().removeAllRanges();
+      return;
+    }
+
+    // Printable character → focus textarea and insert the character
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      textarea.focus();
+      textarea.value = e.key;
+      textarea.selectionStart = textarea.selectionEnd = 1;
+    }
+  });
+
+  // Dismiss if native selection is cleared while prompt is idle
+  document.addEventListener('selectionchange', function () {
+    if (!pendingForm) return;
+    var textarea = pendingForm.querySelector('textarea');
+    if (textarea && document.activeElement === textarea) return;
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed) dismissCommentPrompt();
+  });
+
+  // ── Citation hover tooltips ─────────────────────────
+
+  var citationTooltip = null;
+  var citationHideTimer = null;
+
+  function setupCitationTooltips() {
+    // Pandoc with link-citations creates <a href="#ref-KEY"> inside <span class="citation">
+    var links = docEl.querySelectorAll('a[href^="#ref-"]');
+    for (var i = 0; i < links.length; i++) {
+      links[i].addEventListener('mouseenter', showCitationTooltip);
+      links[i].addEventListener('mouseleave', scheduleCitationHide);
+      // Prevent clicking the citation from jumping to the bibliography
+      // when the tooltip is showing (user likely wants to interact with tooltip)
+      links[i].addEventListener('click', function (e) {
+        if (citationTooltip) e.preventDefault();
+      });
+    }
+  }
+
+  function showCitationTooltip(e) {
+    var link = e.target.closest('a[href^="#ref-"]');
+    if (!link) return;
+    var refId = link.getAttribute('href').slice(1); // strip #
+    var refEl = document.getElementById(refId);
+    if (!refEl) return;
+
+    clearTimeout(citationHideTimer);
+    removeCitationTooltip();
+
+    citationTooltip = document.createElement('div');
+    citationTooltip.className = 'scholia-citation-tooltip';
+    citationTooltip.innerHTML = refEl.innerHTML;
+
+    // Keep tooltip alive while hovering it
+    citationTooltip.addEventListener('mouseenter', function () {
+      clearTimeout(citationHideTimer);
+    });
+    citationTooltip.addEventListener('mouseleave', scheduleCitationHide);
+
+    document.body.appendChild(citationTooltip);
+
+    var rect = link.getBoundingClientRect();
+    var tipRect = citationTooltip.getBoundingClientRect();
+    var left = rect.left + rect.width / 2 - tipRect.width / 2;
+    // Clamp to viewport
+    left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+    var top = rect.top - tipRect.height - 8;
+    if (top < 8) top = rect.bottom + 8; // flip below if no room above
+
+    citationTooltip.style.left = left + 'px';
+    citationTooltip.style.top = top + 'px';
+    citationTooltip.style.opacity = '1';
+  }
+
+  function scheduleCitationHide() {
+    clearTimeout(citationHideTimer);
+    citationHideTimer = setTimeout(removeCitationTooltip, 300);
+  }
+
+  function removeCitationTooltip() {
+    if (citationTooltip) {
+      citationTooltip.remove();
+      citationTooltip = null;
+    }
+  }
+
+  // ── Offscreen thread indicators ────────────────────
+
+  var aboveIndicator = document.createElement('div');
+  aboveIndicator.className = 'scholia-offscreen-indicator scholia-offscreen-above';
+  document.body.appendChild(aboveIndicator);
+
+  var belowIndicator = document.createElement('div');
+  belowIndicator.className = 'scholia-offscreen-indicator scholia-offscreen-below';
+  document.body.appendChild(belowIndicator);
+
+  // Click to scroll to nearest offscreen thread
+  aboveIndicator.addEventListener('click', function () {
+    var cards = sidebarEl.querySelectorAll('.scholia-card');
+    // Find the last card that's above the viewport (closest to view)
+    var target = null;
+    for (var i = cards.length - 1; i >= 0; i--) {
+      if (cards[i].getBoundingClientRect().bottom < 0) { target = cards[i]; break; }
+    }
+    if (target) scrollCardIntoView(target);
+  });
+
+  belowIndicator.addEventListener('click', function () {
+    var cards = sidebarEl.querySelectorAll('.scholia-card');
+    var viewH = window.innerHeight;
+    // Find the first card that's below the viewport
+    var target = null;
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].getBoundingClientRect().top > viewH) { target = cards[i]; break; }
+    }
+    if (target) scrollCardIntoView(target);
+  });
+
+  function scrollCardIntoView(card) {
+    var cardH = card.offsetHeight;
+    var viewH = window.innerHeight;
+    var cardPageY = card.getBoundingClientRect().top + window.scrollY;
+    // If card fits in viewport, scroll so it's fully visible (centered-ish)
+    // If too tall, scroll so its top is at the top of the viewport
+    var scrollTarget;
+    if (cardH <= viewH) {
+      scrollTarget = cardPageY - (viewH - cardH) / 2;
+    } else {
+      scrollTarget = cardPageY;
+    }
+    window.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+  }
+
+  function updateOffscreenIndicators() {
+    var cards = sidebarEl.querySelectorAll('.scholia-card');
+    var viewH = window.innerHeight;
+    var above = 0, aboveOrph = 0, below = 0, belowOrph = 0;
+
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].getBoundingClientRect();
+      var isOrph = cards[i].classList.contains('scholia-orphan');
+      if (r.bottom < 0) { above++; if (isOrph) aboveOrph++; }
+      else if (r.top > viewH) { below++; if (isOrph) belowOrph++; }
+    }
+
+    // Align indicators with sidebar
+    var sr = sidebarEl.getBoundingClientRect();
+    aboveIndicator.style.left = sr.left + 'px';
+    aboveIndicator.style.width = sr.width + 'px';
+    belowIndicator.style.left = sr.left + 'px';
+    belowIndicator.style.width = sr.width + 'px';
+
+    if (above > 0) {
+      aboveIndicator.style.display = 'block';
+      var t = above + ' more thread' + (above !== 1 ? 's' : '');
+      if (aboveOrph) t += ' (' + aboveOrph + ' orphan' + (aboveOrph !== 1 ? 's' : '') + ')';
+      aboveIndicator.textContent = '\u2191 ' + t;
+    } else {
+      aboveIndicator.style.display = 'none';
+    }
+
+    if (below > 0) {
+      belowIndicator.style.display = 'block';
+      var t = below + ' more thread' + (below !== 1 ? 's' : '');
+      if (belowOrph) t += ' (' + belowOrph + ' orphan' + (belowOrph !== 1 ? 's' : '') + ')';
+      belowIndicator.textContent = '\u2193 ' + t;
+    } else {
+      belowIndicator.style.display = 'none';
+    }
+  }
+
+  var scrollRaf = false;
+  window.addEventListener('scroll', function () {
+    if (!scrollRaf) {
+      scrollRaf = true;
+      requestAnimationFrame(function () {
+        updateOffscreenIndicators();
+        scrollRaf = false;
+      });
+    }
+  }, { passive: true });
 
   // ── Init ───────────────────────────────────────────
 
@@ -679,9 +1120,14 @@
   // KaTeX is loaded with defer, so wait for window load before rendering math
   window.addEventListener('load', function () {
     rerenderMath();
+    rerenderCommentBodies();
     decorateCodeBlocks();
+    setupCitationTooltips();
     reanchorAll();
     positionCards();
   });
+
+  // Reposition cards on resize (layout may change)
+  window.addEventListener('resize', positionCards);
 
 })();

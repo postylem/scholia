@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +15,7 @@ from scholia.comments import (
     annotation_path,
     append_comment,
     append_reply,
+    get_default_creator,
     load_comments,
     resolve,
     unresolve,
@@ -30,22 +32,33 @@ def _check_pandoc():
 
 
 _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
+_DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
 
 
 def _render_pandoc_sync(doc_path: Path) -> str:
     """Render markdown to HTML fragment using Pandoc (blocking)."""
+    # Use document's own CSL if specified in YAML, otherwise default to APA
+    md_text = doc_path.read_text(encoding="utf-8")
+    has_own_csl = re.search(r"^csl:", md_text, re.MULTILINE) is not None
+
+    cmd = [
+        "pandoc",
+        "--katex",
+        "--citeproc",
+        "--section-divs",
+        "--syntax-highlighting=pygments",
+        "--lua-filter",
+        _SIDENOTE_FILTER,
+        "--metadata=link-citations:true",
+        "--from=markdown+tex_math_single_backslash",
+        "--to=html5",
+    ]
+    if not has_own_csl:
+        cmd.extend(["--csl", _DEFAULT_CSL])
+
     result = subprocess.run(
-        [
-            "pandoc",
-            "--katex",
-            "--citeproc",
-            "--section-divs",
-            "--syntax-highlighting=pygments",
-            "--lua-filter", _SIDENOTE_FILTER,
-            "--from=markdown+tex_math_single_backslash",
-            "--to=html5",
-        ],
-        input=doc_path.read_text(encoding="utf-8"),
+        cmd,
+        input=md_text,
         capture_output=True,
         text=True,
         check=True,
@@ -60,12 +73,28 @@ async def render_pandoc(doc_path: Path) -> str:
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path)
 
 
+def _extract_title(markdown_text: str) -> str:
+    """Extract title from YAML frontmatter, or return 'Scholia'."""
+    m = re.match(r"^---\n(.*?)\n---", markdown_text, re.DOTALL)
+    if not m:
+        return "Scholia"
+    for line in m.group(1).splitlines():
+        tm = re.match(r"""^title:\s*["']?(.+?)["']?\s*$""", line)
+        if tm:
+            return tm.group(1)
+    return "Scholia"
+
+
 async def build_page(doc_path: Path, template: str) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     html = await render_pandoc(doc_path)
+    md_text = doc_path.read_text(encoding="utf-8")
+    title = _extract_title(md_text)
     comments = load_comments(doc_path)
     state = load_state(doc_path)
-    page = template.replace("{{PANDOC_HTML}}", html)
+    page = template.replace("{{TITLE}}", title)
+    page = page.replace("{{PANDOC_HTML}}", html)
+    page = page.replace("{{CREATOR_NAME}}", json.dumps(get_default_creator()))
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments))
     page = page.replace("{{STATE_JSON}}", json.dumps(state))
     return page
@@ -142,14 +171,14 @@ class ScholiaServer:
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
                     body_text=msg["body"],
-                    creator="human",
+                    creator=msg.get("creator", get_default_creator()),
                 )
             elif msg_type == "reply":
                 append_reply(
                     self.doc_path,
                     annotation_id=msg["annotation_id"],
                     body_text=msg["body"],
-                    creator=msg.get("creator", "human"),
+                    creator=msg.get("creator", get_default_creator()),
                 )
             elif msg_type == "resolve":
                 resolve(self.doc_path, msg["annotation_id"])

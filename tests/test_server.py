@@ -33,6 +33,14 @@ async def test_index_returns_html(client):
 
 
 @pytest.mark.asyncio
+async def test_index_uses_yaml_title(client):
+    """Page <title> should come from YAML frontmatter."""
+    resp = await client.get("/")
+    text = await resp.text()
+    assert "<title>Test Document</title>" in text
+
+
+@pytest.mark.asyncio
 async def test_static_files(client):
     resp = await client.get("/static/scholia.js")
     assert resp.status == 200

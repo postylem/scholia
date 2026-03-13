@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Scholia</title>
+  <title>{{TITLE}}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
   <link rel="stylesheet" href="/static/scholia.css">
@@ -14,6 +14,7 @@
     <aside id="scholia-sidebar"></aside>
   </div>
   <script>
+  window.__SCHOLIA_CREATOR__ = {{CREATOR_NAME}};
   window.__SCHOLIA_COMMENTS__ = {{COMMENTS_JSON}};
   window.__SCHOLIA_STATE__ = {{STATE_JSON}};
 </script>

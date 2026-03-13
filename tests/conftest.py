@@ -9,7 +9,7 @@ import pytest
 def tmp_doc(tmp_path):
     """Create a temporary markdown file and return its path."""
     doc = tmp_path / "test.md"
-    doc.write_text("# Test\n\nSome text to anchor comments to.\n\nDuplicate text here.\n\nDuplicate text here.\n")
+    doc.write_text('---\ntitle: Test Document\nauthor: Test Author\ndate: 2026-03-12\n---\n\nSome text to anchor comments to.\n\nDuplicate text here.\n\nDuplicate text here.\n')
     return doc
 
 

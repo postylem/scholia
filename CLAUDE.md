@@ -29,11 +29,11 @@ scholia comment <doc.md> "exact text to anchor to" "Your comment"
 
 ## Review Workflow
 
-When the human asks you to review or "take a look":
+When the human asks you to "look at the scholia" or review comments:
 
 1. **Read the document**: `Read <doc>.md` to understand current content
-2. **List open comments**: run `scholia list <doc.md> --open`
-3. **For each open comment**:
+2. **List all comments**: run `scholia list <doc.md>` to get full context (resolved threads show what's already been addressed)
+3. **For each open (unresolved) comment**:
    - Read the anchor text and the human's message
    - If it's a question: reply with `scholia reply` answering it
    - If it's a request to change the document: edit the `.md` file directly, then reply confirming what you changed
@@ -42,6 +42,7 @@ When the human asks you to review or "take a look":
 
 ## Guidelines
 
+- **Never respond to resolved comments.** Resolved threads are closed — the human marked them done. Only work with open (unresolved) threads from `--open`.
 - Keep replies concise — this is margin dialogue, not an essay
 - When editing the document, make minimal targeted changes
 - Quote the specific text you're responding to when it aids clarity

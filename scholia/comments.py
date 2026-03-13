@@ -1,10 +1,19 @@
 """Read/write .scholia.jsonl comment store (W3C Web Annotation format)."""
 
+import getpass
 import json
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def get_default_creator() -> str:
+    """Return the system username for use as the default human creator name."""
+    try:
+        return getpass.getuser()
+    except Exception:
+        return "human"
 
 
 def annotation_path(doc_path: str | Path) -> Path:
@@ -37,12 +46,14 @@ def append_comment(
     prefix: str = "",
     suffix: str = "",
     body_text: str = "",
-    creator: str = "human",
+    creator: str | None = None,
 ) -> dict:
     """Create a new annotation with a TextQuoteSelector."""
+    if creator is None:
+        creator = get_default_creator()
     now = datetime.now(timezone.utc).isoformat()
     creator_obj = {
-        "type": "Person" if creator == "human" else "Software",
+        "type": "Software" if creator == "ai" else "Person",
         "name": creator,
     }
     ann = {
@@ -97,7 +108,7 @@ def append_reply(
             "type": "TextualBody",
             "value": body_text,
             "creator": {
-                "type": "Person" if creator == "human" else "Software",
+                "type": "Software" if creator == "ai" else "Person",
                 "name": creator,
             },
             "created": now,

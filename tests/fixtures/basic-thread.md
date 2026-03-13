@@ -1,3 +1,9 @@
+---
+title: The Lindy Effect
+author: V
+date: 2026-03-12
+---
+
 # The Lindy Effect
 
 The Lindy effect is a theorized phenomenon by which the future life expectancy of

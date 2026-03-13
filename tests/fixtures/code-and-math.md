@@ -1,3 +1,9 @@
+---
+title: Numerical Computing Patterns
+author: V
+date: 2026-03-12
+---
+
 # Numerical Computing Patterns
 
 Einstein's mass-energy equivalence $E = mc^2$ is perhaps the most famous equation

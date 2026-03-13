@@ -9,6 +9,7 @@ from pathlib import Path
 from scholia.comments import (
     append_comment,
     append_reply,
+    get_default_creator,
     list_open,
     load_comments,
     resolve,
@@ -129,7 +130,7 @@ def main():
     p_comment.add_argument("doc", help="Markdown document path")
     p_comment.add_argument("anchor", help="Text to anchor the comment to")
     p_comment.add_argument("text", help="Comment text")
-    p_comment.add_argument("--creator", default="human")
+    p_comment.add_argument("--creator", default=None)
 
     # resolve
     p_resolve = sub.add_parser("resolve", help="Resolve a thread")

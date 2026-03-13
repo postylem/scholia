@@ -1,3 +1,9 @@
+---
+title: Error Handling in Distributed Systems
+author: V
+date: 2026-03-12
+---
+
 # Error Handling in Distributed Systems
 
 Distributed systems fail in ways that monolithic applications do not. Network
