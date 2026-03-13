@@ -14,6 +14,7 @@
   var sidebarEl = document.getElementById('scholia-sidebar');
   var containerEl = document.getElementById('scholia-container');
   var toolbarEl = document.getElementById('scholia-toolbar');
+  var resizeHandle = document.getElementById('scholia-resize-handle');
   var highlights = new Map();   // annotation id → [mark elements]
   var orphanIds = new Set();
   var filterMode = 'open';      // 'open' or 'all'
@@ -43,9 +44,7 @@
         if (!sidebarHidden) { reanchorAll(); positionCards(); }
       } else if (msg.type === 'comments_update') {
         comments = msg.comments;
-        renderSidebar();
-        reanchorAll();
-        positionCards();
+        scheduleRender();
       } else if (msg.type === 'error') {
         console.warn('Scholia server error:', msg.message);
       }
@@ -60,6 +59,19 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(obj));
     }
+  }
+
+  // ── Debounced render pipeline ───────────────────────
+
+  var renderRaf = 0;
+  function scheduleRender() {
+    if (renderRaf) cancelAnimationFrame(renderRaf);
+    renderRaf = requestAnimationFrame(function () {
+      renderRaf = 0;
+      renderSidebar();
+      reanchorAll();
+      positionCards();
+    });
   }
 
   // ── Toolbar ──────────────────────────────────────────
@@ -80,7 +92,7 @@
 
     var snBtn = document.createElement('button');
     snBtn.className = 'scholia-toolbar-btn' + (sidenotesEnabled ? ' active' : '');
-    snBtn.textContent = 'Sidenotes';
+    snBtn.textContent = sidenotesEnabled ? 'Sidenotes' : 'Footnotes';
     snBtn.title = 'Toggle sidenote rendering (requires re-render)';
     snBtn.addEventListener('click', function () {
       sidenotesEnabled = !sidenotesEnabled;
@@ -90,24 +102,46 @@
     });
     toolbarEl.appendChild(snBtn);
 
+    var commentGroup = document.createElement('span');
+    commentGroup.className = 'scholia-toolbar-group';
+
     var sbBtn = document.createElement('button');
-    sbBtn.className = 'scholia-toolbar-btn' + (!sidebarHidden ? ' active' : '');
-    sbBtn.textContent = sidebarHidden ? 'Show comments' : 'Comments';
+    sbBtn.className = 'scholia-toolbar-btn scholia-toolbar-group-left' + (!sidebarHidden ? ' active' : '');
+    if (sidebarHidden) {
+      var s = document.createElement('s');
+      s.textContent = 'Comments';
+      sbBtn.appendChild(s);
+    } else {
+      sbBtn.textContent = 'Comments';
+    }
     sbBtn.title = 'Hide/show comment sidebar';
     sbBtn.addEventListener('click', function () {
       sidebarHidden = !sidebarHidden;
       containerEl.classList.toggle('scholia-sidebar-hidden', sidebarHidden);
       if (sidebarHidden) {
-        // Clear highlights and dismiss any pending form
         clearAllHighlights();
         dismissCommentPrompt();
       } else {
-        reanchorAll();
-        positionCards();
+        scheduleRender();
       }
       renderToolbar();
     });
-    toolbarEl.appendChild(sbBtn);
+    commentGroup.appendChild(sbBtn);
+
+    if (!sidebarHidden) {
+      var filterBtn = document.createElement('button');
+      filterBtn.className = 'scholia-toolbar-btn scholia-toolbar-group-right';
+      filterBtn.textContent = filterMode === 'open' ? 'Open' : 'All';
+      filterBtn.title = 'Toggle open/all comments';
+      filterBtn.addEventListener('click', function () {
+        filterMode = filterMode === 'open' ? 'all' : 'open';
+        renderToolbar();
+        scheduleRender();
+      });
+      commentGroup.appendChild(filterBtn);
+    }
+
+    toolbarEl.appendChild(commentGroup);
   }
 
   function clearAllHighlights() {
@@ -340,34 +374,6 @@
       sidebarEl.appendChild(existingForm);
     }
 
-    // Filter controls
-    var controls = document.createElement('div');
-    controls.className = 'scholia-sidebar-controls';
-
-    var openBtn = document.createElement('button');
-    openBtn.className = 'scholia-filter-btn' + (filterMode === 'open' ? ' active' : '');
-    openBtn.textContent = 'Open';
-    openBtn.addEventListener('click', function () {
-      filterMode = 'open';
-      renderSidebar();
-      reanchorAll();
-      positionCards();
-    });
-    controls.appendChild(openBtn);
-
-    var allBtn = document.createElement('button');
-    allBtn.className = 'scholia-filter-btn' + (filterMode === 'all' ? ' active' : '');
-    allBtn.textContent = 'All';
-    allBtn.addEventListener('click', function () {
-      filterMode = 'all';
-      renderSidebar();
-      reanchorAll();
-      positionCards();
-    });
-    controls.appendChild(allBtn);
-
-    sidebarEl.appendChild(controls);
-
     // Filter comments
     var filtered = [];
     for (var i = 0; i < comments.length; i++) {
@@ -532,6 +538,7 @@
     replyRow.className = 'scholia-reply-input';
 
     var replyTextarea = document.createElement('textarea');
+    replyTextarea.name = 'reply-' + ann.id;
     replyTextarea.placeholder = 'Reply\u2026';
     replyTextarea.rows = 1;
     autoGrow(replyTextarea);
@@ -786,13 +793,9 @@
 
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
 
-    // Reserve space for controls and new-comment form
-    var controlsEl = sidebarEl.querySelector('.scholia-sidebar-controls');
+    // Reserve space for new-comment form
     var newCommentEl = document.getElementById('scholia-new-comment');
     var minY = parseFloat(getComputedStyle(sidebarEl).paddingTop) || 0;
-    if (controlsEl) {
-      minY = controlsEl.getBoundingClientRect().bottom - sidebarTop;
-    }
     if (newCommentEl) {
       var ncBottom = newCommentEl.getBoundingClientRect().bottom - sidebarTop;
       if (ncBottom > minY) minY = ncBottom;
@@ -950,6 +953,7 @@
     form.appendChild(anchorDiv);
 
     var textarea = document.createElement('textarea');
+    textarea.name = 'new-comment';
     textarea.placeholder = 'Add a comment\u2026';
     textarea.rows = 3;
     autoGrow(textarea);
@@ -1243,6 +1247,53 @@
       });
     }
   }, { passive: true });
+
+  // ── Sidebar resize handle ──────────────────────────
+
+  var SIDEBAR_MIN = 200;
+  var SIDEBAR_MAX = 600;
+  var SIDEBAR_COLLAPSE = 80;  // drag past this to hide
+
+  resizeHandle.addEventListener('mousedown', function (e) {
+    e.preventDefault();
+    resizeHandle.classList.add('dragging');
+    containerEl.style.transition = 'none';
+
+    function onMove(e) {
+      var newWidth = window.innerWidth - e.clientX;
+      if (newWidth < SIDEBAR_COLLAPSE) {
+        // Collapse: hide sidebar
+        if (!sidebarHidden) {
+          sidebarHidden = true;
+          containerEl.classList.add('scholia-sidebar-hidden');
+          clearAllHighlights();
+          dismissCommentPrompt();
+          renderToolbar();
+        }
+        return;
+      }
+      // Uncollapse if was hidden
+      if (sidebarHidden) {
+        sidebarHidden = false;
+        containerEl.classList.remove('scholia-sidebar-hidden');
+        renderToolbar();
+        scheduleRender();
+      }
+      var clamped = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, newWidth));
+      containerEl.style.setProperty('--sidebar-width', clamped + 'px');
+      positionCards();
+    }
+
+    function onUp() {
+      resizeHandle.classList.remove('dragging');
+      containerEl.style.transition = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 
   // ── Init ───────────────────────────────────────────
 

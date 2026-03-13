@@ -1,6 +1,8 @@
 """Integration tests for the scholia server."""
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -113,3 +115,43 @@ async def test_ws_mark_unread(client, tmp_doc):
     await ws.close()
     state = load_state(tmp_doc)
     assert state[ann["id"]]["lastReadAt"] is None
+
+
+# ── Static analysis ──────────────────────────────────
+
+
+def test_form_elements_have_name_or_id():
+    """Every dynamically created textarea/input must have a name or id.
+
+    Chrome DevTools flags form fields without these attributes, and the
+    warnings accumulate across re-renders, making it look like a leak.
+    """
+    js_path = Path(__file__).resolve().parent.parent / "scholia" / "static" / "scholia.js"
+    source = js_path.read_text()
+    lines = source.splitlines()
+
+    # Find all createElement('textarea') and createElement('input') calls
+    pattern = re.compile(r"""createElement\(['"](textarea|input)['"]\)""")
+    violations = []
+    window = 8  # lines to look ahead for .name or .id assignment
+
+    for i, line in enumerate(lines):
+        if pattern.search(line):
+            # Extract the variable name (e.g. "var replyTextarea = ...")
+            var_match = re.search(r"var\s+(\w+)\s*=", line)
+            if not var_match:
+                continue
+            var_name = var_match.group(1)
+
+            # Check next `window` lines for .name or .id assignment
+            snippet = "\n".join(lines[i : i + window])
+            has_name = re.search(rf"{var_name}\.name\s*=", snippet)
+            has_id = re.search(rf"{var_name}\.id\s*=", snippet)
+
+            if not has_name and not has_id:
+                violations.append(f"line {i + 1}: {line.strip()}")
+
+    assert violations == [], (
+        "Form elements created without name or id attribute:\n"
+        + "\n".join(violations)
+    )
