@@ -110,6 +110,7 @@ This section is for AI agents reading this README. You rely on the skill install
 scholia list <doc.md> --open              List open comment threads
 scholia list <doc.md> --all               List all threads including resolved
 scholia reply <doc.md> <id> "text"        Reply to a thread
+scholia edit <doc.md> <id> "text"         Edit the last message in a thread
 scholia comment <doc.md> "anchor" "text"  Add a new comment anchored to text
 scholia resolve <doc.md> <id>             Resolve a thread
 scholia unresolve <doc.md> <id>           Reopen a thread

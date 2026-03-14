@@ -11,6 +11,7 @@ from scholia.comments import (
     annotation_path,
     append_comment,
     append_reply,
+    edit_body,
     list_open,
     load_comments,
     resolve,
@@ -61,6 +62,23 @@ def test_list_open_filter(tmp_doc):
     open_anns = list_open(tmp_doc)
     assert len(open_anns) == 1
     assert open_anns[0]["id"] == ann1["id"]
+
+
+def test_edit_body(tmp_doc):
+    """edit_body replaces last body entry's value."""
+    ann = append_comment(tmp_doc, exact="text", body_text="original")
+    append_reply(tmp_doc, ann["id"], "reply text")
+    edited = edit_body(tmp_doc, ann["id"], "edited reply")
+    loaded = load_comments(tmp_doc)
+    assert len(loaded) == 1
+    assert loaded[0]["body"][-1]["value"] == "edited reply"
+    assert "modified" in loaded[0]["body"][-1]
+    assert loaded[0]["body"][0]["value"] == "original"  # first body unchanged
+
+
+def test_edit_body_missing_id(tmp_doc):
+    with pytest.raises(ValueError, match="not found"):
+        edit_body(tmp_doc, "urn:uuid:nonexistent", "text")
 
 
 def test_dedup_by_id(tmp_doc):
@@ -159,6 +177,22 @@ def test_cli_comment_reply_resolve(tmp_doc):
     code, _, _ = _run_cli("unresolve", str(tmp_doc), ann_id)
     assert code == 0
     assert load_comments(tmp_doc)[0]["scholia:status"] == "open"
+
+
+def test_cli_edit(tmp_doc):
+    """CLI edit replaces the last body entry."""
+    append_comment(tmp_doc, exact="text", body_text="first")
+    ann_id = load_comments(tmp_doc)[0]["id"]
+    append_reply(tmp_doc, ann_id, "second")
+    code, out, _ = _run_cli("edit", str(tmp_doc), ann_id, "edited second")
+    assert code == 0 and "Edited" in out
+    assert load_comments(tmp_doc)[0]["body"][-1]["value"] == "edited second"
+
+
+def test_cli_version():
+    """scholia --version prints version string."""
+    code, out, _ = _run_cli("--version")
+    assert code == 0 and "scholia" in out
 
 
 def test_cli_error_cases(tmp_doc):

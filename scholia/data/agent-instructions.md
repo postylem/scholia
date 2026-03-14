@@ -26,6 +26,9 @@ scholia reply <doc.md> <annotation-id> "Your reply text here"
 # Add a new comment anchored to specific text
 scholia comment <doc.md> "exact text to anchor to" "Your comment"
 
+# Edit the last message in a thread
+scholia edit <doc.md> <annotation-id> "New text"
+
 # Resolve / unresolve a thread
 scholia resolve <doc.md> <annotation-id>
 scholia unresolve <doc.md> <annotation-id>

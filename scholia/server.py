@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import signal
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,6 +16,7 @@ from scholia.comments import (
     annotation_path,
     append_comment,
     append_reply,
+    edit_body,
     get_default_creator,
     load_comments,
     resolve,
@@ -91,7 +93,9 @@ def _extract_title(markdown_text: str) -> str:
     return "Scholia"
 
 
-async def build_page(doc_path: Path, template: str, sidenotes: bool = False) -> str:
+async def build_page(
+    doc_path: Path, template: str, sidenotes: bool = False, display_path: str = ""
+) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     html = await render_pandoc(doc_path, sidenotes=sidenotes)
     md_text = doc_path.read_text(encoding="utf-8")
@@ -101,7 +105,8 @@ async def build_page(doc_path: Path, template: str, sidenotes: bool = False) -> 
     page = template.replace("{{TITLE}}", title)
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_default_creator()))
-    page = page.replace("{{DOC_PATH}}", json.dumps(str(doc_path)))
+    page = page.replace("{{DOC_PATH}}", json.dumps(display_path or str(doc_path)))
+    page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
     page = page.replace("{{SIDENOTES_ENABLED}}", json.dumps(sidenotes))
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments))
     page = page.replace("{{STATE_JSON}}", json.dumps(state))
@@ -138,6 +143,7 @@ class _FileChangeHandler(FileSystemEventHandler):
 class ScholiaServer:
     def __init__(self, doc_path: str, host: str = "127.0.0.1", port: int = 8088):
         _check_pandoc()
+        self.display_path = doc_path  # as given on command line
         self.doc_path = Path(doc_path).resolve()
         if not self.doc_path.exists():
             raise FileNotFoundError(f"Document not found: {self.doc_path}")
@@ -165,7 +171,9 @@ class ScholiaServer:
 
     async def _handle_index(self, request):
         page = await build_page(
-            self.doc_path, self.template, sidenotes=self.sidenotes_enabled
+            self.doc_path, self.template,
+            sidenotes=self.sidenotes_enabled,
+            display_path=self.display_path,
         )
         return web.Response(text=page, content_type="text/html")
 
@@ -203,8 +211,15 @@ class ScholiaServer:
                     body_text=msg["body"],
                     creator=msg.get("creator", get_default_creator()),
                 )
+            elif msg_type == "edit_body":
+                edit_body(
+                    self.doc_path,
+                    annotation_id=msg["annotation_id"],
+                    new_text=msg["body"],
+                )
             elif msg_type == "resolve":
                 resolve(self.doc_path, msg["annotation_id"])
+                mark_read(self.doc_path, msg["annotation_id"])
             elif msg_type == "unresolve":
                 unresolve(self.doc_path, msg["annotation_id"])
             elif msg_type == "toggle_sidenotes":
@@ -253,6 +268,17 @@ class ScholiaServer:
 
     async def start(self):
         self._loop = asyncio.get_running_loop()
+        stop_event = asyncio.Event()
+
+        def _request_stop():
+            if not stop_event.is_set():
+                stop_event.set()
+            else:
+                # Second Ctrl-C: force exit
+                raise SystemExit(0)
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            self._loop.add_signal_handler(sig, _request_stop)
 
         # Start watchdog
         handler = _FileChangeHandler(self.doc_path, self._loop, self._on_file_change)
@@ -274,9 +300,13 @@ class ScholiaServer:
         print(f"Scholia serving {self.doc_path.name} at {url}")
         print("Press Ctrl+C to stop")
 
-        try:
-            await asyncio.Event().wait()
-        finally:
-            observer.stop()
-            observer.join()
-            await runner.cleanup()
+        await stop_event.wait()
+
+        # Close all WebSocket connections so runner.cleanup() doesn't block
+        for ws in list(self.ws_clients):
+            await ws.close()
+        self.ws_clients.clear()
+
+        observer.stop()
+        observer.join(timeout=1)
+        await runner.cleanup()

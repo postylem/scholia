@@ -76,88 +76,170 @@
 
   // ── Toolbar ──────────────────────────────────────────
 
+  // Sidebar toggle icon: panel sliding out (open) or in (closed)
+  var sidebarIconOpen = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="12" height="10" rx="1.5"/><line x1="9" y1="2" x2="9" y2="12"/><line x1="5.5" y1="6" x2="7" y2="7" /><line x1="5.5" y1="8" x2="7" y2="7" /></svg>';
+  var sidebarIconClosed = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="12" height="10" rx="1.5"/><line x1="9" y1="2" x2="9" y2="12"/><line x1="7" y1="6" x2="5.5" y2="7" /><line x1="7" y1="8" x2="5.5" y2="7" /></svg>';
+
   function renderToolbar() {
     toolbarEl.innerHTML = '';
 
+    // "scholia on <filename>" at left
+    var brandPath = document.createElement('span');
+    brandPath.className = 'scholia-toolbar-path';
+    var brandLink = document.createElement('a');
+    brandLink.className = 'scholia-toolbar-brand';
+    brandLink.href = 'https://github.com/postylem/scholia';
+    brandLink.target = '_blank';
+    brandLink.rel = 'noopener';
+    brandLink.textContent = 'scholia';
+    brandPath.appendChild(brandLink);
+    var onText = document.createTextNode(' on ');
+    brandPath.appendChild(onText);
     var docPath = window.__SCHOLIA_DOC_PATH__ || '';
-    var pathLabel = document.createElement('span');
-    pathLabel.className = 'scholia-toolbar-path';
-    // Show parent dir + filename for context without being too long
-    var parts = docPath.replace(/\\/g, '/').split('/');
-    pathLabel.textContent = parts.length > 1
-      ? parts.slice(-2).join('/')
-      : parts[parts.length - 1] || '';
-    pathLabel.title = docPath;
-    toolbarEl.appendChild(pathLabel);
-
-    var brand = document.createElement('span');
-    brand.className = 'scholia-toolbar-brand';
-    brand.textContent = 'scholia';
-    toolbarEl.appendChild(brand);
-
-    var themeBtn = document.createElement('button');
-    themeBtn.className = 'scholia-toolbar-btn' + (darkMode ? ' active' : '');
-    themeBtn.textContent = darkMode ? 'Dark' : 'Light';
-    themeBtn.title = 'Toggle dark/light mode';
-    themeBtn.addEventListener('click', function () {
-      darkMode = !darkMode;
-      document.body.classList.toggle('scholia-dark', darkMode);
-      renderToolbar();
+    var docFullPath = window.__SCHOLIA_DOC_FULLPATH__ || docPath;
+    var fileSpan = document.createElement('span');
+    fileSpan.className = 'scholia-toolbar-filename';
+    fileSpan.textContent = docPath;
+    fileSpan.addEventListener('mouseenter', function () {
+      fileSpan.textContent = docFullPath;
     });
-    toolbarEl.appendChild(themeBtn);
-
-    var snBtn = document.createElement('button');
-    snBtn.className = 'scholia-toolbar-btn' + (sidenotesEnabled ? ' active' : '');
-    snBtn.textContent = sidenotesEnabled ? 'Sidenotes' : 'Footnotes';
-    snBtn.title = 'Toggle sidenote rendering (requires re-render)';
-    snBtn.addEventListener('click', function () {
-      sidenotesEnabled = !sidenotesEnabled;
-      docEl.classList.toggle('scholia-no-sidenotes', !sidenotesEnabled);
-      wsSend({ type: 'toggle_sidenotes', enabled: sidenotesEnabled });
-      renderToolbar();
+    fileSpan.addEventListener('mouseleave', function () {
+      fileSpan.textContent = docPath;
     });
-    toolbarEl.appendChild(snBtn);
+    brandPath.appendChild(fileSpan);
+    toolbarEl.appendChild(brandPath);
 
-    var commentGroup = document.createElement('span');
-    commentGroup.className = 'scholia-toolbar-group';
+    // Options dropdown
+    var optionsWrap = document.createElement('span');
+    optionsWrap.className = 'scholia-options-wrap';
 
-    var sbBtn = document.createElement('button');
-    sbBtn.className = 'scholia-toolbar-btn scholia-toolbar-group-left' + (!sidebarHidden ? ' active' : '');
-    if (sidebarHidden) {
-      var s = document.createElement('s');
-      s.textContent = 'Comments';
-      sbBtn.appendChild(s);
-    } else {
-      sbBtn.textContent = 'Comments';
-    }
-    sbBtn.title = 'Hide/show comment sidebar';
-    sbBtn.addEventListener('click', function () {
-      sidebarHidden = !sidebarHidden;
-      containerEl.classList.toggle('scholia-sidebar-hidden', sidebarHidden);
-      if (sidebarHidden) {
-        clearAllHighlights();
-        dismissCommentPrompt();
-      } else {
-        scheduleRender();
-      }
-      renderToolbar();
+    var optionsBtn = document.createElement('button');
+    optionsBtn.className = 'scholia-toolbar-btn';
+    optionsBtn.textContent = 'Options';
+    optionsBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var menu = optionsWrap.querySelector('.scholia-options-menu');
+      if (menu) { menu.remove(); return; }
+      menu = document.createElement('div');
+      menu.className = 'scholia-options-menu';
+
+      // Theme row
+      var themeRow = document.createElement('div');
+      themeRow.className = 'scholia-options-row';
+      var themeLabel = document.createElement('span');
+      themeLabel.textContent = 'Theme:';
+      themeRow.appendChild(themeLabel);
+      var themeGroup = document.createElement('span');
+      themeGroup.className = 'scholia-options-toggle';
+      var lightBtn = document.createElement('button');
+      lightBtn.textContent = 'light';
+      lightBtn.className = darkMode ? '' : 'active';
+      lightBtn.addEventListener('click', function () {
+        darkMode = false;
+        document.body.classList.remove('scholia-dark');
+        menu.remove();
+        renderToolbar();
+      });
+      var darkBtn = document.createElement('button');
+      darkBtn.textContent = 'dark';
+      darkBtn.className = darkMode ? 'active' : '';
+      darkBtn.addEventListener('click', function () {
+        darkMode = true;
+        document.body.classList.add('scholia-dark');
+        menu.remove();
+        renderToolbar();
+      });
+      themeGroup.appendChild(lightBtn);
+      themeGroup.appendChild(darkBtn);
+      themeRow.appendChild(themeGroup);
+      menu.appendChild(themeRow);
+
+      // Footnote display row
+      var fnRow = document.createElement('div');
+      fnRow.className = 'scholia-options-row';
+      var fnLabel = document.createElement('span');
+      fnLabel.textContent = 'Footnotes:';
+      fnRow.appendChild(fnLabel);
+      var fnGroup = document.createElement('span');
+      fnGroup.className = 'scholia-options-toggle';
+      var sideBtn = document.createElement('button');
+      sideBtn.textContent = 'side';
+      sideBtn.className = sidenotesEnabled ? 'active' : '';
+      sideBtn.addEventListener('click', function () {
+        if (!sidenotesEnabled) {
+          sidenotesEnabled = true;
+          docEl.classList.remove('scholia-no-sidenotes');
+          wsSend({ type: 'toggle_sidenotes', enabled: true });
+          menu.remove();
+          renderToolbar();
+        }
+      });
+      var endBtn = document.createElement('button');
+      endBtn.textContent = 'end';
+      endBtn.className = sidenotesEnabled ? '' : 'active';
+      endBtn.addEventListener('click', function () {
+        if (sidenotesEnabled) {
+          sidenotesEnabled = false;
+          docEl.classList.add('scholia-no-sidenotes');
+          wsSend({ type: 'toggle_sidenotes', enabled: false });
+          menu.remove();
+          renderToolbar();
+        }
+      });
+      fnGroup.appendChild(sideBtn);
+      fnGroup.appendChild(endBtn);
+      fnRow.appendChild(fnGroup);
+      menu.appendChild(fnRow);
+
+      optionsWrap.appendChild(menu);
     });
-    commentGroup.appendChild(sbBtn);
+    optionsWrap.appendChild(optionsBtn);
+    toolbarEl.appendChild(optionsWrap);
+
+    // Close options menu on click outside
+    document.addEventListener('click', function closeMenu() {
+      var menu = optionsWrap.querySelector('.scholia-options-menu');
+      if (menu) menu.remove();
+      document.removeEventListener('click', closeMenu);
+    });
 
     if (!sidebarHidden) {
       var filterBtn = document.createElement('button');
-      filterBtn.className = 'scholia-toolbar-btn scholia-toolbar-group-right';
-      filterBtn.textContent = filterMode === 'open' ? 'Open' : 'All';
-      filterBtn.title = 'Toggle open/all comments';
+      filterBtn.className = 'scholia-toolbar-btn';
+      filterBtn.textContent = filterMode === 'open' ? 'Showing: open threads' : 'Showing: all threads';
+      filterBtn.title = 'Toggle open/all threads';
       filterBtn.addEventListener('click', function () {
         filterMode = filterMode === 'open' ? 'all' : 'open';
         renderToolbar();
         scheduleRender();
       });
-      commentGroup.appendChild(filterBtn);
-    }
+      toolbarEl.appendChild(filterBtn);
 
-    toolbarEl.appendChild(commentGroup);
+      var sbBtn = document.createElement('button');
+      sbBtn.className = 'scholia-toolbar-btn';
+      sbBtn.innerHTML = sidebarIconOpen;
+      sbBtn.title = 'Hide comment sidebar';
+      sbBtn.addEventListener('click', function () {
+        sidebarHidden = true;
+        containerEl.classList.add('scholia-sidebar-hidden');
+        clearAllHighlights();
+        dismissCommentPrompt();
+        renderToolbar();
+      });
+      toolbarEl.appendChild(sbBtn);
+    } else {
+      var sbBtn = document.createElement('button');
+      sbBtn.className = 'scholia-toolbar-btn';
+      sbBtn.innerHTML = sidebarIconClosed;
+      sbBtn.title = 'Show comment sidebar';
+      sbBtn.addEventListener('click', function () {
+        sidebarHidden = false;
+        containerEl.classList.remove('scholia-sidebar-hidden');
+        scheduleRender();
+        renderToolbar();
+      });
+      toolbarEl.appendChild(sbBtn);
+    }
   }
 
   function clearAllHighlights() {
@@ -519,6 +601,62 @@
       body.innerHTML = renderCommentBody(msg.value);
       msgEl.appendChild(body);
 
+      // Edit button on the very last body entry, only for human messages
+      if (j === bodies.length - 1 && role !== 'ai') {
+        var editBtn = document.createElement('button');
+        editBtn.className = 'scholia-btn-edit';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', (function (theBody, theAnn) {
+          return function (e) {
+            e.stopPropagation();
+            var raw = theBody.dataset.raw;
+            var ta = document.createElement('textarea');
+            ta.name = 'edit-' + theAnn.id;
+            ta.className = 'scholia-edit-textarea';
+            ta.value = raw;
+            ta.rows = Math.max(2, raw.split('\n').length);
+            autoGrow(ta);
+            theBody.innerHTML = '';
+            theBody.appendChild(ta);
+            ta.focus();
+
+            var btnRow = document.createElement('div');
+            btnRow.className = 'scholia-edit-buttons';
+
+            var saveBtn = document.createElement('button');
+            saveBtn.textContent = 'Save';
+            saveBtn.addEventListener('click', function (ev) {
+              ev.stopPropagation();
+              var newText = ta.value.trim();
+              if (newText && newText !== raw) {
+                wsSend({
+                  type: 'edit_body',
+                  annotation_id: theAnn.id,
+                  body: newText
+                });
+              } else {
+                // Revert if empty or unchanged
+                theBody.innerHTML = renderCommentBody(raw);
+                theBody.dataset.raw = raw;
+              }
+            });
+            btnRow.appendChild(saveBtn);
+
+            var cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.addEventListener('click', function (ev) {
+              ev.stopPropagation();
+              theBody.innerHTML = renderCommentBody(raw);
+              theBody.dataset.raw = raw;
+            });
+            btnRow.appendChild(cancelBtn);
+
+            theBody.appendChild(btnRow);
+          };
+        })(body, ann));
+        meta.appendChild(editBtn);
+      }
+
       // Last AI message: read/unread toggle label in upper-right
       if (j === lastAiIdx) {
         var readLabel = document.createElement('button');
@@ -670,7 +808,6 @@
       var ann = comments[i];
       var status = ann['scholia:status'] || 'open';
 
-      // Skip resolved comments in 'open' filter mode
       if (filterMode === 'open' && status === 'resolved') continue;
 
       var selector = ann.target && ann.target.selector;

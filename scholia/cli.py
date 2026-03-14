@@ -1,4 +1,4 @@
-"""CLI: scholia start/reply/list/comment/resolve/unresolve commands."""
+"""CLI: scholia view/reply/list/comment/edit/resolve/unresolve commands."""
 
 import argparse
 import asyncio
@@ -9,6 +9,7 @@ from pathlib import Path
 from scholia.comments import (
     append_comment,
     append_reply,
+    edit_body,
     get_default_creator,
     list_open,
     load_comments,
@@ -86,13 +87,18 @@ def cmd_view(args):
     server = ScholiaServer(doc, host=args.host, port=args.port)
     try:
         asyncio.run(server.start())
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         pass
 
 
 def cmd_reply(args):
     ann = append_reply(args.doc, args.id, args.text, creator=args.creator)
     print(f"Reply added to {ann['id']}")
+
+
+def cmd_edit(args):
+    ann = edit_body(args.doc, args.id, args.text)
+    print(f"Edited last message in {ann['id']}")
 
 
 def cmd_list(args):
@@ -157,6 +163,50 @@ def _load_instruction_template() -> str:
     return template_path.read_text(encoding="utf-8")
 
 
+def _find_gitignore() -> Path | None:
+    """Find .gitignore in cwd or git root, if any."""
+    cwd = Path.cwd()
+    # Check cwd first
+    gi = cwd / ".gitignore"
+    if gi.exists():
+        return gi
+    # Walk up to find git root
+    for parent in cwd.parents:
+        if (parent / ".git").exists():
+            gi = parent / ".gitignore"
+            return gi if gi.exists() else None
+        if parent == parent.parent:
+            break
+    return None
+
+
+_GITIGNORE_SNIPPET = """\
+# Scholia sidecar files
+*.scholia.state.json
+# *.scholia.jsonl
+"""
+
+
+def _offer_gitignore():
+    """Offer to append scholia patterns to .gitignore."""
+    gi = _find_gitignore()
+    if gi is None:
+        return
+    content = gi.read_text(encoding="utf-8")
+    if "*.scholia.state.json" in content:
+        return  # already has scholia patterns
+    try:
+        answer = input(f"Add scholia patterns to {gi}? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return
+    if answer in ("", "y", "yes"):
+        with open(gi, "a", encoding="utf-8") as f:
+            if not content.endswith("\n"):
+                f.write("\n")
+            f.write(_GITIGNORE_SNIPPET)
+        print(f"Updated {gi}")
+
+
 def cmd_skill_init(args):
     if args.path:
         path = Path(args.path).expanduser()
@@ -175,9 +225,14 @@ def cmd_skill_init(args):
     print(f"Wrote {path}")
     print("This file teaches your AI coding agent how to use scholia.")
 
+    _offer_gitignore()
+
 
 def cmd_resolve(args):
+    from scholia.state import mark_read
+
     resolved = resolve(args.doc, args.id)
+    mark_read(args.doc, resolved["id"])
     print(f"Resolved {resolved['id']}")
 
 
@@ -187,11 +242,16 @@ def cmd_unresolve(args):
 
 
 def main():
+    from scholia import __version__
+
     parser = argparse.ArgumentParser(
         prog="scholia",
         description="Collaborative marginalia for human-AI dialogue",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument(
+        "--version", action="version", version=f"scholia {__version__}"
+    )
+    sub = parser.add_subparsers(dest="command")
 
     # view
     p_view = sub.add_parser("view", help="View and annotate a document")
@@ -225,6 +285,12 @@ def main():
     p_comment.add_argument("text", help="Comment text")
     p_comment.add_argument("--creator", default=None)
 
+    # edit
+    p_edit = sub.add_parser("edit", help="Edit the last message in a thread")
+    p_edit.add_argument("doc", help="Markdown document path")
+    p_edit.add_argument("id", help="Annotation ID")
+    p_edit.add_argument("text", help="New text for the last message")
+
     # skill-init
     p_skill = sub.add_parser("skill-init", help="Install or update agent skill file")
     p_skill.add_argument(
@@ -247,11 +313,16 @@ def main():
 
     args = parser.parse_args()
 
+    if args.command is None:
+        parser.print_help()
+        sys.exit(0)
+
     handlers = {
         "view": cmd_view,
         "reply": cmd_reply,
         "list": cmd_list,
         "comment": cmd_comment,
+        "edit": cmd_edit,
         "skill-init": cmd_skill_init,
         "resolve": cmd_resolve,
         "unresolve": cmd_unresolve,

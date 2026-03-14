@@ -1,7 +1,6 @@
 """Tests for scholia skill-init command."""
 import subprocess
 import sys
-from pathlib import Path
 
 
 def test_skill_init_default_path(tmp_path):

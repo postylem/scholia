@@ -5,3 +5,8 @@ __pycache__/
 .superpowers/
 playground/*
 !playground/.gitkeep
+
+# Scholia read/unread state (personal, never shared)
+*.scholia.state.json
+# Uncomment to also ignore annotation threads:
+# *.scholia.jsonl

@@ -1,4 +1,3 @@
-# scholia/state.py
 """Read/unread state management via <doc>.scholia.state.json sidecar."""
 
 import json

@@ -492,6 +492,57 @@ input.margin-toggle { display: none; }
   letter-spacing: 0;
 }
 .scholia-read-toggle:hover { color: var(--s-accent); }
+.scholia-btn-edit {
+  font-size: 0.58rem;
+  font-family: var(--s-sans);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--s-text-dim);
+  font-weight: 400;
+  margin-left: auto;
+}
+.scholia-btn-edit:hover { color: var(--s-accent); }
+.scholia-edit-textarea {
+  width: 100%;
+  font-family: var(--s-sans);
+  font-size: 0.75rem;
+  padding: 0.3rem;
+  border: 1px solid var(--s-border);
+  border-radius: 3px;
+  background: var(--s-card);
+  color: var(--s-text);
+  resize: vertical;
+  min-height: 2rem;
+  box-sizing: border-box;
+}
+.scholia-edit-buttons {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+.scholia-edit-buttons button {
+  font-size: 0.65rem;
+  font-family: var(--s-sans);
+  border: none;
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+}
+.scholia-edit-buttons button:first-child {
+  background: var(--s-accent);
+  color: #fff;
+}
+.scholia-edit-buttons button:last-child {
+  background: none;
+  color: var(--s-text-dim);
+  border: 1px solid var(--s-border);
+}
+.scholia-edit-buttons button:last-child:hover {
+  border-color: var(--s-accent);
+  color: var(--s-accent);
+}
 .scholia-read-toggle-unread {
   color: var(--s-unread);
   font-weight: 700;
@@ -747,11 +798,6 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   border-left: 2px solid var(--s-ai);
 }
 
-/* ── Resolve button ────────────────────────────────── */
-
-
-/* (mark-unread is now handled by .scholia-read-toggle) */
-
 /* ── Anchor pulse animation ────────────────────────── */
 
 @keyframes scholia-pulse {
@@ -906,18 +952,27 @@ mark.scholia-highlight.scholia-pulse {
   margin-right: auto;
   font-size: 0.72rem;
   color: var(--s-text-dim);
+  opacity: 0.6;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.scholia-toolbar-path .scholia-toolbar-filename {
+  color: var(--s-text);
+  opacity: 1;
+}
 
-.scholia-toolbar-brand {
-  font-size: 0.72rem;
-  color: var(--s-text-dim);
-  opacity: 0.5;
-  margin-right: 0.5rem;
+a.scholia-toolbar-brand {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
   font-style: italic;
   letter-spacing: 0.03em;
+}
+a.scholia-toolbar-brand:hover {
+  opacity: 1;
+  color: var(--s-text);
 }
 
 .scholia-toolbar-btn {
@@ -935,26 +990,66 @@ mark.scholia-highlight.scholia-pulse {
   color: var(--s-text);
   border-color: var(--s-accent);
 }
+.scholia-toolbar-btn svg {
+  display: block;
+}
 .scholia-toolbar-btn.active {
   background: var(--s-accent);
   color: #fff;
   border-color: var(--s-accent);
 }
-.scholia-toolbar-group {
+/* ── Options dropdown ─────────────────────────────── */
+
+.scholia-options-wrap {
+  position: relative;
+}
+.scholia-options-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--s-card);
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-family: var(--s-sans);
+}
+.scholia-options-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--s-text-dim);
+}
+.scholia-options-toggle {
   display: inline-flex;
-}
-.scholia-toolbar-group .scholia-toolbar-btn {
-  border-radius: 0;
-}
-.scholia-toolbar-group .scholia-toolbar-group-left {
-  border-radius: 3px 0 0 3px;
-}
-.scholia-toolbar-group .scholia-toolbar-group-right {
-  border-radius: 0 3px 3px 0;
-  border-left: none;
-}
-.scholia-toolbar-group .scholia-toolbar-group-left:only-child {
+  border: 1px solid var(--s-border);
   border-radius: 3px;
+  overflow: hidden;
+}
+.scholia-options-toggle button {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-family: var(--s-sans);
+  cursor: pointer;
+  color: var(--s-text-dim);
+}
+.scholia-options-toggle button + button {
+  border-left: 1px solid var(--s-border);
+}
+.scholia-options-toggle button.active {
+  background: var(--s-accent);
+  color: #fff;
+}
+.scholia-options-toggle button:hover:not(.active) {
+  color: var(--s-text);
 }
 
 /* ── Sidebar hide/show ─────────────────────────────── */

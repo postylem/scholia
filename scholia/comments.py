@@ -123,6 +123,35 @@ def append_reply(
     return ann
 
 
+def edit_body(
+    doc_path: str | Path,
+    annotation_id: str,
+    new_text: str,
+) -> dict:
+    """Edit the last body entry of an annotation."""
+    comments = load_comments(doc_path)
+    ann = None
+    for c in comments:
+        if c["id"] == annotation_id:
+            ann = c
+            break
+    if ann is None:
+        raise ValueError(f"Annotation {annotation_id} not found")
+
+    if not ann.get("body"):
+        raise ValueError(f"Annotation {annotation_id} has no body entries")
+
+    now = datetime.now(timezone.utc).isoformat()
+    ann["body"][-1]["value"] = new_text
+    ann["body"][-1]["modified"] = now
+    ann["modified"] = now
+
+    path = annotation_path(doc_path)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ann) + "\n")
+    return ann
+
+
 def list_open(doc_path: str | Path) -> list[dict]:
     """List annotations with open status."""
     return [c for c in load_comments(doc_path) if c.get("scholia:status") == "open"]

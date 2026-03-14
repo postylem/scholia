@@ -90,6 +90,24 @@ async def test_ws_resolve(client, tmp_doc):
     await ws.close()
     comments = load_comments(tmp_doc)
     assert comments[0]["scholia:status"] == "resolved"
+    # Resolve should also mark as read
+    state = load_state(tmp_doc)
+    assert ann["id"] in state
+    assert state[ann["id"]]["lastReadAt"] is not None
+
+
+@pytest.mark.asyncio
+async def test_ws_edit_body(client, tmp_doc):
+    ann = append_comment(tmp_doc, exact="Some text", body_text="original")
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({
+        "type": "edit_body",
+        "annotation_id": ann["id"],
+        "body": "edited text",
+    })
+    await ws.close()
+    comments = load_comments(tmp_doc)
+    assert comments[0]["body"][-1]["value"] == "edited text"
 
 
 @pytest.mark.asyncio
