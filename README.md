@@ -4,7 +4,7 @@ Take notes in the margins of live-rendered rich text documents, and collaborate 
 
 Think of notes added to manuscripts by medieval scholars annotating clarifications, corrections, and arguments threaded alongside the original text (called [scholia](https://en.wikipedia.org/wiki/Scholia)). This is a tool for maintaining such marginalia, and (optionally) using them to collaborate with an AI interlocutor as the document evolves.
 
-![Scholia screenshot](docs/demo_screenshot.png)
+![Scholia screenshot](assets/demo_screenshot.png)
 
 ## What is this?
 
