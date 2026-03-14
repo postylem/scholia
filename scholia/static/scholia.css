@@ -684,7 +684,48 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   height: 0;
 }
 
-.scholia-card.scholia-orphan { opacity: 0.6; }
+.scholia-orphan-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.75rem;
+  color: var(--s-text-dim);
+  position: relative;
+}
+.scholia-orphan-label-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 50%;
+  border: 1px solid var(--s-text-dim);
+  color: var(--s-text-dim);
+  font-size: 0.6rem;
+  font-weight: 700;
+  cursor: help;
+  flex-shrink: 0;
+}
+.scholia-orphan-tooltip {
+  display: none;
+  position: absolute;
+  top: 1.6em;
+  left: 0;
+  width: 240px;
+  background: var(--s-card);
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--s-text);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  z-index: 50;
+}
+.scholia-orphan-label-help:hover + .scholia-orphan-tooltip,
+.scholia-orphan-tooltip:hover {
+  display: block;
+}
 .scholia-orphan-icon {
   display: inline-flex;
   align-items: center;

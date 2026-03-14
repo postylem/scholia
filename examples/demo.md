@@ -8,11 +8,6 @@ subtitle: Human-AI dialogue via collaborative marginalia
 Write rich text in your editor, review the rendered version with an AI assistant via live comments in the margins on your browser.
 
 
-
-Think of marginal annotations scribbled in the margins of manuscripts by medieval scholars. Such [*scholia*](https://en.wikipedia.org/wiki/Scholia) could be clarifications, corrections, and arguments threaded alongside the original text. This is for doing that, but with an AI interlocutor.
-
-
-
 ## How It Works
 
 You edit `.md` files in your editor. The browser shows a live-rendered view with a comment sidebar. Select any text to start a conversation about it.

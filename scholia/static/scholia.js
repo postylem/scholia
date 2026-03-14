@@ -884,13 +884,15 @@
       currentY = top + (shouldExpand ? entry.expandedH : entry.collapsedH) + 4;
     }
 
-    // Remove stale divider if no orphans this render
+    // Remove stale divider + label if no orphans this render
     var staleDivider = sidebarEl.querySelector('.scholia-orphan-divider');
-    if (staleDivider && (orphans.length === 0 || positioned.length === 0)) {
-      staleDivider.remove();
+    var staleLabel = sidebarEl.querySelector('.scholia-orphan-label');
+    if (orphans.length === 0 || positioned.length === 0) {
+      if (staleDivider) staleDivider.remove();
+      if (staleLabel) staleLabel.remove();
     }
 
-    // Orphan cards after all positioned ones, with divider
+    // Orphan cards after all positioned ones, with divider and label
     if (orphans.length > 0 && positioned.length > 0) {
       currentY += 16;
       var divider = sidebarEl.querySelector('.scholia-orphan-divider');
@@ -903,7 +905,29 @@
       divider.style.left = '0.75rem';
       divider.style.right = '0.75rem';
       divider.style.top = currentY + 'px';
-      currentY += divider.offsetHeight + 16;
+      currentY += divider.offsetHeight + 8;
+
+      var label = sidebarEl.querySelector('.scholia-orphan-label');
+      if (!label) {
+        label = document.createElement('div');
+        label.className = 'scholia-orphan-label';
+        var labelText = document.createElement('span');
+        labelText.textContent = 'Orphaned threads';
+        var helpIcon = document.createElement('span');
+        helpIcon.className = 'scholia-orphan-label-help';
+        helpIcon.textContent = '?';
+        var tooltip = document.createElement('div');
+        tooltip.className = 'scholia-orphan-tooltip';
+        tooltip.textContent = 'The text to which these "orphaned" threads are anchored can no longer be found in the document. This happens when the anchored passage is edited or deleted. The comments are preserved here so you don\'t lose them.';
+        label.appendChild(labelText);
+        label.appendChild(helpIcon);
+        label.appendChild(tooltip);
+        sidebarEl.appendChild(label);
+      }
+      label.style.position = 'absolute';
+      label.style.left = '0.75rem';
+      label.style.top = currentY + 'px';
+      currentY += label.offsetHeight + 8;
     }
     for (var o = 0; o < orphans.length; o++) {
       var oId = orphans[o].dataset.annotationId;

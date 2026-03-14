@@ -17,9 +17,73 @@ from scholia.comments import (
 )
 
 
-def cmd_start(args):
+def _default_new_filename() -> str:
+    """Return 'notes.md' or 'notes_N.md' if notes.md already exists."""
+    if not Path("notes.md").exists():
+        return "notes.md"
+    max_n = 0
+    for f in Path.cwd().glob("notes_*.md"):
+        try:
+            n = int(f.stem.split("_", 1)[1])
+            max_n = max(max_n, n)
+        except (ValueError, IndexError):
+            pass
+    return f"notes_{max_n + 1}.md"
+
+
+def _pick_or_create_doc() -> str:
+    """Interactive file picker when no doc argument is given."""
+    cwd = Path.cwd()
+    md_files = sorted(cwd.glob("*.md"))
+    choices = [f.name for f in md_files]
+
+    if choices:
+        print("Markdown files in current directory:\n")
+        for i, name in enumerate(choices, 1):
+            print(f"  {i}. {name}")
+        print()
+        while True:
+            try:
+                raw = input("Choose a file (number, name, or Enter to create new): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                sys.exit(0)
+            if raw == "":
+                break  # fall through to create
+            # Try as number
+            try:
+                idx = int(raw)
+                if 1 <= idx <= len(choices):
+                    return choices[idx - 1]
+            except ValueError:
+                pass
+            # Try as filename
+            if raw in choices:
+                return raw
+            if raw and Path(raw).suffix == ".md":
+                return raw  # user typed a new name
+            print("Invalid choice. Try again.")
+    # Create new file
+    default = _default_new_filename()
+    try:
+        name = input(f"New filename [{default}]: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        sys.exit(0)
+    if not name:
+        name = default
+    if not name.endswith(".md"):
+        name += ".md"
+    Path(name).write_text(
+        f"---\ntitle: {Path(name).stem}\n---\n\n", encoding="utf-8"
+    )
+    print(f"Created {name}")
+    return name
+
+
+def cmd_view(args):
     from scholia.server import ScholiaServer
-    server = ScholiaServer(args.doc, host=args.host, port=args.port)
+
+    doc = args.doc or _pick_or_create_doc()
+    server = ScholiaServer(doc, host=args.host, port=args.port)
     try:
         asyncio.run(server.start())
     except KeyboardInterrupt:
@@ -93,13 +157,13 @@ def _load_instruction_template() -> str:
     return template_path.read_text(encoding="utf-8")
 
 
-def cmd_init(args):
-    if args.glob:
-        base = Path.home()
+def cmd_skill_init(args):
+    if args.path:
+        path = Path(args.path).expanduser()
+        if not path.is_absolute():
+            path = Path.cwd() / path
     else:
-        base = Path.cwd()
-
-    path = base / (args.path or ".claude/skills/scholia.md")
+        path = Path.home() / ".claude" / "skills" / "scholia.md"
 
     if path.exists() and not args.force:
         print(f"Already exists: {path}")
@@ -125,16 +189,20 @@ def cmd_unresolve(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="scholia",
-        description="Collaborative document annotation for human-AI dialogue",
+        description="Collaborative marginalia for human-AI dialogue",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # start
-    p_start = sub.add_parser("start", help="Start annotation server",
-                                description="Start annotation server")
-    p_start.add_argument("doc", help="Markdown document path")
-    p_start.add_argument("--host", default="127.0.0.1")
-    p_start.add_argument("--port", type=int, default=8088)
+    # view
+    p_view = sub.add_parser("view", help="View and annotate a document")
+    p_view.add_argument(
+        "doc",
+        nargs="?",
+        default=None,
+        help="Markdown document path (interactive picker if omitted)",
+    )
+    p_view.add_argument("--host", default="127.0.0.1")
+    p_view.add_argument("--port", type=int, default=8088)
 
     # reply
     p_reply = sub.add_parser("reply", help="Reply to an annotation")
@@ -157,13 +225,15 @@ def main():
     p_comment.add_argument("text", help="Comment text")
     p_comment.add_argument("--creator", default=None)
 
-    # init
-    p_init = sub.add_parser("init", help="Write AI agent instructions into project")
-    p_init.add_argument("path", nargs="?", default=None,
-                         help="Target path (default: .claude/skills/scholia.md)")
-    p_init.add_argument("--force", action="store_true", help="Overwrite existing file")
-    p_init.add_argument("--global", dest="glob", action="store_true",
-                         help="Write to home directory instead of project")
+    # skill-init
+    p_skill = sub.add_parser("skill-init", help="Install or update agent skill file")
+    p_skill.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Target path (default: ~/.claude/skills/scholia.md)",
+    )
+    p_skill.add_argument("--force", action="store_true", help="Overwrite existing file")
 
     # resolve
     p_resolve = sub.add_parser("resolve", help="Resolve a thread")
@@ -178,11 +248,11 @@ def main():
     args = parser.parse_args()
 
     handlers = {
-        "start": cmd_start,
+        "view": cmd_view,
         "reply": cmd_reply,
         "list": cmd_list,
         "comment": cmd_comment,
-        "init": cmd_init,
+        "skill-init": cmd_skill_init,
         "resolve": cmd_resolve,
         "unresolve": cmd_unresolve,
     }

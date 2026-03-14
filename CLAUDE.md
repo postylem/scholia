@@ -5,7 +5,7 @@ Collaborative document annotation for human-AI dialogue in markdown margins.
 ## For using scholia (reviewing documents)
 
 See `scholia/data/agent-instructions.md` for the full AI review workflow.
-Run `scholia init` to install these instructions into any project.
+Run `scholia skill-init` to install these instructions into any project.
 
 ## For developing scholia
 

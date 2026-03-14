@@ -163,7 +163,7 @@ def test_cli_comment_reply_resolve(tmp_doc):
 
 def test_cli_error_cases(tmp_doc):
     """Bad inputs return non-zero exit codes."""
-    code, _, err = _run_cli("start", "/nonexistent/doc.md")
+    code, _, err = _run_cli("view", "/nonexistent/doc.md")
     assert code == 1
 
     code, _, _ = _run_cli("reply", str(tmp_doc), "urn:uuid:fake", "text")

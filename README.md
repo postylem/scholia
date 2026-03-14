@@ -1,92 +1,118 @@
 # Scholia
 
-Write rich text in your editor, review the rendered version with an AI assistant via live comments in the margins on your browser.
+Take notes in the margins of live-rendered rich text documents, and collaborate in comment threads with an AI assistant.
 
-Think of marginal annotations scribbled in the margins of manuscripts by medieval scholars. Such [*scholia*](https://en.wikipedia.org/wiki/Scholia) could be clarifications, corrections, and arguments threaded alongside the original text. This is for doing that, but with an AI interlocutor.
+Think of notes added to manuscripts by medieval scholars annotating clarifications, corrections, and arguments threaded alongside the original text. This is a tool for maintaining such marginalia, and (optionally) using them to collaborate with an AI interlocutor as the document evolves.
 
 ![Scholia screenshot](docs/demo_screenshot.png)
 
-## How It Works
+## What is this?
 
-- You edit some `<doc>.md` file in your editor
-- The browser shows a live-rendered view with a comment sidebar
-- Comments are stored in `<doc>.md.scholia.jsonl` (append-only, W3C Web Annotation format)
-- File changes are detected via watchdog and pushed to the browser via WebSocket
-- AI assistant reads and replies to comments via the CLI
+Scholia provides a simple interactive comment-thread interface on top of rendered markdown documents, for notetaking and collaboration. You get:
 
-## Prerequisites
+- A **browser UI** that renders markdown files (with code, LaTeX math, BibTeX citations, etc. via [Pandoc](https://pandoc.org/)) and adds an interactive comment sidebar where you can select text and start threaded converations
+  - Resolve and reopen threads, or filter to show only open threads
+  - Hide the sidebar entirely for a clean reading view
+  - Toggle between footnotes and sidenotes, and dark and light theme
+- **Live sync** — edits to the markdown or new comments show up instantly in the browser via WebSocket
+- Behind the scenes, a **CLI API** (`scholia list`, `scholia reply`, `scholia comment`, ...) for reading and responding to threads — designed for AI agents, but usable by anyone
 
-- Python 3.10+
-- [Pandoc](https://pandoc.org/installing.html)
+**Example:** You're chatting with an AI about a plan. The AI drafts the plan a markdown file `plan.md`. Now you're going through the file and want to ask questions or push back on specific parts. In a linear chat, the conversation quickly loses track of which comment refers to which section, and it's hard to make minor comments while also continuing the general conversation. With scholia, you open the rendered plan in your browser (math, code, citations all formatted), select text in the document and add notes or start threaded converations right there in the margin. Meanwhile the AI can also edit the document directly. Everything stays anchored to the text it's about, and you can keep the terminal chat going for bigger-picture discussion.
 
 ## Install
 
-Install from GitHub directly
+Requires Python 3.10+ and [Pandoc](https://pandoc.org/installing.html).
+
+### Step 1: Install the `scholia` CLI
+
+Using [uv](https://docs.astral.sh/uv/) (or [pipx](https://pipx.pypa.io/)):
 
 ```bash
-pipx install git+https://github.com/postylem/scholia.git
+uv tool install git+https://github.com/postylem/scholia.git
+# or with pipx:
+# pipx install git+https://github.com/postylem/scholia.git
 ```
 
-or clone this repo and install from source
+After install, the `scholia` command is available globally (you may need to restart your shell). You can use it to live-render and take notes on any markdown file with the command `scholia view`.
 
-```bas
-pipx install .
-# or
-uv tool install .
+To update to the latest version:
+
+```bash
+uv tool upgrade scholia
+```
+
+> *Alternately, for development, clone a local version and install in editable mode so local code changes take effect immediately:*
+>
+> ```bash
+> git clone https://github.com/postylem/scholia.git
+> cd scholia
+> uv tool install -e .
+> ```
+
+### Step 2 (optional): Set up the agent skill
+
+If you want an AI agent to read and reply to your comments, install the agent skill.
+
+```bash
+# Installs to ~/.claude/skills/scholia.md
+scholia skill-init
+```
+
+For other agents, specify the path:
+
+```bash
+scholia skill-init ~/.codex/skills/scholia/SKILL.md      # Codex
+scholia skill-init ~/.opencode/skills/scholia/SKILL.md   # opencode
+scholia skill-init .cursor/rules/scholia.md              # Cursor (project-local)
+```
+
+This copies a single markdown file describing the CLI commands and review workflow. [Inspect it here](scholia/data/agent-instructions.md) to see exactly what your agent will be told.
+
+## Files
+
+Scholia doesn't touch your markdown file — it only reads and renders it. When you run `scholia view` on some file `<file>.md`, it creates sidecar files in the same directory:
+
+- `<file>.md.scholia.jsonl` — comment threads (append-only, [W3C Web Annotation](https://www.w3.org/TR/annotation-model/) format)
+- `<file>.md.scholia.state.json` — per-thread read/unread state (created when you view threads in the browser)
+
+If you're working in a git repo, you'll probably want to ignore at least the state file:
+
+```gitignore
+# Scholia read/unread state (personal, never shared)
+*.scholia.state.json
+# Uncomment to also ignore annotation threads:
+# *.scholia.jsonl
 ```
 
 ## Usage
 
-For some document `idea.md`:
+Start a server and open the URL in your browser:
 
 ```bash
-# Start the annotation server
-scholia start idea.md
+scholia view idea.md
 ```
 
-- Open the rendered version in your browser
-- Select text in the document to add comment. Or edit the markdown for a live preview of changed to the main text. 
-- When you are ready, tell your agent to take a pass and respond to comments
-    ```
-    > take a look at the scholia for idea.md
-    ```
-    It should follow use the API to write replies to comment threads, or modify the main text. Replies and edits will show up live.  
-    
+Select text to start a thread. Edit the markdown in your editor for a live preview. The comment sidebar and document view update in real time.
 
-## AI Agent Setup
-
-Scholia works with any AI coding agent. Just run `scholia init` to add review instructions globally (recommended), or to your project:
-
-```bash
-# Claude Code (default)
-scholia init
-
-# Cursor
-scholia init .cursor/rules/scholia.md
-
-# Codex
-scholia init AGENTS.md
-
-# opencode
-scholia init .opencode/skills/scholia.md
-
-# Global install (always available, not per-project)
-scholia init --global
-```
-
-This writes a single markdown file containing the CLI commands and review workflow your agent needs. The file is self-contained — inspect it to see exactly what your agent will be told. Run `scholia init --force` to update it after upgrading scholia.
-
-## CLI Reference
+If you've set up the agent skill, tell your agent to respond when you're ready:
 
 ```
-scholia start <doc.md>                    Start annotation server
-scholia start <doc.md> --port 888         Start server at specified port [Auto-pick a free port if none set]
-scholia list <doc.md> --open              List open comments
-scholia list <doc.md> --all               List all comments
-scholia reply <doc.md> <id> "text"        Reply to a comment
-scholia comment <doc.md> "anchor" "text"  Add a new comment
+> check the scholia for idea.md
+```
+
+The agent will go through open comment threads, reply to each, and/or edit the document. Replies appear live in the sidebar.
+
+## For agents
+
+This section is for AI agents reading this README. You rely on the skill installed by `scholia skill-init` for the full workflow, but here's an overview of the CLI API:
+
+```
+scholia list <doc.md> --open              List open comment threads
+scholia list <doc.md> --all               List all threads including resolved
+scholia reply <doc.md> <id> "text"        Reply to a thread
+scholia comment <doc.md> "anchor" "text"  Add a new comment anchored to text
 scholia resolve <doc.md> <id>             Resolve a thread
 scholia unresolve <doc.md> <id>           Reopen a thread
-scholia init [path]                       Write agent instructions
-scholia init --global [path]              Write to home directory
 ```
+
+Use `scholia list --open` to find threads awaiting response, reply with `scholia reply`, and edit the `.md` file directly when the comment requests a change to the document.
