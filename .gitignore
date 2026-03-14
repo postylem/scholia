@@ -3,8 +3,6 @@ __pycache__/
 *.egg-info/
 .claude/
 .superpowers/
-playground/*
-!playground/.gitkeep
 
 # Scholia read/unread state (personal, never shared)
 *.scholia.state.json
