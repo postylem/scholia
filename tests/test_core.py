@@ -36,10 +36,10 @@ def test_append_load_reply(tmp_doc):
     assert loaded[0]["body"][0]["value"] == "hello"
     assert loaded[0]["scholia:status"] == "open"
 
-    append_reply(tmp_doc, ann["id"], "answer", creator="ai")
+    append_reply(tmp_doc, ann["id"], "answer", creator="AI")
     loaded = load_comments(tmp_doc)
     assert len(loaded[0]["body"]) == 2
-    assert loaded[0]["body"][1]["creator"]["name"] == "ai"
+    assert loaded[0]["body"][1]["creator"]["name"] == "AI"
     assert loaded[0]["body"][1]["creator"]["type"] == "Software"
 
 

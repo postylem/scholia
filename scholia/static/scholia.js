@@ -123,12 +123,14 @@
       menu = document.createElement('div');
       menu.className = 'scholia-options-menu';
 
+      var tbl = document.createElement('table');
+
       // Theme row
-      var themeRow = document.createElement('div');
-      themeRow.className = 'scholia-options-row';
-      var themeLabel = document.createElement('span');
-      themeLabel.textContent = 'Theme:';
-      themeRow.appendChild(themeLabel);
+      var themeRow = document.createElement('tr');
+      var themeTd1 = document.createElement('td');
+      themeTd1.textContent = 'Theme';
+      themeRow.appendChild(themeTd1);
+      var themeTd2 = document.createElement('td');
       var themeGroup = document.createElement('span');
       themeGroup.className = 'scholia-options-toggle';
       var lightBtn = document.createElement('button');
@@ -151,15 +153,16 @@
       });
       themeGroup.appendChild(lightBtn);
       themeGroup.appendChild(darkBtn);
-      themeRow.appendChild(themeGroup);
-      menu.appendChild(themeRow);
+      themeTd2.appendChild(themeGroup);
+      themeRow.appendChild(themeTd2);
+      tbl.appendChild(themeRow);
 
       // Footnote display row
-      var fnRow = document.createElement('div');
-      fnRow.className = 'scholia-options-row';
-      var fnLabel = document.createElement('span');
-      fnLabel.textContent = 'Footnotes:';
-      fnRow.appendChild(fnLabel);
+      var fnRow = document.createElement('tr');
+      var fnTd1 = document.createElement('td');
+      fnTd1.textContent = 'Footnotes';
+      fnRow.appendChild(fnTd1);
+      var fnTd2 = document.createElement('td');
       var fnGroup = document.createElement('span');
       fnGroup.className = 'scholia-options-toggle';
       var sideBtn = document.createElement('button');
@@ -188,8 +191,11 @@
       });
       fnGroup.appendChild(sideBtn);
       fnGroup.appendChild(endBtn);
-      fnRow.appendChild(fnGroup);
-      menu.appendChild(fnRow);
+      fnTd2.appendChild(fnGroup);
+      fnRow.appendChild(fnTd2);
+      tbl.appendChild(fnRow);
+
+      menu.appendChild(tbl);
 
       optionsWrap.appendChild(menu);
     });
@@ -391,8 +397,8 @@
 
   var userColorCache = {};
 
-  function userColor(name) {
-    if (name === 'ai') return 'var(--s-ai)';
+  function userColor(name, creatorType) {
+    if (creatorType === 'Software') return 'var(--s-ai)';
     if (userColorCache[name]) return userColorCache[name];
     // djb2 hash → hue
     var hash = 5381;
@@ -422,10 +428,9 @@
     var bodies = ann.body || [];
     if (bodies.length === 0) return false;
 
-    // If the last message is by a human (not AI), they've seen everything
+    // If the last message is by a human (not Software), they've seen everything
     var lastBody = bodies[bodies.length - 1];
-    var lastCreator = lastBody.creator && lastBody.creator.name;
-    if (lastCreator !== 'ai') return false;
+    if (!(lastBody.creator && lastBody.creator.type === 'Software')) return false;
 
     // No read timestamp and last msg is not human → unread
     var annState = state[ann.id];
@@ -514,7 +519,7 @@
     // AI-replied detection: has any reply from AI
     var hasAiReply = false;
     for (var b = 0; b < bodies.length; b++) {
-      if (bodies[b].creator && bodies[b].creator.name === 'ai') {
+      if (bodies[b].creator && bodies[b].creator.type === 'Software') {
         hasAiReply = true;
         break;
       }
@@ -528,7 +533,7 @@
     // Track last AI message index for placing mark-unread button
     var lastAiIdx = -1;
     for (var b2 = bodies.length - 1; b2 >= 0; b2--) {
-      if (bodies[b2].creator && bodies[b2].creator.name === 'ai') {
+      if (bodies[b2].creator && bodies[b2].creator.type === 'Software') {
         lastAiIdx = b2;
         break;
       }
@@ -586,13 +591,14 @@
       var msg = bodies[j];
       var msgEl = document.createElement('div');
       var msgCreator = (msg.creator && msg.creator.name) || 'unknown';
-      var role = msgCreator === 'ai' ? 'ai' : 'human';
+      var isSoftware = msg.creator && msg.creator.type === 'Software';
+      var role = isSoftware ? 'ai' : 'human';
       msgEl.className = 'scholia-message scholia-' + role;
 
       var meta = document.createElement('div');
       meta.className = 'scholia-message-meta';
       meta.textContent = msgCreator;
-      meta.style.color = userColor(msgCreator);
+      meta.style.color = userColor(msgCreator, msg.creator && msg.creator.type);
       msgEl.appendChild(meta);
 
       var body = document.createElement('div');
@@ -601,8 +607,8 @@
       body.innerHTML = renderCommentBody(msg.value);
       msgEl.appendChild(body);
 
-      // Edit button on the very last body entry, only for human messages
-      if (j === bodies.length - 1 && role !== 'ai') {
+      // Edit button on the very last body entry, only if it's the current user's message
+      if (j === bodies.length - 1 && !isSoftware && msgCreator === creatorName) {
         var editBtn = document.createElement('button');
         editBtn.className = 'scholia-btn-edit';
         editBtn.textContent = 'Edit';

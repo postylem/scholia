@@ -1,63 +1,50 @@
 ---
-title: Scholia
-subtitle: Human-AI dialogue via collaborative marginalia
+title: Scholia Demo
+subtitle: A showcase of rendered markdown with margin annotations
+author: Your Name Here
+bibliography: references.bib
 ---
 
-# Scholia
+## What is this?
 
-Take notes in the margins of live-rendered rich text documents, and collaborate in comment threads with an AI assistant.
+Take notes in the margins of live-rendered rich text documents, and collaborate in comment threads with any AI assistant.
 
-Think of notes added to manuscripts by medieval scholars annotating clarifications, corrections, and arguments threaded alongside the original text. This is a tool for maintaining such marginalia, and (optionally) using them to collaborate with an AI interlocutor as the document evolves.
+[Scholia](https://en.wikipedia.org/wiki/Scholia) were annotations added to manuscripts by medieval or ancient scholars for explanation, clarification and commentary. This is a tool for maintaining such marginalia on (markdown) text documents, and optionally using them to collaborate with an AI as the documents evolve.
 
+![Scholia screenshot](demo_screenshot.png)
 
-## How It Works
+## Math
 
-You edit `.md` files in your editor. The browser shows a live-rendered view with a comment sidebar. Select any text to start a conversation about it.
+Pandoc renders LaTeX math via KaTeX. Inline math like $e^{i\pi} + 1 = 0$ works, as do display equations:
 
-Comments are stored in a sidecar file (`<doc>.md.scholia.jsonl`) using the W3C Web Annotation format. File changes are detected via watchdog and pushed to the browser via WebSocket, so the rendered view updates as you type.
+$$
+H(X) = -\sum_{x \in \mathcal{X}} p(x) \log p(x)
+$$
 
-Your AI assistant reads and replies to comments via the CLI:
+Shannon [-@shannon1948] showed that entropy gives a fundamental limit on lossless compression. The cross-entropy between distributions $p$ and $q$ is:
 
-```bash
-# List open comments
-scholia list paper.md --open
+$$
+H(p, q) = -\sum_{x} p(x) \log q(x) = H(p) + D_{\mathrm{KL}}(p \| q)
+$$
 
-# Reply to a thread
-scholia reply paper.md <annotation-id> "Your reply here"
+where $D_{\mathrm{KL}}$ is the Kullback–Leibler divergence.
 
-# Add a new comment anchored to text
-scholia comment paper.md "exact text" "Your comment"
+## Code
+
+Syntax-highlighted code blocks:
+
+```python
+def entropy(p):
+    """Shannon entropy in nats."""
+    return -sum(pi * log(pi) for pi in p if pi > 0)
 ```
 
-## AI Agent Setup
+## Citations
 
-Scholia works with any AI coding agent. Run `scholia init` to write review instructions into your project:
+Pandoc handles BibTeX citations automatically. For example: @turing1936 introduced the notion of computability, @knuth1997 wrote the definitive reference on algorithms, and @lamport1978 formalized event ordering in distributed systems.
 
-```bash
-# Claude Code (default)
-scholia init
+Footnotes also work[^1], and can be rendered as sidenotes using the toggle in the Options menu.
 
-# Cursor
-scholia init .cursor/rules/scholia.md
+[^1]: This is a footnote. Toggle "Footnotes" in the Options menu to see it rendered as a sidenote in the margin.
 
-# Codex
-scholia init AGENTS.md
-```
-
-This writes a single markdown file that teaches your agent the CLI commands and review workflow. The file is self-contained — inspect it to see exactly what your agent will be told.
-
-## Install
-
-Requires Python 3.10+ and [Pandoc](https://pandoc.org/installing.html).
-
-```bash
-pipx install .
-# or
-uv tool install .
-```
-
-Then start annotating:
-
-```bash
-scholia start paper.md
-```
+## References

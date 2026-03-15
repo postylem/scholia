@@ -813,7 +813,7 @@ mark.scholia-highlight.scholia-pulse {
 
 .scholia-reply-input {
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   gap: 0.3rem;
   margin: 0 -0.65rem -0.65rem;
   padding: 0.4rem 0.65rem 0.65rem;
@@ -845,6 +845,7 @@ mark.scholia-highlight.scholia-pulse {
   border: none;
   border-radius: 3px;
   padding: 0 0.5rem;
+  min-height: 2em;
   font-size: 0.72rem;
   cursor: pointer;
   font-family: var(--s-sans);
@@ -1013,17 +1014,18 @@ a.scholia-toolbar-brand:hover {
   padding: 0.4rem 0.6rem;
   z-index: 100;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
   white-space: nowrap;
   font-size: 0.7rem;
   font-family: var(--s-sans);
 }
-.scholia-options-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.scholia-options-menu table {
+  border-collapse: collapse;
+}
+.scholia-options-menu td {
+  padding: 0.15rem 0;
+}
+.scholia-options-menu td:first-child {
+  padding-right: 0.6rem;
   color: var(--s-text-dim);
 }
 .scholia-options-toggle {

@@ -1,7 +1,7 @@
 ---
 title: "Time and Order in Distributed Systems"
 subtitle: "An example document"
-author: V
+author: Me
 date: 2026-03-12
 bibliography: references.bib
 ---

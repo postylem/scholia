@@ -1,10 +1,10 @@
 # Scholia
 
-Take notes in the margins of live-rendered rich text documents, and collaborate in comment threads with an AI assistant.
+Take notes in the margins of live-rendered rich text documents, and collaborate in comment threads with any AI assistant.
 
-Think of notes added to manuscripts by medieval scholars annotating clarifications, corrections, and arguments threaded alongside the original text (called [scholia](https://en.wikipedia.org/wiki/Scholia)). This is a tool for maintaining such marginalia, and (optionally) using them to collaborate with an AI interlocutor as the document evolves.
+[Scholia](https://en.wikipedia.org/wiki/Scholia) were annotations added to manuscripts by medieval or ancient scholars for explanation, clarification and commentary. This is a tool for maintaining such marginalia on (markdown) text documents, and optionally using them to collaborate with an AI as the documents evolve.
 
-![Scholia screenshot](assets/demo_screenshot.png)
+![Scholia screenshot](examples/demo_screenshot.png)
 
 ## What is this?
 
@@ -35,19 +35,22 @@ uv tool install git+https://github.com/postylem/scholia.git
 
 After install, the `scholia` command is available globally (you may need to restart your shell). You can use it to live-render and take notes on any markdown file with the command `scholia view`.
 
-To update to the latest version:
+Notes:
 
-```bash
-uv tool upgrade scholia
-```
+- Your name in comment threads is detected from your system username. To override it, set the `SCHOLIA_USERNAME` environment variable.
 
-> *Alternately, for development, clone a local version and install in editable mode so local code changes take effect immediately:*
->
-> ```bash
-> git clone https://github.com/postylem/scholia.git
-> cd scholia
-> uv tool install -e .
-> ```
+- If you've already installed, and want to update to the latest version:
+  ```bash
+  uv tool upgrade scholia
+  ```
+
+- Alternately, you can clone a local version and install in editable mode so local code changes take effect immediately:
+
+  ```bash
+  git clone https://github.com/postylem/scholia.git
+  cd scholia
+  uv tool install -e .
+  ```
 
 ### Step 2 (optional): Set up the agent skill
 

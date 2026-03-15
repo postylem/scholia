@@ -269,7 +269,7 @@ def main():
     p_reply.add_argument("doc", help="Markdown document path")
     p_reply.add_argument("id", help="Annotation ID")
     p_reply.add_argument("text", help="Reply text")
-    p_reply.add_argument("--creator", default="ai")
+    p_reply.add_argument("--creator", default="AI")
 
     # list
     p_list = sub.add_parser("list", help="List annotations")

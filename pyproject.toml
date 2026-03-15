@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "scholia"
 version = "0.4.0"
-description = "Collaborative document annotation for human-AI dialogue"
+description = "Collaborative marginalia for markdown"
 requires-python = ">=3.10"
 dependencies = [
     "watchdog>=3.0",

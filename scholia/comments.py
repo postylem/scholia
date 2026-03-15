@@ -54,7 +54,7 @@ def append_comment(
         creator = get_default_creator()
     now = datetime.now(timezone.utc).isoformat()
     creator_obj = {
-        "type": "Software" if creator == "ai" else "Person",
+        "type": "Software" if creator == "AI" else "Person",
         "name": creator,
     }
     ann = {
@@ -91,7 +91,7 @@ def append_reply(
     doc_path: str | Path,
     annotation_id: str,
     body_text: str,
-    creator: str = "ai",
+    creator: str = "AI",
 ) -> dict:
     """Append a reply to an existing annotation thread."""
     comments = load_comments(doc_path)
@@ -109,7 +109,7 @@ def append_reply(
             "type": "TextualBody",
             "value": body_text,
             "creator": {
-                "type": "Software" if creator == "ai" else "Person",
+                "type": "Software" if creator == "AI" else "Person",
                 "name": creator,
             },
             "created": now,

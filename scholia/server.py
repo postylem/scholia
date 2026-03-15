@@ -300,6 +300,9 @@ class ScholiaServer:
         print(f"Scholia serving {self.doc_path.name} at {url}")
         print("Press Ctrl+C to stop")
 
+        import webbrowser
+        webbrowser.open(url)
+
         await stop_event.wait()
 
         # Close all WebSocket connections so runner.cleanup() doesn't block
