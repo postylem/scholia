@@ -10,7 +10,7 @@ from scholia.comments import (
     append_comment,
     append_reply,
     edit_body,
-    get_default_creator,
+    get_human_username,
     list_open,
     load_comments,
     resolve,
@@ -91,8 +91,44 @@ def cmd_view(args):
         pass
 
 
+def _resolve_author(args):
+    """Resolve --author-ai-model / --author-name into (creator, nickname, is_software)."""
+    model = getattr(args, "author_ai_model", None)
+    name = getattr(args, "author_name", None)
+
+    if model and name:
+        print(
+            "Error: --author-ai-model and --author-name are mutually exclusive.\n"
+            "--author-name is for humans only. AI agents should use --author-ai-model.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if model:
+        return "AI", model, True
+    if name:
+        return name, None, False
+    return None, None, False  # will use get_human_username() default
+
+
+def _add_author_args(parser):
+    """Add --author-ai-model and --author-name flags to a subparser."""
+    parser.add_argument(
+        "--author-ai-model", default=None, metavar="MODEL",
+        help="AI model name and version (e.g. 'Opus 4.6'). Marks the comment as written by software.",
+    )
+    parser.add_argument(
+        "--author-name", default=None,
+        help="Human author name (default: SCHOLIA_USERNAME or system username)",
+    )
+
+
 def cmd_reply(args):
-    ann = append_reply(args.doc, args.id, args.text, creator=args.creator)
+    creator, nickname, is_software = _resolve_author(args)
+    ann = append_reply(
+        args.doc, args.id, args.text,
+        creator=creator, nickname=nickname, is_software=is_software,
+    )
     print(f"Reply added to {ann['id']}")
 
 
@@ -139,20 +175,44 @@ def cmd_list(args):
         return
 
     for ann in items:
-        status = ann.get("scholia:status", "?")
-        anchor = ann["target"]["selector"]["exact"][:60]
-        bodies = ann.get("body", [])
-        n_msgs = len(bodies)
-        last_author = bodies[-1]["creator"]["name"] if bodies else "?"
-        print(f"[{status}] {ann['id']}")
-        print(f'  anchor: "{anchor}"')
-        print(f"  {n_msgs} message(s), last by {last_author}")
+        _print_annotation(ann, verbose=args.verbose)
         print()
 
 
+def _print_annotation(ann, verbose=False):
+    """Print a single annotation summary, optionally with message bodies."""
+    status = ann.get("scholia:status", "?")
+    anchor = ann["target"]["selector"]["exact"][:60]
+    bodies = ann.get("body", [])
+    n_msgs = len(bodies)
+    last_author = bodies[-1]["creator"]["name"] if bodies else "?"
+    print(f"[{status}] {ann['id']}")
+    print(f'  anchor: "{anchor}"')
+    print(f"  {n_msgs} message(s), last by {last_author}")
+    if verbose and bodies:
+        for b in bodies:
+            name = (b.get("creator") or {}).get("name", "?")
+            nickname = (b.get("creator") or {}).get("nickname", "")
+            label = f"{name} ({nickname})" if nickname else name
+            print(f"  [{label}] {b['value']}")
+    print()
+
+
+def cmd_show(args):
+    comments = load_comments(args.doc)
+    for ann in comments:
+        if ann["id"] == args.id:
+            _print_annotation(ann, verbose=True)
+            return
+    print(f"Error: annotation {args.id} not found", file=sys.stderr)
+    sys.exit(1)
+
+
 def cmd_comment(args):
+    creator, nickname, is_software = _resolve_author(args)
     ann = append_comment(
-        args.doc, exact=args.anchor, body_text=args.text, creator=args.creator
+        args.doc, exact=args.anchor, body_text=args.text,
+        creator=creator, nickname=nickname, is_software=is_software,
     )
     print(f"Comment created: {ann['id']}")
 
@@ -213,7 +273,7 @@ def cmd_skill_init(args):
         if not path.is_absolute():
             path = Path.cwd() / path
     else:
-        path = Path.home() / ".claude" / "skills" / "scholia.md"
+        path = Path.home() / ".claude" / "skills" / "scholia" / "SKILL.md"
 
     if path.exists() and not args.force:
         print(f"Already exists: {path}")
@@ -269,7 +329,7 @@ def main():
     p_reply.add_argument("doc", help="Markdown document path")
     p_reply.add_argument("id", help="Annotation ID")
     p_reply.add_argument("text", help="Reply text")
-    p_reply.add_argument("--creator", default="AI")
+    _add_author_args(p_reply)
 
     # list
     p_list = sub.add_parser("list", help="List annotations")
@@ -277,13 +337,19 @@ def main():
     p_list.add_argument("--open", action="store_true", help="Only show open annotations")
     p_list.add_argument("--all", action="store_true", help="Show all including resolved")
     p_list.add_argument("--since", help="Show annotations since date (YYYY-MM-DD)")
+    p_list.add_argument("-v", "--verbose", action="store_true", help="Show message bodies")
+
+    # show
+    p_show = sub.add_parser("show", help="Show a single thread with all messages")
+    p_show.add_argument("doc", help="Markdown document path")
+    p_show.add_argument("id", help="Annotation ID")
 
     # comment
     p_comment = sub.add_parser("comment", help="Add a new comment")
     p_comment.add_argument("doc", help="Markdown document path")
     p_comment.add_argument("anchor", help="Text to anchor the comment to")
     p_comment.add_argument("text", help="Comment text")
-    p_comment.add_argument("--creator", default=None)
+    _add_author_args(p_comment)
 
     # edit
     p_edit = sub.add_parser("edit", help="Edit the last message in a thread")
@@ -297,7 +363,7 @@ def main():
         "path",
         nargs="?",
         default=None,
-        help="Target path (default: ~/.claude/skills/scholia.md)",
+        help="Target path (default: ~/.claude/skills/scholia/SKILL.md)",
     )
     p_skill.add_argument("--force", action="store_true", help="Overwrite existing file")
 
@@ -321,6 +387,7 @@ def main():
         "view": cmd_view,
         "reply": cmd_reply,
         "list": cmd_list,
+        "show": cmd_show,
         "comment": cmd_comment,
         "edit": cmd_edit,
         "skill-init": cmd_skill_init,

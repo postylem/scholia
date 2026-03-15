@@ -12,11 +12,13 @@ def test_skill_init_default_path(tmp_path):
         env={**__import__("os").environ, "HOME": str(tmp_path)},
     )
     assert result.returncode == 0
-    target = tmp_path / ".claude" / "skills" / "scholia.md"
+    target = tmp_path / ".claude" / "skills" / "scholia" / "SKILL.md"
     assert target.exists()
     content = target.read_text()
     assert "scholia list" in content
     assert "scholia reply" in content
+    assert content.startswith("---\n"), "skill file must have YAML frontmatter"
+    assert "\nname: scholia\n" in content
 
 
 def test_skill_init_custom_path(tmp_path):
@@ -33,7 +35,7 @@ def test_skill_init_custom_path(tmp_path):
 
 def test_skill_init_skip_existing(tmp_path):
     """scholia skill-init skips if file exists."""
-    target = tmp_path / ".claude" / "skills" / "scholia.md"
+    target = tmp_path / ".claude" / "skills" / "scholia" / "SKILL.md"
     target.parent.mkdir(parents=True)
     target.write_text("existing content")
     result = subprocess.run(
@@ -49,7 +51,7 @@ def test_skill_init_skip_existing(tmp_path):
 
 def test_skill_init_force_overwrite(tmp_path):
     """scholia skill-init --force overwrites existing file."""
-    target = tmp_path / ".claude" / "skills" / "scholia.md"
+    target = tmp_path / ".claude" / "skills" / "scholia" / "SKILL.md"
     target.parent.mkdir(parents=True)
     target.write_text("old")
     result = subprocess.run(
@@ -63,7 +65,7 @@ def test_skill_init_force_overwrite(tmp_path):
 
 
 def test_skill_init_template_is_agent_agnostic(tmp_path):
-    """Template should not contain Claude-specific language."""
+    """Template should not address a specific AI agent (e.g. 'you are Claude')."""
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "skill-init"],
         cwd=str(tmp_path),
@@ -71,6 +73,9 @@ def test_skill_init_template_is_agent_agnostic(tmp_path):
         env={**__import__("os").environ, "HOME": str(tmp_path)},
     )
     assert result.returncode == 0
-    target = tmp_path / ".claude" / "skills" / "scholia.md"
+    target = tmp_path / ".claude" / "skills" / "scholia" / "SKILL.md"
     content = target.read_text().lower()
-    assert "claude" not in content
+    # Mentioning "Claude Opus 4.6" as an example model name is fine;
+    # addressing the agent as Claude ("you are Claude", "as Claude") is not.
+    for phrase in ["you are claude", "as claude,", "as a claude"]:
+        assert phrase not in content, f"Template should not address a specific agent: '{phrase}'"

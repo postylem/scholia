@@ -17,8 +17,9 @@ from scholia.comments import (
     append_comment,
     append_reply,
     edit_body,
-    get_default_creator,
+    get_human_username,
     load_comments,
+    reanchor,
     resolve,
     unresolve,
 )
@@ -104,7 +105,7 @@ async def build_page(
     state = load_state(doc_path)
     page = template.replace("{{TITLE}}", title)
     page = page.replace("{{PANDOC_HTML}}", html)
-    page = page.replace("{{CREATOR_NAME}}", json.dumps(get_default_creator()))
+    page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
     page = page.replace("{{DOC_PATH}}", json.dumps(display_path or str(doc_path)))
     page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
     page = page.replace("{{SIDENOTES_ENABLED}}", json.dumps(sidenotes))
@@ -202,14 +203,14 @@ class ScholiaServer:
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
                     body_text=msg["body"],
-                    creator=msg.get("creator", get_default_creator()),
+                    creator=msg.get("creator", get_human_username()),
                 )
             elif msg_type == "reply":
                 append_reply(
                     self.doc_path,
                     annotation_id=msg["annotation_id"],
                     body_text=msg["body"],
-                    creator=msg.get("creator", get_default_creator()),
+                    creator=msg.get("creator", get_human_username()),
                 )
             elif msg_type == "edit_body":
                 edit_body(
@@ -229,6 +230,14 @@ class ScholiaServer:
                 mark_read(self.doc_path, msg["annotation_id"])
             elif msg_type == "mark_unread":
                 mark_unread(self.doc_path, msg["annotation_id"])
+            elif msg_type == "reanchor":
+                reanchor(
+                    self.doc_path,
+                    annotation_id=msg["annotation_id"],
+                    exact=msg["exact"],
+                    prefix=msg.get("prefix", ""),
+                    suffix=msg.get("suffix", ""),
+                )
         except Exception as e:
             try:
                 await ws.send_json({"type": "error", "message": str(e)})
@@ -290,7 +299,16 @@ class ScholiaServer:
         runner = web.AppRunner(self.app)
         await runner.setup()
         site = web.TCPSite(runner, self.host, self.port)
-        await site.start()
+        try:
+            await site.start()
+        except OSError:
+            if self.port != 0:
+                # Port in use — retry with OS-assigned port
+                site = web.TCPSite(runner, self.host, 0)
+                await site.start()
+                self.port = 0
+            else:
+                raise
 
         if self.port == 0:
             actual_port = site._server.sockets[0].getsockname()[1]

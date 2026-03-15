@@ -57,19 +57,20 @@ Notes:
 If you want an AI agent to read and reply to your comments, install the agent skill.
 
 ```bash
-# Installs to ~/.claude/skills/scholia.md
+# Installs to ~/.claude/skills/scholia/SKILL.md (Claude global skill)
 scholia skill-init
 ```
 
-For other agents, specify the path:
+Default skill installation location is as a Claude global skill. For local installation, or other agents, specify the path manually, for example:
 
 ```bash
-scholia skill-init ~/.codex/skills/scholia/SKILL.md      # Codex
-scholia skill-init ~/.opencode/skills/scholia/SKILL.md   # opencode
-scholia skill-init .cursor/rules/scholia.md              # Cursor (project-local)
+scholia skill-init .claude/skills/scholia/SKILL.md       # Claude (project-local)
+scholia skill-init .agents/skills/scholia/SKILL.md       # Codex / opencode / Cursor (project-local)
+scholia skill-init ~/.codex/skills/scholia/SKILL.md      # Codex (global)
+scholia skill-init ~/.cursor/skills/scholia/SKILL.md     # Cursor (global)
 ```
 
-This copies a single markdown file describing the CLI commands and review workflow. [Inspect it here](scholia/data/agent-instructions.md) to see exactly what your agent will be told.
+This copies a single markdown file describing the CLI commands and review workflow. Inspect it at [`data/agent-instructions.md`](data/agent-instructions.md) to see exactly what your agent will be told.
 
 ## Files
 
@@ -111,7 +112,8 @@ This section is for AI agents reading this README. You rely on the skill install
 
 ```
 scholia list <doc.md> --open              List open comment threads
-scholia list <doc.md> --all               List all threads including resolved
+scholia list <doc.md> --open -v           List open threads with message bodies
+scholia show <doc.md> <id>               Show a single thread with all messages
 scholia reply <doc.md> <id> "text"        Reply to a thread
 scholia edit <doc.md> <id> "text"         Edit the last message in a thread
 scholia comment <doc.md> "anchor" "text"  Add a new comment anchored to text
@@ -119,4 +121,4 @@ scholia resolve <doc.md> <id>             Resolve a thread
 scholia unresolve <doc.md> <id>           Reopen a thread
 ```
 
-Use `scholia list --open` to find threads awaiting response, reply with `scholia reply`, and edit the `.md` file directly when the comment requests a change to the document.
+Use `scholia list --open -v` to see threads and their messages, reply with `scholia reply`, and edit the `.md` file directly when the comment requests a change to the document.

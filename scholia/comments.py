@@ -9,10 +9,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def get_default_creator() -> str:
-    """Return the human creator name.
+
+def get_human_username() -> str:
+    """Return the human user's display name for annotations.
 
     Checks SCHOLIA_USERNAME env var first, falls back to system username.
+    AI agents should pass --author-ai-model to identify themselves rather than relying on this.
     """
     return os.environ.get("SCHOLIA_USERNAME") or getpass.getuser()
 
@@ -41,6 +43,40 @@ def load_comments(doc_path: str | Path) -> list[dict]:
     return list(annotations.values())
 
 
+def _make_creator(
+    name: str,
+    nickname: str | None = None,
+    is_software: bool = False,
+) -> dict:
+    """Build a W3C Web Annotation creator object."""
+    obj = {
+        "type": "Software" if is_software else "Person",
+        "name": name,
+    }
+    if nickname:
+        obj["nickname"] = nickname
+    return obj
+
+
+def _pandoc_plain(text: str) -> str:
+    """Convert markdown to plain text via Pandoc. Returns original on failure."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("pandoc"):
+        return text
+    try:
+        result = subprocess.run(
+            ["pandoc", "-f", "markdown", "-t", "plain", "--wrap=none"],
+            input=text, capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.rstrip("\n")
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return text
+
+
 def append_comment(
     doc_path: str | Path,
     exact: str,
@@ -48,15 +84,18 @@ def append_comment(
     suffix: str = "",
     body_text: str = "",
     creator: str | None = None,
+    nickname: str | None = None,
+    is_software: bool = False,
 ) -> dict:
     """Create a new annotation with a TextQuoteSelector."""
     if creator is None:
-        creator = get_default_creator()
+        creator = get_human_username()
+    # AI agents read raw markdown; the browser anchors against rendered text.
+    # Strip markdown formatting so AI anchors match the rendered document.
+    if is_software:
+        exact = _pandoc_plain(exact)
     now = datetime.now(timezone.utc).isoformat()
-    creator_obj = {
-        "type": "Software" if creator == "AI" else "Person",
-        "name": creator,
-    }
+    creator_obj = _make_creator(creator, nickname, is_software=is_software)
     ann = {
         "@context": "http://www.w3.org/ns/anno.jsonld",
         "id": f"urn:uuid:{uuid.uuid4()}",
@@ -91,9 +130,13 @@ def append_reply(
     doc_path: str | Path,
     annotation_id: str,
     body_text: str,
-    creator: str = "AI",
+    creator: str | None = None,
+    nickname: str | None = None,
+    is_software: bool = False,
 ) -> dict:
     """Append a reply to an existing annotation thread."""
+    if creator is None:
+        creator = get_human_username()
     comments = load_comments(doc_path)
     ann = None
     for c in comments:
@@ -108,10 +151,7 @@ def append_reply(
         {
             "type": "TextualBody",
             "value": body_text,
-            "creator": {
-                "type": "Software" if creator == "AI" else "Person",
-                "name": creator,
-            },
+            "creator": _make_creator(creator, nickname, is_software=is_software),
             "created": now,
         }
     )
@@ -193,6 +233,38 @@ def unresolve(doc_path: str | Path, annotation_id: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     ann["scholia:status"] = "open"
     ann.pop("scholia:resolvedAt", None)
+    ann["modified"] = now
+
+    path = annotation_path(doc_path)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ann) + "\n")
+    return ann
+
+
+def reanchor(
+    doc_path: str | Path,
+    annotation_id: str,
+    exact: str,
+    prefix: str = "",
+    suffix: str = "",
+) -> dict:
+    """Re-anchor an annotation to new text."""
+    comments = load_comments(doc_path)
+    ann = None
+    for c in comments:
+        if c["id"] == annotation_id:
+            ann = c
+            break
+    if ann is None:
+        raise ValueError(f"Annotation {annotation_id} not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    ann["target"]["selector"] = {
+        "type": "TextQuoteSelector",
+        "exact": exact,
+        "prefix": prefix,
+        "suffix": suffix,
+    }
     ann["modified"] = now
 
     path = annotation_path(doc_path)

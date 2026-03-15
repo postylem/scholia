@@ -419,6 +419,7 @@
     textarea.addEventListener('input', function () {
       textarea.style.height = 'auto';
       textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + 'px';
+      positionCards();
     });
   }
 
@@ -555,7 +556,16 @@
       var orphanIcon = document.createElement('span');
       orphanIcon.className = 'scholia-orphan-icon';
       orphanIcon.textContent = '?';
-      orphanIcon.title = 'Anchor text not found in document';
+      var orphanTip = document.createElement('div');
+      orphanTip.className = 'scholia-orphan-tooltip';
+      orphanTip.textContent = 'Anchor text not found. Click to re-anchor.';
+      orphanIcon.appendChild(orphanTip);
+      orphanIcon.addEventListener('click', (function (theAnnId) {
+        return function (e) {
+          e.stopPropagation();
+          startReanchor(theAnnId);
+        };
+      })(ann.id));
       header.appendChild(orphanIcon);
     }
 
@@ -597,7 +607,18 @@
 
       var meta = document.createElement('div');
       meta.className = 'scholia-message-meta';
-      meta.textContent = msgCreator;
+      if (isSoftware && msg.creator.nickname) {
+        var authorSpan = document.createElement('span');
+        authorSpan.className = 'scholia-author-label';
+        authorSpan.textContent = msgCreator + ' ';
+        var modelSpan = document.createElement('span');
+        modelSpan.className = 'scholia-model-name';
+        modelSpan.textContent = msg.creator.nickname;
+        authorSpan.appendChild(modelSpan);
+        meta.appendChild(authorSpan);
+      } else {
+        meta.textContent = msgCreator;
+      }
       meta.style.color = userColor(msgCreator, msg.creator && msg.creator.type);
       msgEl.appendChild(meta);
 
@@ -854,7 +875,16 @@
           var icon = document.createElement('span');
           icon.className = 'scholia-orphan-icon';
           icon.textContent = '?';
-          icon.title = 'Anchor text not found in document';
+          var iconTip = document.createElement('div');
+          iconTip.className = 'scholia-orphan-tooltip';
+          iconTip.textContent = 'Anchor text not found. Click to re-anchor.';
+          icon.appendChild(iconTip);
+          icon.addEventListener('click', (function (theId) {
+            return function (e) {
+              e.stopPropagation();
+              startReanchor(theId);
+            };
+          })(id));
           // Insert before anchor text span
           var anchorSpan = headerEl.querySelector('.scholia-anchor-text');
           if (anchorSpan) {
@@ -1023,33 +1053,41 @@
       if (thread) thread.style.display = shouldExpand ? 'block' : 'none';
       entry.card.classList.toggle('scholia-expanded', shouldExpand);
 
-      entry.card.style.top = top + 'px';
+      if (entry.card !== reanchorCard) {
+        entry.card.style.top = top + 'px';
+      }
       currentY = top + (shouldExpand ? entry.expandedH : entry.collapsedH) + 4;
     }
 
     // Remove stale divider + label if no orphans this render
     var staleDivider = sidebarEl.querySelector('.scholia-orphan-divider');
     var staleLabel = sidebarEl.querySelector('.scholia-orphan-label');
-    if (orphans.length === 0 || positioned.length === 0) {
+    if (orphans.length === 0) {
       if (staleDivider) staleDivider.remove();
       if (staleLabel) staleLabel.remove();
     }
 
-    // Orphan cards after all positioned ones, with divider and label
-    if (orphans.length > 0 && positioned.length > 0) {
-      currentY += 16;
-      var divider = sidebarEl.querySelector('.scholia-orphan-divider');
-      if (!divider) {
-        divider = document.createElement('div');
-        divider.className = 'scholia-orphan-divider';
-        sidebarEl.appendChild(divider);
+    // Orphan section: divider (only if there are positioned cards above) + label + cards
+    if (orphans.length > 0) {
+      // Divider only makes sense when there are positioned cards to separate from
+      if (positioned.length > 0) {
+        currentY += 16;
+        var divider = sidebarEl.querySelector('.scholia-orphan-divider');
+        if (!divider) {
+          divider = document.createElement('div');
+          divider.className = 'scholia-orphan-divider';
+          sidebarEl.appendChild(divider);
+        }
+        divider.style.position = 'absolute';
+        divider.style.left = '0.75rem';
+        divider.style.right = '0.75rem';
+        divider.style.top = currentY + 'px';
+        currentY += divider.offsetHeight + 8;
+      } else {
+        if (staleDivider) staleDivider.remove();
       }
-      divider.style.position = 'absolute';
-      divider.style.left = '0.75rem';
-      divider.style.right = '0.75rem';
-      divider.style.top = currentY + 'px';
-      currentY += divider.offsetHeight + 8;
 
+      // Label always shown when there are orphans
       var label = sidebarEl.querySelector('.scholia-orphan-label');
       if (!label) {
         label = document.createElement('div');
@@ -1073,6 +1111,8 @@
       currentY += label.offsetHeight + 8;
     }
     for (var o = 0; o < orphans.length; o++) {
+      // Skip card being re-anchored — it controls its own position
+      if (orphans[o] === reanchorCard) continue;
       var oId = orphans[o].dataset.annotationId;
       var oThread = orphans[o].querySelector('.scholia-thread');
       var oExpanded = expandOverrides[oId] === true;
@@ -1112,6 +1152,7 @@
 
   docEl.addEventListener('mouseup', function () {
     if (sidebarHidden) return;
+    if (reanchorAnnotationId) return;  // re-anchor mode handles selection
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
 
@@ -1279,6 +1320,146 @@
     if (textarea && document.activeElement === textarea) return;
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) dismissCommentPrompt();
+  });
+
+  // ── Re-anchor orphaned threads ─────────────────────
+  // Click orphan ? icon → inline prompt on card → select text → auto-accepts
+
+  var reanchorAnnotationId = null;
+  var reanchorPrompt = null;
+  var reanchorCard = null;
+  var reanchorOriginalTop = null;
+
+  function reanchorCenterY() {
+    var sidebarRect = sidebarEl.getBoundingClientRect();
+    var cardH = reanchorCard ? reanchorCard.offsetHeight : 0;
+    // Center of visible viewport, converted to sidebar-relative coords
+    var viewportCenterY = window.innerHeight / 2;
+    return viewportCenterY - sidebarRect.top - (cardH / 2);
+  }
+
+  function startReanchor(annotationId) {
+    cancelReanchor();
+    dismissCommentPrompt();
+    reanchorAnnotationId = annotationId;
+
+    // Find the card and add inline prompt
+    var card = sidebarEl.querySelector('[data-annotation-id="' + annotationId + '"]');
+    if (!card) return;
+    reanchorCard = card;
+    reanchorOriginalTop = parseFloat(card.style.top) || 0;
+
+    reanchorPrompt = document.createElement('div');
+    reanchorPrompt.className = 'scholia-reanchor-prompt';
+    reanchorPrompt.innerHTML = 'Select text in the document to re-anchor\u2026 '
+      + '<button class="scholia-btn scholia-btn-cancel">Cancel</button>';
+    reanchorPrompt.querySelector('button').addEventListener('click', function (e) {
+      e.stopPropagation();
+      cancelReanchor();
+    });
+    card.appendChild(reanchorPrompt);
+    card.classList.add('scholia-reanchoring');
+
+    // Dim the rest of the sidebar (fade in)
+    var dim = document.createElement('div');
+    dim.className = 'scholia-reanchor-dim';
+    sidebarEl.appendChild(dim);
+    // Force layout before adding class so transition fires
+    dim.offsetHeight;
+    dim.classList.add('active');
+
+    // Animate card to vertical center
+    card.style.transition = 'top 0.35s ease';
+    card.style.top = reanchorCenterY() + 'px';
+  }
+
+  function cancelReanchor() {
+    if (!reanchorCard) { reanchorAnnotationId = null; return; }
+    var card = reanchorCard;
+
+    // Fade out dim
+    var dim = sidebarEl.querySelector('.scholia-reanchor-dim');
+    if (dim) dim.classList.remove('active');
+
+    // Animate back to original position
+    card.style.transition = 'top 0.35s ease';
+    card.style.top = reanchorOriginalTop + 'px';
+
+    // Clean up after animation
+    setTimeout(function () {
+      card.style.transition = '';
+      card.classList.remove('scholia-reanchoring');
+      if (reanchorPrompt) { reanchorPrompt.remove(); reanchorPrompt = null; }
+      if (dim) dim.remove();
+      reanchorCard = null;
+      reanchorOriginalTop = null;
+      reanchorAnnotationId = null;
+      positionCards();
+    }, 350);
+  }
+
+  // Keep card centered while scrolling in reanchor mode
+  window.addEventListener('scroll', function () {
+    if (!reanchorCard) return;
+    reanchorCard.style.transition = 'none';
+    reanchorCard.style.top = reanchorCenterY() + 'px';
+  });
+
+  // Intercept text selection during re-anchor mode — auto-accept
+  docEl.addEventListener('mouseup', function () {
+    if (!reanchorAnnotationId || !reanchorCard) return;
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+
+    var range = sel.getRangeAt(0);
+    if (!docEl.contains(range.commonAncestorContainer)) return;
+
+    var selector = TextQuoteAnchor.fromRange(docEl, range);
+    if (!selector.exact.trim()) return;
+
+    var annId = reanchorAnnotationId;
+    var card = reanchorCard;
+
+    // Send reanchor
+    wsSend({
+      type: 'reanchor',
+      annotation_id: annId,
+      exact: selector.exact,
+      prefix: selector.prefix,
+      suffix: selector.suffix,
+    });
+    window.getSelection().removeAllRanges();
+
+    // Clean up prompt, fade out dim
+    if (reanchorPrompt) { reanchorPrompt.remove(); reanchorPrompt = null; }
+    var dim = sidebarEl.querySelector('.scholia-reanchor-dim');
+    if (dim) dim.classList.remove('active');
+
+    // Animate card toward where the new anchor is in the document
+    var marks = TextQuoteAnchor.toRange(docEl, selector);
+    if (marks) {
+      var sidebarTop = sidebarEl.getBoundingClientRect().top;
+      var targetY = marks.getBoundingClientRect().top - sidebarTop + sidebarEl.scrollTop;
+      card.style.transition = 'top 0.35s ease';
+      card.style.top = targetY + 'px';
+    }
+
+    setTimeout(function () {
+      card.style.transition = '';
+      card.classList.remove('scholia-reanchoring');
+      if (dim) dim.remove();
+      reanchorCard = null;
+      reanchorOriginalTop = null;
+      reanchorAnnotationId = null;
+    }, 350);
+  }, true);  // capture phase so it runs before the new-comment handler
+
+  // Escape cancels re-anchor mode
+  document.addEventListener('keydown', function (e) {
+    if (reanchorAnnotationId && e.key === 'Escape') {
+      cancelReanchor();
+      window.getSelection().removeAllRanges();
+    }
   });
 
   // ── Citation hover tooltips ─────────────────────────

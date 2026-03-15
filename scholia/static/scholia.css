@@ -469,6 +469,13 @@ input.margin-toggle { display: none; }
   margin-bottom: 0.1rem;
 }
 
+.scholia-model-name {
+  font-size: 0.54rem;
+  font-weight: 400;
+  opacity: 0.7;
+  text-transform: none;
+}
+
 /* Per-user meta colors are set inline via JS userColor() */
 
 /* ── Read/unread toggle on AI messages ────────────── */
@@ -747,12 +754,12 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.1em;
-  height: 1.1em;
+  width: 1.3em;
+  height: 1.3em;
   border-radius: 50%;
   border: 1px solid var(--s-text-dim);
   color: var(--s-text-dim);
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 700;
   cursor: help;
   flex-shrink: 0;
@@ -761,13 +768,14 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   display: none;
   position: absolute;
   top: 1.6em;
-  left: 0;
-  width: 240px;
+  right: 0;
+  max-width: 240px;
   background: var(--s-card);
   border: 1px solid var(--s-border);
   border-radius: 4px;
   padding: 0.5rem 0.65rem;
   font-size: 0.72rem;
+  font-weight: 400;
   line-height: 1.4;
   color: var(--s-text);
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
@@ -790,6 +798,40 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   font-weight: 700;
   cursor: help;
   flex-shrink: 0;
+}
+.scholia-orphan-icon .scholia-orphan-tooltip {
+  display: none;
+}
+.scholia-orphan-icon:hover .scholia-orphan-tooltip {
+  display: block;
+}
+
+/* ── Re-anchor prompt (inline on card) ────────────── */
+
+.scholia-reanchor-prompt {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.65rem;
+  color: var(--s-text);
+  border-top: 1px solid var(--s-border);
+}
+.scholia-card.scholia-reanchoring {
+  border-color: var(--s-accent);
+  z-index: 11;
+  position: relative;
+}
+.scholia-reanchor-dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  z-index: 10;
+  pointer-events: none;
+  transition: background 0.35s ease;
+}
+.scholia-reanchor-dim.active {
+  background: rgba(0, 0, 0, 0.15);
+}
+body.scholia-dark .scholia-reanchor-dim.active {
+  background: rgba(0, 0, 0, 0.3);
 }
 
 /* ── AI-replied thread accent ─────────────────────── */

@@ -1,3 +1,8 @@
+---
+name: scholia
+description: Review and respond to scholia annotations on markdown documents. Use when asked to check comments, review scholia, or respond to annotations.
+---
+
 # Scholia — AI Review Instructions
 
 Scholia is a collaborative annotation system for markdown documents. The human writes/edits a `.md` file and adds comments via a browser sidebar. You review and reply via CLI.
@@ -14,17 +19,21 @@ Scholia is a collaborative annotation system for markdown documents. The human w
 # Start the annotation server (opens browser UI)
 scholia view <doc.md>
 
-# List open (unresolved) comments
+# List open (unresolved) comments — add -v to see message bodies
 scholia list <doc.md> --open
+scholia list <doc.md> --open -v
 
 # List all comments including resolved
 scholia list <doc.md> --all
 
+# Show a single thread with all messages
+scholia show <doc.md> <annotation-id>
+
 # Reply to a specific annotation by ID
-scholia reply <doc.md> <annotation-id> "Your reply text here"
+scholia reply <doc.md> <annotation-id> "Your reply text here" --author-ai-model "<your model name>"
 
 # Add a new comment anchored to specific text
-scholia comment <doc.md> "exact text to anchor to" "Your comment"
+scholia comment <doc.md> "exact text to anchor to" "Your comment" --author-ai-model "<your model name>"
 
 # Edit the last message in a thread
 scholia edit <doc.md> <annotation-id> "New text"
@@ -39,8 +48,8 @@ scholia unresolve <doc.md> <annotation-id>
 When asked to review comments or "check the scholia" or equivalent instruction:
 
 1. **Read the document** to understand current content
-2. **List open comments**: `scholia list <doc.md> --open`
-3. **For each open comment**:
+2. **List open comments with messages**: `scholia list <doc.md> --open -v`
+3. **For each open comment** (use `scholia show <doc.md> <id>` if you need to re-read a specific thread):
    - If it's a question: use `scholia reply` to reply answering it
    - If it's a change request: edit the `.md` file, then use `scholia reply` to reply confirming what you changed
    - If it's minor/acknowledged: use `scholia reply` to reply with a brief acknowledgement. E.g., "Acknowledged." or just "Ack."
@@ -48,12 +57,32 @@ When asked to review comments or "check the scholia" or equivalent instruction:
 
 ## Guidelines
 
+- **Always pass `--author-ai-model "<model>"`** on every `reply` and `comment` command. This is **required**. It marks your comment as written by software and records which model you are. Do NOT use `--author-name` — that flag is for humans only.
+- **For the model value**, use the full vendor and model name you are running as (from your system prompt, model metadata, or initialization). Include the vendor prefix. Examples: `"Claude Opus 4.6"`, `"Claude Sonnet 4.6"`, `"GPT-4o"`, `"Gemini 2.5 Pro"`. If unsure of your exact model name, use the best approximation you have, or as a last resort write `"model unknown"`, but NEVER OMIT THIS FLAG.
 - Never respond to resolved comments — they are closed.
 - Keep replies concise — this is margin dialogue, not an essay.
 - When editing the document, make minimal targeted changes.
 - Quote the specific text you're responding to when it aids clarity.
 - If a comment is ambiguous, ask for clarification rather than guessing.
 - The human sees your replies live in the browser sidebar via WebSocket.
+- **Parallelism**: When there are many independent threads (simple questions, acknowledgements), you can run multiple `scholia reply` calls in parallel. Avoid parallelizing when one reply depends on a document edit triggered by another, or when threads concern overlapping sections.
+
+## Example Session
+
+```bash
+$ scholia list doc.md --open -v
+[open] urn:uuid:abc-123
+  anchor: "We use a microservices architecture"
+  2 message(s), last by alice
+  [alice] Should we mention the trade-offs here?
+  [AI (Claude Opus 4.6)] Good point — added a sentence about latency vs independence.
+
+$ scholia reply doc.md urn:uuid:abc-123 "Good point — I'd add a sentence about the trade-offs." --author-ai-model "Claude Opus 4.6"
+Reply added to urn:uuid:abc-123
+
+$ scholia comment doc.md "deployment pipeline" "This section could mention rollback procedures." --author-ai-model "Claude Opus 4.6"
+Comment created: urn:uuid:def-456
+```
 
 ## Configuration
 
