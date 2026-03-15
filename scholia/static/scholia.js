@@ -1700,4 +1700,20 @@
   // Reposition cards on resize (layout may change)
   window.addEventListener('resize', positionCards);
 
+  // Responsive sidenotes: toggle based on doc pane width, not viewport.
+  // Hysteresis prevents oscillation at the boundary — content width changes
+  // when the class toggles (60% → 100%), so we use separate thresholds.
+  var NARROW_ENTER = 750;
+  var NARROW_LEAVE = 820;
+  var resizeObs = new ResizeObserver(function (entries) {
+    var width = entries[0].contentRect.width;
+    var isNarrow = docEl.classList.contains('scholia-narrow-doc');
+    if (!isNarrow && width < NARROW_ENTER) {
+      docEl.classList.add('scholia-narrow-doc');
+    } else if (isNarrow && width > NARROW_LEAVE) {
+      docEl.classList.remove('scholia-narrow-doc');
+    }
+  });
+  resizeObs.observe(docEl);
+
 })();

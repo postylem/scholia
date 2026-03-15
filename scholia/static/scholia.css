@@ -182,76 +182,72 @@ label.margin-toggle:not(.sidenote-number) {
 /* Always hide the checkbox */
 input.margin-toggle { display: none; }
 
-/* Responsive: collapse sidenotes inline on narrow screens */
-@media (max-width: 1100px) {
-  #scholia-doc {
-    padding: 2rem 25px 4rem 25px;
-  }
-
-  #scholia-doc > p, #scholia-doc > ul, #scholia-doc > ol, #scholia-doc > dl,
-  #scholia-doc > blockquote, #scholia-doc > pre, #scholia-doc > figure,
-  #scholia-doc > table, #scholia-doc > header,
-  #scholia-doc section > p, #scholia-doc section > ul, #scholia-doc section > ol,
-  #scholia-doc section > dl, #scholia-doc section > blockquote,
-  #scholia-doc section > pre, #scholia-doc section > figure,
-  #scholia-doc section > table,
-  #scholia-doc h1, #scholia-doc h2, #scholia-doc h3,
-  #scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
-    width: 100%;
-  }
-
-  /* Code blocks bleed to edges, text stays aligned */
-  #scholia-doc > div.sourceCode,
-  #scholia-doc section > div.sourceCode {
-    width: calc(100% + 50px);
-    margin-left: -25px;
-    margin-right: -25px;
-  }
-  #scholia-doc > div.sourceCode pre,
-  #scholia-doc section > div.sourceCode pre {
-    border-radius: 0;
-    padding-left: 25px;
-    padding-right: 25px;
-  }
-  /* Standalone pre (no sourceCode wrapper) also bleeds */
-  #scholia-doc > pre,
-  #scholia-doc section > pre {
-    width: calc(100% + 50px);
-    margin-left: -25px;
-    margin-right: -25px;
-    border-radius: 0;
-    padding-left: 25px;
-    padding-right: 25px;
-  }
-
-  .sidenote, .marginnote {
-    display: none;
-  }
-
-  .margin-toggle:checked + .sidenote,
-  .margin-toggle:checked + .marginnote {
-    display: block;
-    float: none;
-    clear: both;
-    width: 100%;
-    margin: 0.5rem 0;
-    padding: 0.5rem 0.75rem;
-    background: var(--s-surface);
-    border-left: 2px solid var(--s-border);
-    font-size: 0.9rem;
-  }
-
-  label.margin-toggle:not(.sidenote-number) {
-    display: inline;
-    cursor: pointer;
-    color: var(--s-accent);
-    font-size: 0.75rem;
-    vertical-align: super;
-    line-height: 0;
-  }
-
-  .sidenote-number { cursor: pointer; color: var(--s-accent); }
+/* Responsive: collapse sidenotes when doc pane is narrow */
+#scholia-doc.scholia-narrow-doc {
+  padding: 2rem 25px 4rem 25px;
 }
+#scholia-doc.scholia-narrow-doc > p, #scholia-doc.scholia-narrow-doc > ul,
+#scholia-doc.scholia-narrow-doc > ol, #scholia-doc.scholia-narrow-doc > dl,
+#scholia-doc.scholia-narrow-doc > blockquote, #scholia-doc.scholia-narrow-doc > pre,
+#scholia-doc.scholia-narrow-doc > figure, #scholia-doc.scholia-narrow-doc > table,
+#scholia-doc.scholia-narrow-doc > header, #scholia-doc.scholia-narrow-doc > div.sourceCode,
+#scholia-doc.scholia-narrow-doc section > p, #scholia-doc.scholia-narrow-doc section > ul,
+#scholia-doc.scholia-narrow-doc section > ol, #scholia-doc.scholia-narrow-doc section > dl,
+#scholia-doc.scholia-narrow-doc section > blockquote, #scholia-doc.scholia-narrow-doc section > pre,
+#scholia-doc.scholia-narrow-doc section > figure, #scholia-doc.scholia-narrow-doc section > table,
+#scholia-doc.scholia-narrow-doc section > div.sourceCode,
+#scholia-doc.scholia-narrow-doc h1, #scholia-doc.scholia-narrow-doc h2, #scholia-doc.scholia-narrow-doc h3,
+#scholia-doc.scholia-narrow-doc h4, #scholia-doc.scholia-narrow-doc h5, #scholia-doc.scholia-narrow-doc h6 {
+  width: 100%;
+}
+/* Code blocks bleed to edges, text stays aligned */
+#scholia-doc.scholia-narrow-doc > div.sourceCode,
+#scholia-doc.scholia-narrow-doc section > div.sourceCode {
+  width: calc(100% + 50px);
+  margin-left: -25px;
+  margin-right: -25px;
+}
+#scholia-doc.scholia-narrow-doc > div.sourceCode pre,
+#scholia-doc.scholia-narrow-doc section > div.sourceCode pre {
+  border-radius: 0;
+  padding-left: 25px;
+  padding-right: 25px;
+}
+/* Standalone pre (no sourceCode wrapper) also bleeds */
+#scholia-doc.scholia-narrow-doc > pre,
+#scholia-doc.scholia-narrow-doc section > pre {
+  width: calc(100% + 50px);
+  margin-left: -25px;
+  margin-right: -25px;
+  border-radius: 0;
+  padding-left: 25px;
+  padding-right: 25px;
+}
+#scholia-doc.scholia-narrow-doc .sidenote,
+#scholia-doc.scholia-narrow-doc .marginnote {
+  display: none;
+}
+#scholia-doc.scholia-narrow-doc .margin-toggle:checked + .sidenote,
+#scholia-doc.scholia-narrow-doc .margin-toggle:checked + .marginnote {
+  display: block;
+  float: none;
+  clear: both;
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--s-surface);
+  border-left: 2px solid var(--s-border);
+  font-size: 0.9rem;
+}
+#scholia-doc.scholia-narrow-doc label.margin-toggle:not(.sidenote-number) {
+  display: inline;
+  cursor: pointer;
+  color: var(--s-accent);
+  font-size: 0.75rem;
+  vertical-align: super;
+  line-height: 0;
+}
+#scholia-doc.scholia-narrow-doc .sidenote-number { cursor: pointer; color: var(--s-accent); }
 
 /* ── Document typography ────────────────────────────── */
 
@@ -1156,6 +1152,58 @@ a.scholia-toolbar-brand:hover {
 }
 #scholia-doc.scholia-no-sidenotes pre {
   width: 90%;
+}
+/* Code blocks bleed full width in no-sidenotes mode */
+#scholia-doc.scholia-no-sidenotes > div.sourceCode,
+#scholia-doc.scholia-no-sidenotes section > div.sourceCode,
+#scholia-doc.scholia-no-sidenotes > pre,
+#scholia-doc.scholia-no-sidenotes section > pre {
+  width: 100%;
+  border-radius: 0;
+}
+/* Narrow doc overrides no-sidenotes widths */
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > p,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > ul,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > ol,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > dl,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > blockquote,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > pre,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > figure,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > table,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > header,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > div.sourceCode,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > p,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > ul,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > ol,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > dl,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > blockquote,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > pre,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > figure,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > table,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > div.sourceCode,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes h1,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes h2,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes h3,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes h4,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes h5,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes h6,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes pre {
+  width: 100%;
+}
+/* Code blocks still bleed in narrow + no-sidenotes */
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > div.sourceCode,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > div.sourceCode,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > pre,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > pre {
+  width: calc(100% + 50px);
+  margin-left: -25px;
+  margin-right: -25px;
+  border-radius: 0;
+}
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes > div.sourceCode pre,
+#scholia-doc.scholia-narrow-doc.scholia-no-sidenotes section > div.sourceCode pre {
+  padding-left: 25px;
+  padding-right: 25px;
 }
 
 /* ── Dark mode overrides for hard-coded colors ─────── */
