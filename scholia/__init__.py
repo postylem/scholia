@@ -1,3 +1,6 @@
 """Scholia: collaborative marginalia for human-AI dialogue."""
 
-__version__ = "0.4.1"
+try:
+    from scholia._version import __version__
+except ImportError:
+    __version__ = "0.0.0+unknown"

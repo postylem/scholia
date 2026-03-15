@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "scholia"
-version = "0.4.1"
+dynamic = ["version"]
 description = "Collaborative marginalia for markdown"
 requires-python = ">=3.10"
 dependencies = [
@@ -17,3 +17,9 @@ scholia = "scholia.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-aiohttp>=1.0"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "scholia/_version.py"

@@ -1,6 +1,7 @@
 __pycache__/
 *.egg-info/
 dist/
+scholia/_version.py
 
 # Scholia read/unread state (personal, never shared)
 *.scholia.state.json
