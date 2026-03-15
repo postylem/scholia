@@ -1,6 +1,6 @@
 /**
- * Scholia frontend v0.2: sidebar, text selection, WebSocket live reload,
- * anchor highlighting, read/unread state, reply, resolve, code chrome,
+ * Scholia frontend: sidebar, text selection, WebSocket live reload,
+ * anchor highlighting, read/unread state, reply, resolve, edit,
  * positioned cards with orphan handling.
  */
 (function () {

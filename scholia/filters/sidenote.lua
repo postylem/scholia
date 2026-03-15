@@ -47,8 +47,8 @@ function Note(note)
     return pandoc.RawInline("html", string.format(
       '<label for="%s" class="margin-toggle sidenote-number">%d</label>' ..
       '<input type="checkbox" id="%s" class="margin-toggle"/>' ..
-      '<span class="sidenote">%s</span>',
-      id, sidenote_count, id, html_content
+      '<span class="sidenote"><sup>%d</sup> %s</span>',
+      id, sidenote_count, id, sidenote_count, html_content
     ))
   end
 end

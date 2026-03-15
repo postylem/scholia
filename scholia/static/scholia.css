@@ -39,6 +39,7 @@
   --s-border: #ddd;
   --s-header-open: #f5f3eb;
   --s-header-resolved: #f0f0f0;
+  --s-code-bg: #fbf5e6;
   --s-radius: 4px;
   --s-body: et-book, Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif;
   --s-mono: Consolas, 'Liberation Mono', Menlo, Monaco, Courier, monospace;
@@ -63,6 +64,7 @@ body.scholia-dark {
   --s-highlight-active: rgba(255, 200, 50, 0.3);
   --s-border: #444;
   --s-header-open: #35332a;
+  --s-code-bg: #2c2a22;
   --s-header-resolved: #303030;
   --s-mono: Consolas, 'Liberation Mono', Menlo, Monaco, Courier, monospace;
 }
@@ -115,11 +117,7 @@ body {
 #scholia-doc section > blockquote,
 #scholia-doc section > pre, #scholia-doc section > figure,
 #scholia-doc section > table,
-#scholia-doc section > div.sourceCode {
-  width: 60%;
-}
-
-/* Headings span full width */
+#scholia-doc section > div.sourceCode,
 #scholia-doc h1, #scholia-doc h2, #scholia-doc h3,
 #scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
   width: 60%;
@@ -157,17 +155,23 @@ body {
   margin-bottom: 1rem;
   font-size: 0.85rem;
   line-height: 1.4;
-  color: var(--s-text-dim);
+  color: #555;
 }
 
-.sidenote { padding-top: 0.1rem; }
+.sidenote {
+  padding-top: 0.1rem;
+  text-indent: -0.8em;
+  padding-left: 0.8em;
+}
 
-/* Sidenote number in running text */
-.sidenote-number {
+/* Sidenote numbers (in main text and in margin) */
+.sidenote-number,
+.sidenote > sup {
   font-size: 0.75rem;
   vertical-align: super;
   line-height: 0;
   cursor: default;
+  color: #aaa;
 }
 
 /* Margin note toggle symbol (⊕) */
@@ -235,9 +239,13 @@ input.margin-toggle { display: none; }
   width: 100%;
   margin: 0.5rem 0;
   padding: 0.5rem 0.75rem;
-  background: var(--s-surface);
+  text-indent: 0;
+  padding-left: 0.75rem;
   border-left: 2px solid var(--s-border);
   font-size: 0.9rem;
+}
+#scholia-doc.scholia-narrow-doc .sidenote > sup {
+  display: none;
 }
 #scholia-doc.scholia-narrow-doc label.margin-toggle:not(.sidenote-number) {
   display: inline;
@@ -299,19 +307,18 @@ input.margin-toggle { display: none; }
 
 #scholia-doc code {
   font-family: var(--s-mono);
-  background: var(--s-surface);
+  background: var(--s-code-bg);
   padding: 0.1em 0.3em;
   border-radius: 3px;
   font-size: 0.82em;
 }
 #scholia-doc pre {
-  background: var(--s-surface);
+  background: var(--s-code-bg);
   padding: 1rem 1.2rem;
   border-radius: var(--s-radius);
   overflow-x: auto;
   line-height: 1.45;
   font-size: 0.85rem;
-  width: 60%;
 }
 /* Pre inside div.sourceCode: fill the width-constrained parent */
 #scholia-doc div.sourceCode pre {
@@ -458,6 +465,9 @@ input.margin-toggle { display: none; }
 }
 
 .scholia-message-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 0.6rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -470,16 +480,6 @@ input.margin-toggle { display: none; }
   font-weight: 400;
   opacity: 0.7;
   text-transform: none;
-}
-
-/* Per-user meta colors are set inline via JS userColor() */
-
-/* ── Read/unread toggle on AI messages ────────────── */
-
-.scholia-message-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .scholia-read-toggle {
@@ -678,7 +678,7 @@ code span.do { color: #ba2121; font-style: italic; } /* Documentation */
 code span.dt { color: #902000; } /* DataType */
 code span.dv { color: #40a070; } /* DecVal */
 code span.er { color: #ff0000; font-weight: bold; } /* Error */
-code span.ex { } /* Extension */
+code span.ex { color: inherit; } /* Extension */
 code span.fl { color: #40a070; } /* Float */
 code span.fu { color: #06287e; } /* Function */
 code span.im { color: #008000; font-weight: bold; } /* Import */
@@ -746,7 +746,8 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   color: var(--s-text-dim);
   position: relative;
 }
-.scholia-orphan-label-help {
+.scholia-orphan-label-help,
+.scholia-orphan-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -778,26 +779,7 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   z-index: 50;
 }
 .scholia-orphan-label-help:hover + .scholia-orphan-tooltip,
-.scholia-orphan-tooltip:hover {
-  display: block;
-}
-.scholia-orphan-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.3em;
-  height: 1.3em;
-  border-radius: 50%;
-  border: 1px solid var(--s-text-dim);
-  color: var(--s-text-dim);
-  font-size: 0.65rem;
-  font-weight: 700;
-  cursor: help;
-  flex-shrink: 0;
-}
-.scholia-orphan-icon .scholia-orphan-tooltip {
-  display: none;
-}
+.scholia-orphan-tooltip:hover,
 .scholia-orphan-icon:hover .scholia-orphan-tooltip {
   display: block;
 }
@@ -1148,9 +1130,6 @@ a.scholia-toolbar-brand:hover {
 #scholia-doc.scholia-no-sidenotes h4,
 #scholia-doc.scholia-no-sidenotes h5,
 #scholia-doc.scholia-no-sidenotes h6 {
-  width: 90%;
-}
-#scholia-doc.scholia-no-sidenotes pre {
   width: 90%;
 }
 /* Code blocks bleed full width in no-sidenotes mode */
