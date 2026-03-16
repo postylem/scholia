@@ -25,6 +25,33 @@ def annotation_path(doc_path: str | Path) -> Path:
     return p.parent / f"{p.name}.scholia.jsonl"
 
 
+def resolve_id(doc_path: str | Path, prefix: str) -> str:
+    """Resolve a (possibly abbreviated) annotation ID to its full form.
+
+    Accepts a full ID, a prefix of one, or just the UUID portion without
+    the urn:uuid: prefix. Raises ValueError if no match or ambiguous.
+    """
+    comments = load_comments(doc_path)
+    # Exact match first
+    for c in comments:
+        if c["id"] == prefix:
+            return c["id"]
+    # Prefix match
+    matches = [c["id"] for c in comments if c["id"].startswith(prefix)]
+    # Also try matching without the urn:uuid: prefix
+    if not matches:
+        matches = [c["id"] for c in comments
+                   if c["id"].removeprefix("urn:uuid:").startswith(prefix)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(
+            f"Ambiguous ID prefix '{prefix}' matches {len(matches)} annotations: "
+            + ", ".join(matches[:3]) + ("..." if len(matches) > 3 else "")
+        )
+    raise ValueError(f"Annotation {prefix} not found")
+
+
 def load_comments(doc_path: str | Path) -> list[dict]:
     """Load all annotations, deduplicated by id (last version wins)."""
     path = annotation_path(doc_path)

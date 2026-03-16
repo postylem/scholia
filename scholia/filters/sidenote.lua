@@ -29,8 +29,8 @@ function Note(note)
     end
   end
 
-  -- Render note content as HTML
-  local html_content = pandoc.write(pandoc.Pandoc(blocks), "html")
+  -- Render note content as HTML, preserving math for KaTeX
+  local html_content = pandoc.write(pandoc.Pandoc(blocks), "html", { html_math_method = "katex" })
   -- Unwrap single-paragraph notes
   html_content = html_content:gsub("^%s*<p>(.+)</p>%s*$", "%1")
 

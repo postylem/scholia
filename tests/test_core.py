@@ -158,7 +158,10 @@ def test_cli_comment_reply_resolve(tmp_doc):
     assert code == 0 and "Comment created" in out
 
     code, out, _ = _run_cli("list", str(tmp_doc))
-    assert "1 message(s)" in out
+    assert "A comment" in out  # default format shows messages
+
+    code, out, _ = _run_cli("list", str(tmp_doc), "--format", "summary")
+    assert "1 message(s)" in out  # summary format shows counts
 
     ann_id = load_comments(tmp_doc)[0]["id"]
     code, _, _ = _run_cli("reply", str(tmp_doc), ann_id, "answer")
@@ -168,7 +171,8 @@ def test_cli_comment_reply_resolve(tmp_doc):
     code, out, _ = _run_cli("resolve", str(tmp_doc), ann_id)
     assert code == 0 and "Resolved" in out
 
-    code, out, _ = _run_cli("list", str(tmp_doc), "--open")
+    # Default is open-only; resolved thread should not appear
+    code, out, _ = _run_cli("list", str(tmp_doc))
     assert ann_id not in out
 
     code, out, _ = _run_cli("list", str(tmp_doc), "--all")
