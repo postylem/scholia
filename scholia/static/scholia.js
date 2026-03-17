@@ -23,6 +23,28 @@
   var darkMode = false;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
 
+  // ── Markdown rendering ─────────────────────────────
+
+  var md = null; // initialized after libs load
+
+  function initMarkdownIt() {
+    if (window.markdownit) {
+      md = window.markdownit({
+        html: false,
+        linkify: true,
+        typographer: false,
+        breaks: true,
+      });
+      // Add KaTeX math support if texmath plugin loaded
+      if (window.texmath && window.katex) {
+        md.use(window.texmath, {
+          engine: window.katex,
+          delimiters: 'dollars',
+        });
+      }
+    }
+  }
+
   // ── WebSocket ──────────────────────────────────────
 
   function connectWS() {
@@ -331,61 +353,15 @@
   }
 
   function renderCommentBody(text) {
-    var out = '';
-    var i = 0;
-    var hasKatex = !!window.katex;
-
-    while (i < text.length) {
-      // Inline code: `...`
-      if (text[i] === '`') {
-        var end = text.indexOf('`', i + 1);
-        if (end !== -1) {
-          out += '<code>' + escapeHtml(text.slice(i + 1, end)) + '</code>';
-          i = end + 1;
-          continue;
-        }
-      }
-      // Display math: $$...$$
-      if (text[i] === '$' && text[i + 1] === '$') {
-        var end = text.indexOf('$$', i + 2);
-        if (end !== -1) {
-          var tex = text.slice(i + 2, end);
-          if (hasKatex) {
-            try { out += katex.renderToString(tex, { displayMode: true, throwOnError: false }); }
-            catch (e) { out += '<code>' + escapeHtml(tex) + '</code>'; }
-          } else {
-            out += '<code>' + escapeHtml(tex) + '</code>';
-          }
-          i = end + 2;
-          continue;
-        }
-      }
-      // Inline math: $...$
-      if (text[i] === '$') {
-        var end = text.indexOf('$', i + 1);
-        if (end !== -1 && end > i + 1) {
-          var tex = text.slice(i + 1, end);
-          if (hasKatex) {
-            try { out += katex.renderToString(tex, { displayMode: false, throwOnError: false }); }
-            catch (e) { out += '<code>' + escapeHtml(tex) + '</code>'; }
-          } else {
-            out += '<code>' + escapeHtml(tex) + '</code>';
-          }
-          i = end + 1;
-          continue;
-        }
-      }
-      // Plain text until next special char
-      var next = i + 1;
-      while (next < text.length && text[next] !== '$' && text[next] !== '`') next++;
-      out += escapeHtml(text.slice(i, next));
-      i = next;
+    if (md) {
+      return md.render(text);
     }
-    return out;
+    // Fallback: escape HTML and preserve whitespace (original minimal behavior)
+    return '<p>' + escapeHtml(text) + '</p>';
   }
 
   function rerenderCommentBodies() {
-    if (!window.katex) return;
+    if (!md) return;
     var bodies = sidebarEl.querySelectorAll('.scholia-message-body');
     for (var i = 0; i < bodies.length; i++) {
       var raw = bodies[i].dataset.raw;
@@ -1685,6 +1661,13 @@
 
   renderToolbar();
   connectWS();
+  initMarkdownIt();
+  if (!md) {
+    window.addEventListener('load', function () {
+      initMarkdownIt();
+      rerenderCommentBodies();
+    });
+  }
   renderSidebar();
 
   // KaTeX is loaded with defer, so wait for window load before rendering math

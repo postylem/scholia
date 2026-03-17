@@ -562,9 +562,48 @@ input.margin-toggle { display: none; }
 .scholia-message-body {
   font-size: 0.8rem;
   line-height: 1.45;
-  white-space: pre-wrap;
   color: #333;
+  overflow-wrap: break-word;
 }
+
+/* Scoped markdown styles within comment bodies */
+.scholia-message-body p { margin: 0.3em 0; }
+.scholia-message-body p:first-child { margin-top: 0; }
+.scholia-message-body p:last-child { margin-bottom: 0; }
+.scholia-message-body ul,
+.scholia-message-body ol { margin: 0.3em 0; padding-left: 1.4em; }
+.scholia-message-body li { margin: 0.15em 0; }
+.scholia-message-body table { border-collapse: collapse; width: 100%; margin: 0.4em 0; font-size: 0.75rem; }
+.scholia-message-body th,
+.scholia-message-body td { border: 1px solid var(--s-border); padding: 0.25em 0.5em; text-align: left; }
+.scholia-message-body th { background: var(--s-surface); font-weight: 600; }
+.scholia-message-body blockquote {
+  margin: 0.3em 0;
+  padding: 0.2em 0.6em;
+  border-left: 3px solid var(--s-accent);
+  color: var(--s-text-dim);
+}
+.scholia-message-body pre {
+  background: var(--s-code-bg);
+  border-radius: 3px;
+  padding: 0.4em 0.6em;
+  overflow-x: auto;
+  margin: 0.3em 0;
+  font-size: 0.75rem;
+}
+.scholia-message-body pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+.scholia-message-body hr { border: none; border-top: 1px solid var(--s-border); margin: 0.5em 0; }
+.scholia-message-body a { color: var(--s-accent); text-decoration: underline; }
+.scholia-message-body img { max-width: 100%; border-radius: 3px; }
+.scholia-message-body h1,
+.scholia-message-body h2,
+.scholia-message-body h3,
+.scholia-message-body h4 { margin: 0.4em 0 0.2em; font-size: 0.85rem; }
+.scholia-message-body strong { font-weight: 600; }
 .scholia-message-body code {
   background: rgba(0, 0, 0, 0.06);
   padding: 0.1em 0.25em;
