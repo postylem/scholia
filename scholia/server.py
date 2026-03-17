@@ -82,6 +82,29 @@ async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
+def _render_markdown_fragment_sync(text: str, cwd: str = ".") -> str:
+    """Render a markdown fragment to HTML via Pandoc (blocking)."""
+    cmd = [
+        "pandoc",
+        "--katex",
+        "--citeproc",
+        "--from=markdown+tex_math_single_backslash",
+        "--to=html5",
+    ]
+    result = subprocess.run(
+        cmd, input=text, capture_output=True, text=True, check=True, cwd=cwd,
+    )
+    return result.stdout
+
+
+async def render_markdown_fragment(text: str, cwd: str = ".") -> str:
+    """Render a markdown fragment without blocking the event loop."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _render_markdown_fragment_sync, text, cwd
+    )
+
+
 def _extract_title(markdown_text: str) -> str:
     """Extract title from YAML frontmatter, or return 'Scholia'."""
     m = re.match(r"^---\n(.*?)\n---", markdown_text, re.DOTALL)
@@ -238,6 +261,16 @@ class ScholiaServer:
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
                 )
+            elif msg_type == "render_markdown":
+                html = await render_markdown_fragment(
+                    msg["text"],
+                    cwd=str(self.doc_path.parent),
+                )
+                await ws.send_json({
+                    "type": "rendered_markdown",
+                    "request_id": msg.get("request_id", ""),
+                    "html": html,
+                })
         except Exception as e:
             try:
                 await ws.send_json({"type": "error", "message": str(e)})

@@ -26,6 +26,8 @@
   // ── Markdown rendering ─────────────────────────────
 
   var md = null; // initialized after libs load
+  var pandocCache = new Map();   // raw text → Pandoc HTML
+  var pandocCallbacks = new Map(); // request_id → callback(html)
 
   function initMarkdownIt() {
     if (window.markdownit) {
@@ -89,6 +91,12 @@
       } else if (msg.type === 'comments_update') {
         comments = msg.comments;
         scheduleRender();
+      } else if (msg.type === 'rendered_markdown') {
+        var cb = pandocCallbacks.get(msg.request_id);
+        if (cb) {
+          cb(msg.html);
+          pandocCallbacks.delete(msg.request_id);
+        }
       } else if (msg.type === 'error') {
         console.warn('Scholia server error:', msg.message);
       }
@@ -656,6 +664,41 @@
         };
       })(body, toggleBtn));
       meta.appendChild(toggleBtn);
+
+      // Pandoc render button
+      var pandocBtn = document.createElement('button');
+      pandocBtn.className = 'scholia-btn-pandoc';
+      pandocBtn.textContent = 'P';
+      pandocBtn.title = 'Render with Pandoc (citations)';
+      pandocBtn.addEventListener('click', (function (theBody, theBtn, rawText) {
+        return function (e) {
+          e.stopPropagation();
+          if (theBtn.classList.contains('active')) {
+            // Revert to markdown-it rendering
+            theBody.classList.remove('scholia-raw-view');
+            theBody.innerHTML = renderCommentBody(rawText);
+            theBtn.classList.remove('active');
+            return;
+          }
+          // Check cache first
+          if (pandocCache.has(rawText)) {
+            theBody.innerHTML = pandocCache.get(rawText);
+            theBtn.classList.add('active');
+            return;
+          }
+          // Request Pandoc render
+          var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+          pandocCallbacks.set(reqId, function (html) {
+            pandocCache.set(rawText, html);
+            theBody.innerHTML = html;
+            theBtn.classList.add('active');
+            theBtn.textContent = 'P';
+          });
+          theBtn.textContent = '...';
+          wsSend({ type: 'render_markdown', text: rawText, request_id: reqId });
+        };
+      })(body, pandocBtn, msg.value));
+      meta.appendChild(pandocBtn);
 
       // Edit button on the very last body entry, only if it's the current user's message
       if (j === bodies.length - 1 && !isSoftware && msgCreator === creatorName) {

@@ -498,6 +498,22 @@ input.margin-toggle { display: none; }
 .scholia-btn-toggle-raw:hover { border-color: var(--s-accent); color: var(--s-accent); }
 .scholia-btn-toggle-raw.active { background: var(--s-accent-dim); color: var(--s-accent); }
 
+.scholia-btn-pandoc {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--s-text-dim);
+  cursor: pointer;
+  line-height: 1.4;
+  min-width: 1.2em;
+  text-align: center;
+}
+.scholia-btn-pandoc:hover { border-color: var(--s-accent); color: var(--s-accent); }
+.scholia-btn-pandoc.active { background: var(--s-accent-dim); color: var(--s-accent); }
+
 .scholia-message-body.scholia-raw-view {
   white-space: pre-wrap;
   font-family: var(--s-mono);

@@ -125,6 +125,22 @@ async def test_ws_mark_read(client, tmp_doc):
 
 
 @pytest.mark.asyncio
+async def test_ws_render_markdown(client):
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({
+        "type": "render_markdown",
+        "text": "**bold** and *italic*",
+        "request_id": "req-1",
+    })
+    msg = await ws.receive_json()
+    assert msg["type"] == "rendered_markdown"
+    assert msg["request_id"] == "req-1"
+    assert "<strong>bold</strong>" in msg["html"]
+    assert "<em>italic</em>" in msg["html"]
+    await ws.close()
+
+
+@pytest.mark.asyncio
 async def test_ws_mark_unread(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
