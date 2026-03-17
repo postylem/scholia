@@ -634,6 +634,29 @@
       body.innerHTML = renderCommentBody(msg.value);
       msgEl.appendChild(body);
 
+      // Raw/rendered toggle button
+      var toggleBtn = document.createElement('button');
+      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.textContent = '</>';
+      toggleBtn.title = 'Toggle raw markdown';
+      toggleBtn.addEventListener('click', (function (theBody, theBtn) {
+        return function (e) {
+          e.stopPropagation();
+          if (theBody.classList.contains('scholia-raw-view')) {
+            // Switch back to rendered
+            theBody.classList.remove('scholia-raw-view');
+            theBody.innerHTML = renderCommentBody(theBody.dataset.raw);
+            theBtn.classList.remove('active');
+          } else {
+            // Switch to raw
+            theBody.classList.add('scholia-raw-view');
+            theBody.textContent = theBody.dataset.raw;
+            theBtn.classList.add('active');
+          }
+        };
+      })(body, toggleBtn));
+      meta.appendChild(toggleBtn);
+
       // Edit button on the very last body entry, only if it's the current user's message
       if (j === bodies.length - 1 && !isSoftware && msgCreator === creatorName) {
         var editBtn = document.createElement('button');

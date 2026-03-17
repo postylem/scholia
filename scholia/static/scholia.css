@@ -466,9 +466,10 @@ input.margin-toggle { display: none; }
 
 .scholia-message-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.6rem;
+  align-items: baseline;
+  gap: 0.3em;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -480,6 +481,30 @@ input.margin-toggle { display: none; }
   color: var(--s-text-dim);
   font-weight: normal;
   margin-left: 0.3em;
+}
+
+.scholia-btn-toggle-raw {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.6rem;
+  font-family: var(--s-mono);
+  color: var(--s-text-dim);
+  cursor: pointer;
+  line-height: 1.4;
+  margin-left: auto;
+}
+.scholia-btn-toggle-raw:hover { border-color: var(--s-accent); color: var(--s-accent); }
+.scholia-btn-toggle-raw.active { background: var(--s-accent-dim); color: var(--s-accent); }
+
+.scholia-message-body.scholia-raw-view {
+  white-space: pre-wrap;
+  font-family: var(--s-mono);
+  font-size: 0.75rem;
+  background: var(--s-code-bg);
+  border-radius: 3px;
+  padding: 0.4em 0.6em;
 }
 
 .scholia-model-name {
