@@ -475,6 +475,13 @@ input.margin-toggle { display: none; }
   margin-bottom: 0.1rem;
 }
 
+.scholia-message-time {
+  font-size: 0.65rem;
+  color: var(--s-text-dim);
+  font-weight: normal;
+  margin-left: 0.3em;
+}
+
 .scholia-model-name {
   font-size: 0.54rem;
   font-weight: 400;

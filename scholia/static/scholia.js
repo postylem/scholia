@@ -45,6 +45,28 @@
     }
   }
 
+  function relativeTime(isoString) {
+    if (!isoString) return '';
+    var then = new Date(isoString);
+    var now = new Date();
+    var diffMs = now - then;
+    var diffSec = Math.floor(diffMs / 1000);
+    var diffMin = Math.floor(diffSec / 60);
+    var diffHr = Math.floor(diffMin / 60);
+    var diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return diffMin + ' min ago';
+    if (diffHr < 24) return diffHr + (diffHr === 1 ? ' hour ago' : ' hours ago');
+    if (diffDay === 1) return 'yesterday';
+    if (diffDay < 30) return diffDay + ' days ago';
+
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var sameYear = then.getFullYear() === now.getFullYear();
+    if (sameYear) return months[then.getMonth()] + ' ' + then.getDate();
+    return months[then.getMonth()] + ' ' + then.getDate() + ', ' + then.getFullYear();
+  }
+
   // ── WebSocket ──────────────────────────────────────
 
   function connectWS() {
@@ -596,6 +618,14 @@
         meta.textContent = msgCreator;
       }
       meta.style.color = userColor(msgCreator, msg.creator && msg.creator.type);
+
+      // Relative timestamp
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'scholia-message-time';
+      timeSpan.textContent = relativeTime(msg.created);
+      if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
+      meta.appendChild(timeSpan);
+
       msgEl.appendChild(meta);
 
       var body = document.createElement('div');
