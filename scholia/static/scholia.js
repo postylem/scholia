@@ -91,6 +91,17 @@
       } else if (msg.type === 'comments_update') {
         comments = msg.comments;
         scheduleRender();
+        // Refresh overlay if open
+        if (activeOverlay) {
+          var overlayAnnId = activeOverlay.annotationId;
+          for (var ci = 0; ci < comments.length; ci++) {
+            if (comments[ci].id === overlayAnnId) {
+              closeOverlay();
+              openOverlay(comments[ci]);
+              break;
+            }
+          }
+        }
       } else if (msg.type === 'rendered_markdown') {
         var cb = pandocCallbacks.get(msg.request_id);
         if (cb) {
@@ -596,6 +607,19 @@
       header.appendChild(dot);
     }
 
+    // Pop-out button
+    var popoutBtn = document.createElement('button');
+    popoutBtn.className = 'scholia-btn-popout';
+    popoutBtn.innerHTML = '&#x2922;'; // ⤢
+    popoutBtn.title = 'Pop out thread';
+    popoutBtn.addEventListener('click', (function (theAnn) {
+      return function (e) {
+        e.stopPropagation();
+        openOverlay(theAnn);
+      };
+    })(ann));
+    header.appendChild(popoutBtn);
+
     card.appendChild(header);
 
     // Thread (collapsed)
@@ -885,6 +909,239 @@
     card.addEventListener('mouseleave', function () { setAnchorHighlight(ann.id, false); });
 
     return card;
+  }
+
+  // ── Pop-out overlay ──────────────────────────────────
+
+  var activeOverlay = null;  // track currently open overlay
+
+  function openOverlay(ann) {
+    if (activeOverlay) closeOverlay();
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'scholia-overlay-backdrop';
+    backdrop.addEventListener('click', closeOverlay);
+
+    var panel = document.createElement('div');
+    panel.className = 'scholia-overlay-panel';
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    // Header
+    var hdr = document.createElement('div');
+    hdr.className = 'scholia-overlay-header';
+
+    var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
+    var hdrText = document.createElement('span');
+    hdrText.className = 'scholia-overlay-anchor';
+    hdrText.textContent = '\u201c' + anchorText.slice(0, 80) + (anchorText.length > 80 ? '\u2026' : '') + '\u201d';
+    hdr.appendChild(hdrText);
+
+    var hdrRight = document.createElement('span');
+    hdrRight.className = 'scholia-overlay-header-right';
+
+    var countLabel = document.createElement('span');
+    countLabel.className = 'scholia-overlay-count';
+    var bodies = ann.body || [];
+    countLabel.textContent = bodies.length + (bodies.length === 1 ? ' message' : ' messages');
+    hdrRight.appendChild(countLabel);
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'scholia-overlay-close';
+    closeBtn.innerHTML = '&#x2715; Close';
+    closeBtn.addEventListener('click', closeOverlay);
+    hdrRight.appendChild(closeBtn);
+
+    hdr.appendChild(hdrRight);
+    panel.appendChild(hdr);
+
+    // Thread body
+    var threadBody = document.createElement('div');
+    threadBody.className = 'scholia-overlay-thread';
+
+    for (var j = 0; j < bodies.length; j++) {
+      var msg = bodies[j];
+      var msgEl = document.createElement('div');
+      var isSoftware = msg.creator && msg.creator.type === 'Software';
+      var role = isSoftware ? 'ai' : 'human';
+      msgEl.className = 'scholia-overlay-message scholia-' + role;
+
+      var meta = document.createElement('div');
+      meta.className = 'scholia-overlay-message-meta';
+      var msgCreator = (msg.creator && msg.creator.name) || 'unknown';
+
+      var authorSpan = document.createElement('span');
+      authorSpan.style.color = userColor(msgCreator, msg.creator && msg.creator.type);
+      if (isSoftware && msg.creator.nickname) {
+        authorSpan.className = 'scholia-author-label';
+        authorSpan.textContent = msgCreator + ' ';
+        var modelSpan = document.createElement('span');
+        modelSpan.className = 'scholia-model-name';
+        modelSpan.textContent = msg.creator.nickname;
+        authorSpan.appendChild(modelSpan);
+      } else {
+        authorSpan.textContent = msgCreator;
+      }
+      meta.appendChild(authorSpan);
+
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'scholia-message-time';
+      timeSpan.textContent = relativeTime(msg.created);
+      if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
+      meta.appendChild(timeSpan);
+
+      // Toggle and Pandoc buttons
+      var bodyEl = document.createElement('div');
+      bodyEl.className = 'scholia-message-body';
+      bodyEl.dataset.raw = msg.value;
+      bodyEl.innerHTML = renderCommentBody(msg.value);
+
+      var toggleBtn = document.createElement('button');
+      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.textContent = '</>';
+      toggleBtn.title = 'Toggle raw markdown';
+      toggleBtn.addEventListener('click', (function (theBody, theBtn) {
+        return function (e) {
+          e.stopPropagation();
+          if (theBody.classList.contains('scholia-raw-view')) {
+            theBody.classList.remove('scholia-raw-view');
+            theBody.innerHTML = renderCommentBody(theBody.dataset.raw);
+            theBtn.classList.remove('active');
+          } else {
+            theBody.classList.add('scholia-raw-view');
+            theBody.textContent = theBody.dataset.raw;
+            theBtn.classList.add('active');
+          }
+        };
+      })(bodyEl, toggleBtn));
+      meta.appendChild(toggleBtn);
+
+      var pandocBtn = document.createElement('button');
+      pandocBtn.className = 'scholia-btn-pandoc';
+      pandocBtn.textContent = 'P';
+      pandocBtn.title = 'Render with Pandoc (citations)';
+      pandocBtn.addEventListener('click', (function (theBody, theBtn, rawText) {
+        return function (e) {
+          e.stopPropagation();
+          if (theBtn.classList.contains('active')) {
+            theBody.innerHTML = renderCommentBody(rawText);
+            theBtn.classList.remove('active');
+            return;
+          }
+          if (pandocCache.has(rawText)) {
+            theBody.innerHTML = pandocCache.get(rawText);
+            theBtn.classList.add('active');
+            return;
+          }
+          var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+          pandocCallbacks.set(reqId, function (html) {
+            pandocCache.set(rawText, html);
+            theBody.innerHTML = html;
+            theBtn.classList.add('active');
+            theBtn.textContent = 'P';
+          });
+          theBtn.textContent = '...';
+          wsSend({ type: 'render_markdown', text: rawText, request_id: reqId });
+        };
+      })(bodyEl, pandocBtn, msg.value));
+      meta.appendChild(pandocBtn);
+
+      msgEl.appendChild(meta);
+      msgEl.appendChild(bodyEl);
+      threadBody.appendChild(msgEl);
+    }
+    panel.appendChild(threadBody);
+
+    // Reply row
+    var replyRow = document.createElement('div');
+    replyRow.className = 'scholia-overlay-reply';
+
+    var replyTextarea = document.createElement('textarea');
+    replyTextarea.name = 'overlay-reply-' + ann.id;
+    replyTextarea.placeholder = 'Reply\u2026';
+    replyTextarea.rows = 2;
+    autoGrow(replyTextarea);
+    replyRow.appendChild(replyTextarea);
+
+    var btnRow = document.createElement('div');
+    btnRow.className = 'scholia-overlay-reply-buttons';
+
+    var replyBtn = document.createElement('button');
+    replyBtn.className = 'scholia-overlay-reply-btn';
+    replyBtn.textContent = 'Reply';
+    replyBtn.addEventListener('click', function () {
+      var text = replyTextarea.value.trim();
+      if (!text) return;
+      wsSend({ type: 'reply', annotation_id: ann.id, body: text, creator: creatorName });
+      replyTextarea.value = '';
+    });
+    btnRow.appendChild(replyBtn);
+
+    // Preview button
+    var previewDiv = null;
+    var previewBtn = document.createElement('button');
+    previewBtn.className = 'scholia-btn-preview';
+    previewBtn.textContent = 'Preview';
+    previewBtn.addEventListener('click', function () {
+      if (previewDiv) {
+        // Hide preview, show textarea
+        previewDiv.remove();
+        previewDiv = null;
+        replyTextarea.style.display = '';
+        previewBtn.textContent = 'Preview';
+      } else {
+        // Show preview, hide textarea
+        previewDiv = document.createElement('div');
+        previewDiv.className = 'scholia-message-body scholia-preview-body';
+        previewDiv.innerHTML = renderCommentBody(replyTextarea.value);
+        replyTextarea.style.display = 'none';
+        replyRow.insertBefore(previewDiv, btnRow);
+        previewBtn.textContent = 'Edit';
+      }
+    });
+    btnRow.appendChild(previewBtn);
+
+    var status = ann['scholia:status'] || 'open';
+    if (status === 'open') {
+      var resolveBtn = document.createElement('button');
+      resolveBtn.className = 'scholia-btn-resolve';
+      resolveBtn.textContent = 'Resolve';
+      resolveBtn.addEventListener('click', function () {
+        wsSend({ type: 'resolve', annotation_id: ann.id });
+      });
+      btnRow.appendChild(resolveBtn);
+    } else {
+      var unresolveBtn = document.createElement('button');
+      unresolveBtn.className = 'scholia-btn-unresolve';
+      unresolveBtn.textContent = 'Unresolve';
+      unresolveBtn.addEventListener('click', function () {
+        wsSend({ type: 'unresolve', annotation_id: ann.id });
+      });
+      btnRow.appendChild(unresolveBtn);
+    }
+
+    replyRow.appendChild(btnRow);
+    panel.appendChild(replyRow);
+
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+    activeOverlay = { backdrop: backdrop, annotationId: ann.id };
+
+    // Escape to close
+    document.addEventListener('keydown', overlayEscHandler);
+
+    // Scroll thread to bottom
+    threadBody.scrollTop = threadBody.scrollHeight;
+  }
+
+  function closeOverlay() {
+    if (!activeOverlay) return;
+    activeOverlay.backdrop.remove();
+    activeOverlay = null;
+    document.removeEventListener('keydown', overlayEscHandler);
+  }
+
+  function overlayEscHandler(e) {
+    if (e.key === 'Escape') closeOverlay();
   }
 
   // ── Anchor highlighting ────────────────────────────

@@ -1296,3 +1296,164 @@ body.scholia-dark .scholia-toolbar-btn.active {
 body.scholia-dark .scholia-ai {
   background: rgba(125, 168, 210, 0.1);
 }
+
+/* ── Pop-out overlay ─────────────────────────────────── */
+
+.scholia-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 5vh;
+}
+
+.scholia-overlay-panel {
+  background: var(--s-card);
+  width: min(80vw, 800px);
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scholia-overlay-header {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--s-border);
+  background: var(--s-surface);
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.scholia-overlay-anchor {
+  color: var(--s-text-dim);
+  font-style: italic;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scholia-overlay-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.scholia-overlay-count {
+  font-size: 0.75rem;
+  color: var(--s-text-dim);
+}
+
+.scholia-overlay-close {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--s-text-dim);
+}
+.scholia-overlay-close:hover { border-color: var(--s-accent); color: var(--s-accent); }
+
+.scholia-overlay-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+}
+
+.scholia-overlay-message {
+  margin-bottom: 1rem;
+}
+.scholia-overlay-message.scholia-ai {
+  background: rgba(74, 111, 165, 0.04);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+.scholia-overlay-message.scholia-human {
+  padding: 0 0.25rem;
+}
+
+.scholia-overlay-message-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.scholia-overlay-reply {
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--s-border);
+  flex-shrink: 0;
+}
+
+.scholia-overlay-reply textarea {
+  width: 100%;
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  font-family: var(--s-sans);
+  resize: vertical;
+  min-height: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.scholia-overlay-reply-buttons {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.scholia-overlay-reply-btn {
+  background: var(--s-accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.scholia-overlay-reply-btn:hover { opacity: 0.9; }
+
+.scholia-btn-popout {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.7rem;
+  color: var(--s-text-dim);
+  cursor: pointer;
+  line-height: 1.4;
+  margin-left: 0.2rem;
+}
+.scholia-btn-popout:hover { border-color: var(--s-accent); color: var(--s-accent); }
+
+.scholia-btn-preview {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--s-text-dim);
+}
+.scholia-btn-preview:hover { border-color: var(--s-accent); color: var(--s-accent); }
+
+.scholia-preview-body {
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.5rem;
+  min-height: 2.5rem;
+}
