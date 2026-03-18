@@ -273,6 +273,30 @@
       document.removeEventListener('click', closeMenu);
     });
 
+    // Contents (TOC) dropdown
+    tocWrapEl = document.createElement('span');
+    tocWrapEl.className = 'scholia-toc-wrap';
+    var tocBtn = document.createElement('button');
+    tocBtn.className = 'scholia-toolbar-btn';
+    tocBtn.textContent = 'Contents';
+    tocBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleToc();
+    });
+    tocWrapEl.appendChild(tocBtn);
+    toolbarEl.appendChild(tocWrapEl);
+    // Re-attach existing TOC dropdown if already built
+    if (tocEl) {
+      tocWrapEl.appendChild(tocEl);
+      renderMathIn(tocEl);
+    }
+    // Close TOC on click outside
+    document.addEventListener('click', function closeTocOutside(e) {
+      if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
+        closeToc();
+      }
+    });
+
     if (!sidebarHidden) {
       var filterBtn = document.createElement('button');
       filterBtn.className = 'scholia-toolbar-btn';
@@ -355,12 +379,15 @@
   // ── Table of contents & collapsible sections ────────
 
   var tocEl = null;
-  var tocCollapsed = false;
+  var tocWrapEl = null;
+  var tocOpen = false;
 
   function buildToc() {
+    // Remove old TOC dropdown content
     if (tocEl) tocEl.remove();
+    tocEl = null;
+
     var headings = docEl.querySelectorAll('h1, h2, h3, h4');
-    // Filter out title-block h1
     var items = [];
     for (var i = 0; i < headings.length; i++) {
       var h = headings[i];
@@ -375,31 +402,19 @@
     tocEl = document.createElement('div');
     tocEl.className = 'scholia-toc';
 
-    var hdr = document.createElement('div');
-    hdr.className = 'scholia-toc-header';
-    hdr.innerHTML = 'Contents <span class="scholia-toc-toggle">&#x25BC;</span>';
-    hdr.addEventListener('click', function () {
-      tocCollapsed = !tocCollapsed;
-      tocEl.classList.toggle('scholia-toc-collapsed', tocCollapsed);
-    });
-    tocEl.appendChild(hdr);
-
     var body = document.createElement('div');
     body.className = 'scholia-toc-body';
 
     // Build nested list
     var root = document.createElement('ul');
-    var stack = [{ ul: root, level: 0 }]; // stack of {ul, level}
+    var stack = [{ ul: root, level: 0 }];
 
     for (var j = 0; j < items.length; j++) {
       var item = items[j];
-      // Pop stack to find the right parent level
       while (stack.length > 1 && stack[stack.length - 1].level >= item.level) {
         stack.pop();
       }
       var parentUl = stack[stack.length - 1].ul;
-
-      // Check if this heading has child headings (next item is deeper)
       var hasChildren = (j + 1 < items.length && items[j + 1].level > item.level);
 
       var li = document.createElement('li');
@@ -418,7 +433,6 @@
         a.dataset.sectionId = item.id;
         a.addEventListener('click', tocClickHandler);
         branchSpan.appendChild(a);
-        // Click chevron to toggle children
         chevron.addEventListener('click', (function (theLi) {
           return function (e) {
             e.stopPropagation();
@@ -443,25 +457,38 @@
 
     body.appendChild(root);
     tocEl.appendChild(body);
-    document.body.appendChild(tocEl);
 
-    // Render math in TOC entries (uses same KaTeX spans from Pandoc)
-    renderMathIn(tocEl);
+    // Insert into the toolbar wrap (created in renderToolbar)
+    if (tocWrapEl) {
+      tocWrapEl.appendChild(tocEl);
+      renderMathIn(tocEl);
+    }
 
     // Set up collapsible sections
     setupCollapsibleSections();
 
     // Highlight active section on scroll
+    window.removeEventListener('scroll', updateTocActive);
     window.addEventListener('scroll', updateTocActive, { passive: true });
+  }
+
+  function toggleToc() {
+    tocOpen = !tocOpen;
+    if (tocEl) tocEl.classList.toggle('scholia-toc-open', tocOpen);
+  }
+
+  function closeToc() {
+    tocOpen = false;
+    if (tocEl) tocEl.classList.remove('scholia-toc-open');
   }
 
   function tocClickHandler(e) {
     e.preventDefault();
     var target = document.getElementById(this.dataset.sectionId);
     if (target) {
-      // Uncollapse if collapsed
       var section = target.tagName === 'SECTION' ? target : target.closest('section');
       if (section) uncollapseAncestors(section);
+      closeToc();
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }

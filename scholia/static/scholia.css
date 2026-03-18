@@ -339,49 +339,32 @@ input.margin-toggle { display: none; }
   display: none;
 }
 
-/* ── Table of contents panel ───────────────────────── */
+/* ── Table of contents dropdown ────────────────────── */
 
+.scholia-toc-wrap {
+  position: relative;
+}
 .scholia-toc {
-  position: fixed;
-  top: 3rem;
-  left: 1rem;
-  max-width: 280px;
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 240px;
+  max-width: 340px;
   max-height: calc(100vh - 4rem);
   overflow-y: auto;
   background: var(--s-card);
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  padding: 0.5rem 0;
-  z-index: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 0.4rem 0;
+  z-index: 600;
   font-family: var(--s-sans);
   font-size: 0.72rem;
-  transition: opacity 0.15s;
+  margin-top: 0.25rem;
 }
-.scholia-toc.scholia-toc-collapsed {
-  max-height: none;
-  overflow: visible;
-}
-.scholia-toc.scholia-toc-collapsed .scholia-toc-body {
-  display: none;
-}
-.scholia-toc-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.2rem 0.6rem 0.3rem;
-  font-weight: 600;
-  color: var(--s-text-dim);
-  cursor: pointer;
-  user-select: none;
-}
-.scholia-toc-header:hover { color: var(--s-text); }
-.scholia-toc-toggle {
-  font-size: 0.6rem;
-  transition: transform 0.2s;
-}
-.scholia-toc-collapsed .scholia-toc-toggle {
-  transform: rotate(-90deg);
+.scholia-toc.scholia-toc-open {
+  display: block;
 }
 .scholia-toc-body {
   padding: 0 0.3rem;
