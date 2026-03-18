@@ -869,6 +869,9 @@
           ta.style.display = 'none';
           row.insertBefore(sidebarPreviewDiv, replyBtnRow);
           sidebarPreviewBtn.textContent = 'Edit';
+          // Keep bottom visible
+          var thr = row.closest('.scholia-thread');
+          if (thr) thr.scrollTop = thr.scrollHeight;
         }
       };
     })(replyTextarea, replyRow));
