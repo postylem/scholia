@@ -179,7 +179,7 @@
     var tocBtn = document.createElement('button');
     tocBtn.className = 'scholia-toolbar-btn';
     tocBtn.title = 'Table of contents';
-    tocBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="3" x2="10" y2="3"/><line x1="4" y1="7" x2="12" y2="7"/><line x1="4" y1="11" x2="12" y2="11"/></svg>';
+    tocBtn.innerHTML = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="1" y1="2" x2="8" y2="2"/><line x1="3" y1="5" x2="11" y2="5"/><line x1="3" y1="8" x2="11" y2="8"/></svg>';
     tocBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       toggleToc();
