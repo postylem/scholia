@@ -111,6 +111,7 @@ def _render_markdown_fragment_sync(
         "pandoc",
         "--katex",
         "--citeproc",
+        "--metadata=link-citations:true",
         "--from=markdown+tex_math_single_backslash",
         "--to=html5",
     ]
