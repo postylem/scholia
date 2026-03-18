@@ -601,10 +601,6 @@ input.margin-toggle { display: none; }
 .scholia-ai {
   background: rgba(74, 111, 165, 0.06);
   border-radius: 3px;
-  margin-left: -0.3rem;
-  margin-right: -0.3rem;
-  padding-left: 0.3rem;
-  padding-right: 0.3rem;
 }
 
 .scholia-message-body {
@@ -1383,14 +1379,11 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
 
 .scholia-overlay-message {
   margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
 }
 .scholia-overlay-message.scholia-ai {
   background: rgba(74, 111, 165, 0.04);
   border-radius: 6px;
-  padding: 0.75rem 1rem;
-}
-.scholia-overlay-message.scholia-human {
-  padding: 0 0.25rem;
 }
 
 .scholia-overlay-message-meta {
