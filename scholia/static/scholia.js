@@ -173,6 +173,29 @@
     brandPath.appendChild(fileSpan);
     toolbarEl.appendChild(brandPath);
 
+    // Contents (TOC) dropdown — before Options
+    tocWrapEl = document.createElement('span');
+    tocWrapEl.className = 'scholia-toc-wrap';
+    var tocBtn = document.createElement('button');
+    tocBtn.className = 'scholia-toolbar-btn';
+    tocBtn.title = 'Table of contents';
+    tocBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="3" x2="10" y2="3"/><line x1="4" y1="7" x2="12" y2="7"/><line x1="4" y1="11" x2="12" y2="11"/></svg>';
+    tocBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleToc();
+    });
+    tocWrapEl.appendChild(tocBtn);
+    toolbarEl.appendChild(tocWrapEl);
+    if (tocEl) {
+      tocWrapEl.appendChild(tocEl);
+      renderMathIn(tocEl);
+    }
+    document.addEventListener('click', function closeTocOutside(e) {
+      if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
+        closeToc();
+      }
+    });
+
     // Options dropdown
     var optionsWrap = document.createElement('span');
     optionsWrap.className = 'scholia-options-wrap';
@@ -271,30 +294,6 @@
       var menu = optionsWrap.querySelector('.scholia-options-menu');
       if (menu) menu.remove();
       document.removeEventListener('click', closeMenu);
-    });
-
-    // Contents (TOC) dropdown
-    tocWrapEl = document.createElement('span');
-    tocWrapEl.className = 'scholia-toc-wrap';
-    var tocBtn = document.createElement('button');
-    tocBtn.className = 'scholia-toolbar-btn';
-    tocBtn.textContent = 'Contents';
-    tocBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggleToc();
-    });
-    tocWrapEl.appendChild(tocBtn);
-    toolbarEl.appendChild(tocWrapEl);
-    // Re-attach existing TOC dropdown if already built
-    if (tocEl) {
-      tocWrapEl.appendChild(tocEl);
-      renderMathIn(tocEl);
-    }
-    // Close TOC on click outside
-    document.addEventListener('click', function closeTocOutside(e) {
-      if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
-        closeToc();
-      }
     });
 
     if (!sidebarHidden) {
