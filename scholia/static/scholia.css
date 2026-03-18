@@ -427,6 +427,8 @@ input.margin-toggle { display: none; }
 }
 
 .scholia-anchor-text {
+  font-family: var(--s-body);
+  font-style: italic;
   font-size: 0.78rem;
   color: var(--s-text-dim);
   flex: 1;
@@ -472,7 +474,6 @@ input.margin-toggle { display: none; }
   font-family: var(--s-sans);
   font-size: 0.72rem;
   font-weight: 600;
-  font-variant: small-caps;
   margin-bottom: 0.1rem;
 }
 
@@ -480,7 +481,6 @@ input.margin-toggle { display: none; }
   font-size: 0.54rem;
   color: var(--s-text-dim);
   font-weight: 400;
-  font-variant: normal;
   margin-left: 0.5em;
 }
 
@@ -527,7 +527,6 @@ input.margin-toggle { display: none; }
 .scholia-model-name {
   font-size: 0.54rem;
   font-weight: 400;
-  font-variant: normal;
   opacity: 0.7;
 }
 
@@ -1342,6 +1341,7 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
 }
 
 .scholia-overlay-anchor {
+  font-family: var(--s-body);
   color: var(--s-text-dim);
   font-style: italic;
   font-size: 0.85rem;
@@ -1401,7 +1401,6 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
   font-family: var(--s-sans);
   font-size: 0.8rem;
   font-weight: 600;
-  font-variant: small-caps;
 }
 
 .scholia-overlay-reply {
