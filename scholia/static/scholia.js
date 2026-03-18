@@ -426,7 +426,7 @@
         chevron.className = 'scholia-toc-chevron';
         chevron.textContent = '\u25BC';
         branchSpan.appendChild(chevron);
-        branchSpan.appendChild(document.createTextNode(' '));
+        // chevron is absolutely positioned, no space needed
         var a = document.createElement('a');
         a.href = '#' + item.id;
         a.innerHTML = item.heading.innerHTML;

@@ -394,16 +394,17 @@ input.margin-toggle { display: none; }
   color: var(--s-accent);
   font-weight: 600;
 }
-/* Indent levels */
+/* Indent levels — all items at same level align regardless of chevron */
 .scholia-toc-body .scholia-toc-h2 { padding-left: 0.6rem; }
 .scholia-toc-body .scholia-toc-h3 { padding-left: 1.2rem; font-size: 0.68rem; }
 .scholia-toc-body .scholia-toc-h4 { padding-left: 1.8rem; font-size: 0.65rem; }
 
 /* Sub-TOC collapse */
+.scholia-toc-body li {
+  position: relative;
+}
 .scholia-toc-body .scholia-toc-branch > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
+  display: block;
   cursor: pointer;
   padding: 0.15rem 0.4rem;
   color: var(--s-text-dim);
@@ -415,9 +416,15 @@ input.margin-toggle { display: none; }
   background: var(--s-accent-dim);
 }
 .scholia-toc-body .scholia-toc-chevron {
-  font-size: 0.5rem;
+  position: absolute;
+  left: -0.1rem;
+  top: 0.35rem;
+  font-size: 0.4rem;
+  cursor: pointer;
+  color: var(--s-text-dim);
   transition: transform 0.2s;
 }
+.scholia-toc-body .scholia-toc-chevron:hover { color: var(--s-accent); }
 .scholia-toc-body .scholia-toc-branch.collapsed > ul { display: none; }
 .scholia-toc-body .scholia-toc-branch.collapsed .scholia-toc-chevron {
   transform: rotate(-90deg);
