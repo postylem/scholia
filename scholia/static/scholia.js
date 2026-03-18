@@ -966,14 +966,14 @@
     var pandocHeaderBtn = document.createElement('button');
     pandocHeaderBtn.className = 'scholia-btn-pandoc active';
     pandocHeaderBtn.textContent = 'P';
-    pandocHeaderBtn.title = 'Pandoc rendering (citations, math) — click to toggle off';
+    pandocHeaderBtn.title = 'Render citations via Pandoc — click to toggle off';
     pandocHeaderBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       overlayPandocActive = !overlayPandocActive;
       pandocHeaderBtn.classList.toggle('active', overlayPandocActive);
       pandocHeaderBtn.title = overlayPandocActive
-        ? 'Pandoc rendering (citations, math) — click to toggle off'
-        : 'Pandoc rendering off — click to enable';
+        ? 'Render citations via Pandoc — click to toggle off'
+        : 'Citations off — click to render via Pandoc';
       for (var bi = 0; bi < overlayBodies.length; bi++) {
         var b = overlayBodies[bi];
         if (b.classList.contains('scholia-raw-view')) continue; // skip if in raw mode
@@ -1099,7 +1099,7 @@
     });
     btnRow.appendChild(replyBtn);
 
-    // Preview button
+    // Preview button (uses Pandoc when P is active)
     var previewDiv = null;
     var previewBtn = document.createElement('button');
     previewBtn.className = 'scholia-btn-preview';
@@ -1119,6 +1119,24 @@
         replyTextarea.style.display = 'none';
         replyRow.insertBefore(previewDiv, btnRow);
         previewBtn.textContent = 'Edit';
+        // If Pandoc active, upgrade preview via server
+        if (overlayPandocActive) {
+          var raw = replyTextarea.value;
+          if (pandocCache.has(raw)) {
+            previewDiv.innerHTML = pandocCache.get(raw);
+            renderMathIn(previewDiv);
+          } else {
+            var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+            pandocCallbacks.set(reqId, function (html) {
+              pandocCache.set(raw, html);
+              if (previewDiv) {
+                previewDiv.innerHTML = html;
+                renderMathIn(previewDiv);
+              }
+            });
+            wsSend({ type: 'render_markdown', text: raw, request_id: reqId });
+          }
+        }
       }
     });
     btnRow.appendChild(previewBtn);
