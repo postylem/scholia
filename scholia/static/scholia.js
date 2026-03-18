@@ -84,9 +84,9 @@
           renderToolbar();
         }
         docEl.innerHTML = msg.html;
+        buildToc();
         rerenderMath();
         decorateCodeBlocks();
-        buildToc();
         setupCitationTooltips();
         if (!sidebarHidden) { reanchorAll(); positionCards(); }
       } else if (msg.type === 'comments_update') {
@@ -414,7 +414,7 @@
         branchSpan.appendChild(document.createTextNode(' '));
         var a = document.createElement('a');
         a.href = '#' + item.id;
-        a.textContent = item.heading.textContent;
+        a.innerHTML = item.heading.innerHTML;
         a.dataset.sectionId = item.id;
         a.addEventListener('click', tocClickHandler);
         branchSpan.appendChild(a);
@@ -433,7 +433,7 @@
         var a = document.createElement('a');
         a.href = '#' + item.id;
         a.className = 'scholia-toc-h' + item.level;
-        a.textContent = item.heading.textContent;
+        a.innerHTML = item.heading.innerHTML;
         a.dataset.sectionId = item.id;
         a.addEventListener('click', tocClickHandler);
         li.appendChild(a);
@@ -444,6 +444,9 @@
     body.appendChild(root);
     tocEl.appendChild(body);
     document.body.appendChild(tocEl);
+
+    // Render math in TOC entries (uses same KaTeX spans from Pandoc)
+    renderMathIn(tocEl);
 
     // Set up collapsible sections
     setupCollapsibleSections();
@@ -2287,10 +2290,10 @@
 
   // KaTeX is loaded with defer, so wait for window load before rendering math
   window.addEventListener('load', function () {
+    buildToc();
     rerenderMath();
     rerenderCommentBodies();
     decorateCodeBlocks();
-    buildToc();
     setupCitationTooltips();
     reanchorAll();
     positionCards();

@@ -276,18 +276,21 @@ input.margin-toggle { display: none; }
   font-size: 1.5rem;
   font-style: italic;
   margin-top: 2rem;
-  padding-left: 0.6rem;
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 3px);
   border-left: 3px solid var(--s-accent);
 }
 #scholia-doc h3 {
   font-size: 1.2rem;
   font-style: italic;
   margin-top: 1.5rem;
-  padding-left: 0.6rem;
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 2px);
   border-left: 2px solid var(--s-border);
 }
 #scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
-  padding-left: 0.6rem;
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 2px);
   border-left: 2px solid var(--s-border);
 }
 
