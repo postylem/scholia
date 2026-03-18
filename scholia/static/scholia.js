@@ -774,6 +774,28 @@
             });
             btnRow.appendChild(cancelBtn);
 
+            var editPreviewDiv = null;
+            var editPreviewBtn = document.createElement('button');
+            editPreviewBtn.className = 'scholia-btn-preview';
+            editPreviewBtn.textContent = 'Preview';
+            editPreviewBtn.addEventListener('click', function (ev) {
+              ev.stopPropagation();
+              if (editPreviewDiv) {
+                editPreviewDiv.remove();
+                editPreviewDiv = null;
+                ta.style.display = '';
+                editPreviewBtn.textContent = 'Preview';
+              } else {
+                editPreviewDiv = document.createElement('div');
+                editPreviewDiv.className = 'scholia-message-body scholia-preview-body';
+                editPreviewDiv.innerHTML = renderCommentBody(ta.value);
+                ta.style.display = 'none';
+                theBody.insertBefore(editPreviewDiv, btnRow);
+                editPreviewBtn.textContent = 'Edit';
+              }
+            });
+            btnRow.appendChild(editPreviewBtn);
+
             theBody.appendChild(btnRow);
           };
         })(body, ann));
@@ -849,6 +871,30 @@
       replyTextarea.value = '';
     });
     replyRow.appendChild(replyBtn);
+
+    // Preview button for sidebar reply
+    var sidebarPreviewDiv = null;
+    var sidebarPreviewBtn = document.createElement('button');
+    sidebarPreviewBtn.className = 'scholia-btn-preview';
+    sidebarPreviewBtn.textContent = 'Preview';
+    sidebarPreviewBtn.addEventListener('click', (function (ta, row) {
+      return function () {
+        if (sidebarPreviewDiv) {
+          sidebarPreviewDiv.remove();
+          sidebarPreviewDiv = null;
+          ta.style.display = '';
+          sidebarPreviewBtn.textContent = 'Preview';
+        } else {
+          sidebarPreviewDiv = document.createElement('div');
+          sidebarPreviewDiv.className = 'scholia-message-body scholia-preview-body';
+          sidebarPreviewDiv.innerHTML = renderCommentBody(ta.value);
+          ta.style.display = 'none';
+          row.insertBefore(sidebarPreviewDiv, row.querySelector('.scholia-btn-preview'));
+          sidebarPreviewBtn.textContent = 'Edit';
+        }
+      };
+    })(replyTextarea, replyRow));
+    replyRow.appendChild(sidebarPreviewBtn);
 
     thread.appendChild(replyRow);
 
@@ -1574,6 +1620,29 @@
       }
     });
     actions.appendChild(submitBtn);
+
+    var newCommentPreviewDiv = null;
+    var newCommentPreviewBtn = document.createElement('button');
+    newCommentPreviewBtn.className = 'scholia-btn scholia-btn-preview';
+    newCommentPreviewBtn.textContent = 'Preview';
+    newCommentPreviewBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (newCommentPreviewDiv) {
+        newCommentPreviewDiv.remove();
+        newCommentPreviewDiv = null;
+        textarea.style.display = '';
+        newCommentPreviewBtn.textContent = 'Preview';
+      } else {
+        newCommentPreviewDiv = document.createElement('div');
+        newCommentPreviewDiv.className = 'scholia-message-body scholia-preview-body';
+        newCommentPreviewDiv.innerHTML = renderCommentBody(textarea.value);
+        textarea.style.display = 'none';
+        // Insert before the actions row
+        form.insertBefore(newCommentPreviewDiv, actions);
+        newCommentPreviewBtn.textContent = 'Edit';
+      }
+    });
+    actions.appendChild(newCommentPreviewBtn);
 
     form.appendChild(actions);
     sidebarEl.appendChild(form);
