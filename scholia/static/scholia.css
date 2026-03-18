@@ -590,6 +590,9 @@ input.margin-toggle { display: none; }
 .scholia-ai {
   background: rgba(74, 111, 165, 0.06);
   border-radius: 3px;
+}
+/* Extend AI background in sidebar only (not overlay) */
+.scholia-thread .scholia-ai {
   margin-left: -10px;
   margin-right: -10px;
   padding-left: 10px;
