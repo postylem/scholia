@@ -960,6 +960,37 @@
     countLabel.textContent = bodies.length + (bodies.length === 1 ? ' message' : ' messages');
     hdrRight.appendChild(countLabel);
 
+    // Pandoc toggle for whole overlay (on by default)
+    var overlayPandocActive = true;
+    var overlayBodies = []; // collect body elements for bulk toggle
+    var pandocHeaderBtn = document.createElement('button');
+    pandocHeaderBtn.className = 'scholia-btn-pandoc active';
+    pandocHeaderBtn.textContent = 'P';
+    pandocHeaderBtn.title = 'Pandoc rendering (citations, math) — click to toggle off';
+    pandocHeaderBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      overlayPandocActive = !overlayPandocActive;
+      pandocHeaderBtn.classList.toggle('active', overlayPandocActive);
+      pandocHeaderBtn.title = overlayPandocActive
+        ? 'Pandoc rendering (citations, math) — click to toggle off'
+        : 'Pandoc rendering off — click to enable';
+      for (var bi = 0; bi < overlayBodies.length; bi++) {
+        var b = overlayBodies[bi];
+        if (b.classList.contains('scholia-raw-view')) continue; // skip if in raw mode
+        var raw = b.dataset.raw;
+        if (overlayPandocActive) {
+          if (pandocCache.has(raw)) {
+            b.innerHTML = pandocCache.get(raw);
+            renderMathIn(b);
+          }
+          // else already requested or will be requested
+        } else {
+          b.innerHTML = renderCommentBody(raw);
+        }
+      }
+    });
+    hdrRight.appendChild(pandocHeaderBtn);
+
     var closeBtn = document.createElement('button');
     closeBtn.className = 'scholia-overlay-close';
     closeBtn.innerHTML = '&#x2715; Close';
@@ -1004,11 +1035,11 @@
       if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
       meta.appendChild(timeSpan);
 
-      // Toggle and Pandoc buttons
       var bodyEl = document.createElement('div');
       bodyEl.className = 'scholia-message-body';
       bodyEl.dataset.raw = msg.value;
       bodyEl.innerHTML = renderCommentBody(msg.value);
+      overlayBodies.push(bodyEl);
 
       var toggleBtn = document.createElement('button');
       toggleBtn.className = 'scholia-btn-toggle-raw';
@@ -1019,7 +1050,14 @@
           e.stopPropagation();
           if (theBody.classList.contains('scholia-raw-view')) {
             theBody.classList.remove('scholia-raw-view');
-            theBody.innerHTML = renderCommentBody(theBody.dataset.raw);
+            // Restore to Pandoc or markdown-it depending on overlay state
+            var raw = theBody.dataset.raw;
+            if (overlayPandocActive && pandocCache.has(raw)) {
+              theBody.innerHTML = pandocCache.get(raw);
+              renderMathIn(theBody);
+            } else {
+              theBody.innerHTML = renderCommentBody(raw);
+            }
             theBtn.classList.remove('active');
           } else {
             theBody.classList.add('scholia-raw-view');
@@ -1029,38 +1067,6 @@
         };
       })(bodyEl, toggleBtn));
       meta.appendChild(toggleBtn);
-
-      var pandocBtn = document.createElement('button');
-      pandocBtn.className = 'scholia-btn-pandoc';
-      pandocBtn.textContent = 'P';
-      pandocBtn.title = 'Render with Pandoc (citations)';
-      pandocBtn.addEventListener('click', (function (theBody, theBtn, rawText) {
-        return function (e) {
-          e.stopPropagation();
-          if (theBtn.classList.contains('active')) {
-            theBody.innerHTML = renderCommentBody(rawText);
-            theBtn.classList.remove('active');
-            return;
-          }
-          if (pandocCache.has(rawText)) {
-            theBody.innerHTML = pandocCache.get(rawText);
-            renderMathIn(theBody);
-            theBtn.classList.add('active');
-            return;
-          }
-          var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-          pandocCallbacks.set(reqId, function (html) {
-            pandocCache.set(rawText, html);
-            theBody.innerHTML = html;
-            renderMathIn(theBody);
-            theBtn.classList.add('active');
-            theBtn.textContent = 'P';
-          });
-          theBtn.textContent = '...';
-          wsSend({ type: 'render_markdown', text: rawText, request_id: reqId });
-        };
-      })(bodyEl, pandocBtn, msg.value));
-      meta.appendChild(pandocBtn);
 
       msgEl.appendChild(meta);
       msgEl.appendChild(bodyEl);
@@ -1148,6 +1154,27 @@
 
     // Scroll thread to bottom
     threadBody.scrollTop = threadBody.scrollHeight;
+
+    // Auto-render all messages via Pandoc (on by default)
+    for (var pi = 0; pi < overlayBodies.length; pi++) {
+      (function (bEl) {
+        var raw = bEl.dataset.raw;
+        if (pandocCache.has(raw)) {
+          bEl.innerHTML = pandocCache.get(raw);
+          renderMathIn(bEl);
+        } else {
+          var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+          pandocCallbacks.set(reqId, function (html) {
+            pandocCache.set(raw, html);
+            if (overlayPandocActive && !bEl.classList.contains('scholia-raw-view')) {
+              bEl.innerHTML = html;
+              renderMathIn(bEl);
+            }
+          });
+          wsSend({ type: 'render_markdown', text: raw, request_id: reqId });
+        }
+      })(overlayBodies[pi]);
+    }
   }
 
   function closeOverlay() {
