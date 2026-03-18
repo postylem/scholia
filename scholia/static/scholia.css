@@ -405,15 +405,8 @@ input.margin-toggle { display: none; }
 }
 .scholia-toc-body .scholia-toc-branch > span {
   display: block;
-  cursor: pointer;
-  padding: 0.15rem 0.4rem;
-  color: var(--s-text-dim);
-  border-radius: 2px;
+  padding: 0;
   user-select: none;
-}
-.scholia-toc-body .scholia-toc-branch > span:hover {
-  color: var(--s-accent);
-  background: var(--s-accent-dim);
 }
 .scholia-toc-body .scholia-toc-chevron {
   position: absolute;
