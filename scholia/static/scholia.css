@@ -469,17 +469,18 @@ input.margin-toggle { display: none; }
   align-items: baseline;
   gap: 0.3em;
   flex-wrap: wrap;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-family: var(--s-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant: small-caps;
   margin-bottom: 0.1rem;
 }
 
 .scholia-message-time {
   font-size: 0.54rem;
   color: var(--s-text-dim);
-  font-weight: normal;
+  font-weight: 400;
+  font-variant: normal;
   margin-left: 0.5em;
 }
 
@@ -526,8 +527,8 @@ input.margin-toggle { display: none; }
 .scholia-model-name {
   font-size: 0.54rem;
   font-weight: 400;
+  font-variant: normal;
   opacity: 0.7;
-  text-transform: none;
 }
 
 .scholia-read-toggle {
@@ -1397,8 +1398,10 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
   align-items: baseline;
   gap: 0.4rem;
   margin-bottom: 0.4rem;
+  font-family: var(--s-sans);
   font-size: 0.8rem;
   font-weight: 600;
+  font-variant: small-caps;
 }
 
 .scholia-overlay-reply {
