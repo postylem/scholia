@@ -367,7 +367,7 @@ input.margin-toggle { display: none; }
   display: block;
 }
 .scholia-toc-body {
-  padding: 0 0.3rem;
+  padding: 0 0.3rem 0 0.8rem;
 }
 .scholia-toc-body ul {
   list-style: none;
