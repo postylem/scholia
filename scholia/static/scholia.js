@@ -346,6 +346,11 @@
     renderMathIn(docEl);
   }
 
+  function postProcessPandocHtml(container) {
+    renderMathIn(container);
+    setupCitationTooltipsIn(container);
+  }
+
   // ── Code block chrome ──────────────────────────────
 
   function decorateCodeBlocks() {
@@ -981,7 +986,7 @@
         if (overlayPandocActive) {
           if (pandocCache.has(raw)) {
             b.innerHTML = pandocCache.get(raw);
-            renderMathIn(b);
+            postProcessPandocHtml(b);
           }
           // else already requested or will be requested
         } else {
@@ -1054,7 +1059,7 @@
             var raw = theBody.dataset.raw;
             if (overlayPandocActive && pandocCache.has(raw)) {
               theBody.innerHTML = pandocCache.get(raw);
-              renderMathIn(theBody);
+              postProcessPandocHtml(theBody);
             } else {
               theBody.innerHTML = renderCommentBody(raw);
             }
@@ -1124,14 +1129,14 @@
           var raw = replyTextarea.value;
           if (pandocCache.has(raw)) {
             previewDiv.innerHTML = pandocCache.get(raw);
-            renderMathIn(previewDiv);
+            postProcessPandocHtml(previewDiv);
           } else {
             var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
             pandocCallbacks.set(reqId, function (html) {
               pandocCache.set(raw, html);
               if (previewDiv) {
                 previewDiv.innerHTML = html;
-                renderMathIn(previewDiv);
+                postProcessPandocHtml(previewDiv);
               }
             });
             wsSend({ type: 'render_markdown', text: raw, request_id: reqId });
@@ -1179,14 +1184,14 @@
         var raw = bEl.dataset.raw;
         if (pandocCache.has(raw)) {
           bEl.innerHTML = pandocCache.get(raw);
-          renderMathIn(bEl);
+          postProcessPandocHtml(bEl);
         } else {
           var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
           pandocCallbacks.set(reqId, function (html) {
             pandocCache.set(raw, html);
             if (overlayPandocActive && !bEl.classList.contains('scholia-raw-view')) {
               bEl.innerHTML = html;
-              renderMathIn(bEl);
+              postProcessPandocHtml(bEl);
             }
           });
           wsSend({ type: 'render_markdown', text: raw, request_id: reqId });
@@ -1882,13 +1887,16 @@
   var citationHideTimer = null;
 
   function setupCitationTooltips() {
+    setupCitationTooltipsIn(docEl);
+  }
+
+  function setupCitationTooltipsIn(container) {
     // Pandoc with link-citations creates <a href="#ref-KEY"> inside <span class="citation">
-    var links = docEl.querySelectorAll('a[href^="#ref-"]');
+    var links = container.querySelectorAll('a[href^="#ref-"]');
     for (var i = 0; i < links.length; i++) {
       links[i].addEventListener('mouseenter', showCitationTooltip);
       links[i].addEventListener('mouseleave', scheduleCitationHide);
       // Prevent clicking the citation from jumping to the bibliography
-      // when the tooltip is showing (user likely wants to interact with tooltip)
       links[i].addEventListener('click', function (e) {
         if (citationTooltip) e.preventDefault();
       });
@@ -1899,7 +1907,10 @@
     var link = e.target.closest('a[href^="#ref-"]');
     if (!link) return;
     var refId = link.getAttribute('href').slice(1); // strip #
-    var refEl = document.getElementById(refId);
+    // Look in the closest message body first (for comment citations), fall back to document
+    var messageBody = link.closest('.scholia-message-body');
+    var refEl = messageBody ? messageBody.querySelector('#' + CSS.escape(refId)) : null;
+    if (!refEl) refEl = document.getElementById(refId);
     if (!refEl) return;
 
     clearTimeout(citationHideTimer);

@@ -477,10 +477,10 @@ input.margin-toggle { display: none; }
 }
 
 .scholia-message-time {
-  font-size: 0.65rem;
+  font-size: 0.54rem;
   color: var(--s-text-dim);
   font-weight: normal;
-  margin-left: 0.3em;
+  margin-left: 0.5em;
 }
 
 .scholia-btn-toggle-raw {
@@ -652,6 +652,11 @@ input.margin-toggle { display: none; }
 .scholia-message-body h3,
 .scholia-message-body h4 { margin: 0.4em 0 0.2em; font-size: 0.85rem; }
 .scholia-message-body strong { font-weight: 600; }
+
+/* Hide Pandoc bibliography in comments — citations shown via hover tooltips */
+.scholia-message-body #refs,
+.scholia-message-body .references { display: none; }
+.scholia-message-body .citation a { color: var(--s-accent); cursor: pointer; }
 .scholia-message-body code {
   background: rgba(0, 0, 0, 0.06);
   padding: 0.1em 0.25em;
