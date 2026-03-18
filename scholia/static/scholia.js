@@ -23,6 +23,52 @@
   var darkMode = false;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
 
+  // ── Markdown rendering ─────────────────────────────
+
+  var md = null; // initialized after libs load
+  var pandocCache = new Map();   // raw text → Pandoc HTML
+  var pandocCallbacks = new Map(); // request_id → callback(html)
+
+  function initMarkdownIt() {
+    if (window.markdownit) {
+      md = window.markdownit({
+        html: false,
+        linkify: true,
+        typographer: false,
+        breaks: true,
+      });
+      // Add KaTeX math support if texmath plugin loaded
+      if (window.texmath && window.katex) {
+        md.use(window.texmath, {
+          engine: window.katex,
+          delimiters: 'dollars',
+        });
+      }
+    }
+  }
+
+  function relativeTime(isoString) {
+    if (!isoString) return '';
+    var then = new Date(isoString);
+    var now = new Date();
+    var diffMs = now - then;
+    var diffSec = Math.floor(diffMs / 1000);
+    var diffMin = Math.floor(diffSec / 60);
+    var diffHr = Math.floor(diffMin / 60);
+    var diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return diffMin + ' min ago';
+    if (diffHr < 24) return diffHr + (diffHr === 1 ? ' hour ago' : ' hours ago');
+    if (diffDay === 1) return 'yesterday';
+    if (diffDay < 30) return diffDay + ' days ago';
+
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var sameYear = then.getFullYear() === now.getFullYear();
+    if (sameYear) return months[then.getMonth()] + ' ' + then.getDate();
+    return months[then.getMonth()] + ' ' + then.getDate() + ', ' + then.getFullYear();
+  }
+
   // ── WebSocket ──────────────────────────────────────
 
   function connectWS() {
@@ -38,6 +84,7 @@
           renderToolbar();
         }
         docEl.innerHTML = msg.html;
+        buildToc();
         rerenderMath();
         decorateCodeBlocks();
         setupCitationTooltips();
@@ -45,6 +92,23 @@
       } else if (msg.type === 'comments_update') {
         comments = msg.comments;
         scheduleRender();
+        // Refresh overlay if open
+        if (activeOverlay) {
+          var overlayAnnId = activeOverlay.annotationId;
+          for (var ci = 0; ci < comments.length; ci++) {
+            if (comments[ci].id === overlayAnnId) {
+              closeOverlay();
+              openOverlay(comments[ci]);
+              break;
+            }
+          }
+        }
+      } else if (msg.type === 'rendered_markdown') {
+        var cb = pandocCallbacks.get(msg.request_id);
+        if (cb) {
+          cb(msg.html);
+          pandocCallbacks.delete(msg.request_id);
+        }
       } else if (msg.type === 'error') {
         console.warn('Scholia server error:', msg.message);
       }
@@ -108,6 +172,29 @@
     });
     brandPath.appendChild(fileSpan);
     toolbarEl.appendChild(brandPath);
+
+    // Contents (TOC) dropdown — before Options
+    tocWrapEl = document.createElement('span');
+    tocWrapEl.className = 'scholia-toc-wrap';
+    var tocBtn = document.createElement('button');
+    tocBtn.className = 'scholia-toolbar-btn';
+    tocBtn.title = 'Table of contents';
+    tocBtn.innerHTML = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="1" y1="2" x2="8" y2="2"/><line x1="3" y1="5" x2="11" y2="5"/><line x1="3" y1="8" x2="11" y2="8"/></svg>';
+    tocBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleToc();
+    });
+    tocWrapEl.appendChild(tocBtn);
+    toolbarEl.appendChild(tocWrapEl);
+    if (tocEl) {
+      tocWrapEl.appendChild(tocEl);
+      renderMathIn(tocEl);
+    }
+    document.addEventListener('click', function closeTocOutside(e) {
+      if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
+        closeToc();
+      }
+    });
 
     // Options dropdown
     var optionsWrap = document.createElement('span');
@@ -264,10 +351,10 @@
 
   // ── Math rendering ─────────────────────────────────
 
-  function rerenderMath() {
+  function renderMathIn(container) {
     if (!window.katex) return;
     // Pandoc --katex outputs <span class="math inline"> and <span class="math display">
-    var mathEls = docEl.querySelectorAll('span.math');
+    var mathEls = container.querySelectorAll('span.math');
     for (var i = 0; i < mathEls.length; i++) {
       var el = mathEls[i];
       var displayMode = el.classList.contains('display');
@@ -276,6 +363,178 @@
       } catch (e) {
         // leave raw LaTeX visible on error
       }
+    }
+  }
+
+  function rerenderMath() {
+    renderMathIn(docEl);
+  }
+
+  function postProcessPandocHtml(container) {
+    renderMathIn(container);
+    setupCitationTooltipsIn(container);
+  }
+
+  // ── Table of contents & collapsible sections ────────
+
+  var tocEl = null;
+  var tocWrapEl = null;
+  var tocOpen = false;
+
+  function buildToc() {
+    // Remove old TOC dropdown content
+    if (tocEl) tocEl.remove();
+    tocEl = null;
+
+    var headings = docEl.querySelectorAll('h1, h2, h3, h4');
+    var items = [];
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      if (h.closest('#title-block-header')) continue;
+      var section = h.parentElement;
+      if (!section || section.tagName !== 'SECTION') continue;
+      var level = parseInt(h.tagName[1]);
+      items.push({ heading: h, section: section, level: level, id: section.id || h.id || '' });
+    }
+    if (items.length === 0) return;
+
+    tocEl = document.createElement('div');
+    tocEl.className = 'scholia-toc';
+
+    var body = document.createElement('div');
+    body.className = 'scholia-toc-body';
+
+    // Build nested list
+    var root = document.createElement('ul');
+    var stack = [{ ul: root, level: 0 }];
+
+    for (var j = 0; j < items.length; j++) {
+      var item = items[j];
+      while (stack.length > 1 && stack[stack.length - 1].level >= item.level) {
+        stack.pop();
+      }
+      var parentUl = stack[stack.length - 1].ul;
+      var hasChildren = (j + 1 < items.length && items[j + 1].level > item.level);
+
+      var li = document.createElement('li');
+      if (hasChildren) {
+        li.className = 'scholia-toc-branch';
+        var branchSpan = document.createElement('span');
+        branchSpan.className = 'scholia-toc-h' + item.level;
+        var chevron = document.createElement('span');
+        chevron.className = 'scholia-toc-chevron';
+        chevron.textContent = '\u25BC';
+        branchSpan.appendChild(chevron);
+        // chevron is absolutely positioned, no space needed
+        var a = document.createElement('a');
+        a.href = '#' + item.id;
+        a.innerHTML = item.heading.innerHTML;
+        a.dataset.sectionId = item.id;
+        a.addEventListener('click', tocClickHandler);
+        branchSpan.appendChild(a);
+        chevron.addEventListener('click', (function (theLi) {
+          return function (e) {
+            e.stopPropagation();
+            theLi.classList.toggle('collapsed');
+          };
+        })(li));
+        li.appendChild(branchSpan);
+        var childUl = document.createElement('ul');
+        li.appendChild(childUl);
+        stack.push({ ul: childUl, level: item.level });
+      } else {
+        var a = document.createElement('a');
+        a.href = '#' + item.id;
+        a.className = 'scholia-toc-h' + item.level;
+        a.innerHTML = item.heading.innerHTML;
+        a.dataset.sectionId = item.id;
+        a.addEventListener('click', tocClickHandler);
+        li.appendChild(a);
+      }
+      parentUl.appendChild(li);
+    }
+
+    body.appendChild(root);
+    tocEl.appendChild(body);
+
+    // Insert into the toolbar wrap (created in renderToolbar)
+    if (tocWrapEl) {
+      tocWrapEl.appendChild(tocEl);
+      renderMathIn(tocEl);
+    }
+
+    // Set up collapsible sections
+    setupCollapsibleSections();
+
+    // Highlight active section on scroll
+    window.removeEventListener('scroll', updateTocActive);
+    window.addEventListener('scroll', updateTocActive, { passive: true });
+  }
+
+  function toggleToc() {
+    tocOpen = !tocOpen;
+    if (tocEl) tocEl.classList.toggle('scholia-toc-open', tocOpen);
+  }
+
+  function closeToc() {
+    tocOpen = false;
+    if (tocEl) tocEl.classList.remove('scholia-toc-open');
+  }
+
+  function tocClickHandler(e) {
+    e.preventDefault();
+    var target = document.getElementById(this.dataset.sectionId);
+    if (target) {
+      var section = target.tagName === 'SECTION' ? target : target.closest('section');
+      if (section) uncollapseAncestors(section);
+      closeToc();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function uncollapseAncestors(el) {
+    var node = el;
+    while (node && node !== docEl) {
+      if (node.tagName === 'SECTION' && node.classList.contains('scholia-collapsed')) {
+        node.classList.remove('scholia-collapsed');
+      }
+      node = node.parentElement;
+    }
+  }
+
+  function setupCollapsibleSections() {
+    var sections = docEl.querySelectorAll('section');
+    for (var i = 0; i < sections.length; i++) {
+      var sec = sections[i];
+      var heading = sec.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4');
+      if (!heading) continue;
+      if (heading.closest('#title-block-header')) continue;
+      // Skip if already has listener (re-render)
+      if (heading.dataset.collapsible) continue;
+      heading.dataset.collapsible = 'true';
+      heading.addEventListener('click', (function (theSec) {
+        return function () {
+          theSec.classList.toggle('scholia-collapsed');
+        };
+      })(sec));
+    }
+  }
+
+  var tocActiveLink = null;
+  function updateTocActive() {
+    if (!tocEl) return;
+    var links = tocEl.querySelectorAll('a[data-section-id]');
+    var current = null;
+    for (var i = 0; i < links.length; i++) {
+      var target = document.getElementById(links[i].dataset.sectionId);
+      if (target && target.getBoundingClientRect().top <= 80) {
+        current = links[i];
+      }
+    }
+    if (current !== tocActiveLink) {
+      if (tocActiveLink) tocActiveLink.classList.remove('scholia-toc-active');
+      if (current) current.classList.add('scholia-toc-active');
+      tocActiveLink = current;
     }
   }
 
@@ -331,61 +590,15 @@
   }
 
   function renderCommentBody(text) {
-    var out = '';
-    var i = 0;
-    var hasKatex = !!window.katex;
-
-    while (i < text.length) {
-      // Inline code: `...`
-      if (text[i] === '`') {
-        var end = text.indexOf('`', i + 1);
-        if (end !== -1) {
-          out += '<code>' + escapeHtml(text.slice(i + 1, end)) + '</code>';
-          i = end + 1;
-          continue;
-        }
-      }
-      // Display math: $$...$$
-      if (text[i] === '$' && text[i + 1] === '$') {
-        var end = text.indexOf('$$', i + 2);
-        if (end !== -1) {
-          var tex = text.slice(i + 2, end);
-          if (hasKatex) {
-            try { out += katex.renderToString(tex, { displayMode: true, throwOnError: false }); }
-            catch (e) { out += '<code>' + escapeHtml(tex) + '</code>'; }
-          } else {
-            out += '<code>' + escapeHtml(tex) + '</code>';
-          }
-          i = end + 2;
-          continue;
-        }
-      }
-      // Inline math: $...$
-      if (text[i] === '$') {
-        var end = text.indexOf('$', i + 1);
-        if (end !== -1 && end > i + 1) {
-          var tex = text.slice(i + 1, end);
-          if (hasKatex) {
-            try { out += katex.renderToString(tex, { displayMode: false, throwOnError: false }); }
-            catch (e) { out += '<code>' + escapeHtml(tex) + '</code>'; }
-          } else {
-            out += '<code>' + escapeHtml(tex) + '</code>';
-          }
-          i = end + 1;
-          continue;
-        }
-      }
-      // Plain text until next special char
-      var next = i + 1;
-      while (next < text.length && text[next] !== '$' && text[next] !== '`') next++;
-      out += escapeHtml(text.slice(i, next));
-      i = next;
+    if (md) {
+      return md.render(text);
     }
-    return out;
+    // Fallback: escape HTML and preserve whitespace (original minimal behavior)
+    return '<p>' + escapeHtml(text) + '</p>';
   }
 
   function rerenderCommentBodies() {
-    if (!window.katex) return;
+    if (!md) return;
     var bodies = sidebarEl.querySelectorAll('.scholia-message-body');
     for (var i = 0; i < bodies.length; i++) {
       var raw = bodies[i].dataset.raw;
@@ -590,6 +803,19 @@
       header.appendChild(dot);
     }
 
+    // Pop-out button
+    var popoutBtn = document.createElement('button');
+    popoutBtn.className = 'scholia-btn-popout';
+    popoutBtn.innerHTML = '&#x2922;'; // ⤢
+    popoutBtn.title = 'Pop out thread';
+    popoutBtn.addEventListener('click', (function (theAnn) {
+      return function (e) {
+        e.stopPropagation();
+        openOverlay(theAnn);
+      };
+    })(ann));
+    header.appendChild(popoutBtn);
+
     card.appendChild(header);
 
     // Thread (collapsed)
@@ -620,6 +846,14 @@
         meta.textContent = msgCreator;
       }
       meta.style.color = userColor(msgCreator, msg.creator && msg.creator.type);
+
+      // Relative timestamp
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'scholia-message-time';
+      timeSpan.textContent = relativeTime(msg.created);
+      if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
+      meta.appendChild(timeSpan);
+
       msgEl.appendChild(meta);
 
       var body = document.createElement('div');
@@ -627,6 +861,29 @@
       body.dataset.raw = msg.value;
       body.innerHTML = renderCommentBody(msg.value);
       msgEl.appendChild(body);
+
+      // Raw/rendered toggle button
+      var toggleBtn = document.createElement('button');
+      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.textContent = '</>';
+      toggleBtn.title = 'Toggle raw markdown';
+      toggleBtn.addEventListener('click', (function (theBody, theBtn) {
+        return function (e) {
+          e.stopPropagation();
+          if (theBody.classList.contains('scholia-raw-view')) {
+            // Switch back to rendered
+            theBody.classList.remove('scholia-raw-view');
+            theBody.innerHTML = renderCommentBody(theBody.dataset.raw);
+            theBtn.classList.remove('active');
+          } else {
+            // Switch to raw
+            theBody.classList.add('scholia-raw-view');
+            theBody.textContent = theBody.dataset.raw;
+            theBtn.classList.add('active');
+          }
+        };
+      })(body, toggleBtn));
+      meta.appendChild(toggleBtn);
 
       // Edit button on the very last body entry, only if it's the current user's message
       if (j === bodies.length - 1 && !isSoftware && msgCreator === creatorName) {
@@ -677,6 +934,28 @@
               theBody.dataset.raw = raw;
             });
             btnRow.appendChild(cancelBtn);
+
+            var editPreviewDiv = null;
+            var editPreviewBtn = document.createElement('button');
+            editPreviewBtn.className = 'scholia-btn-ghost';
+            editPreviewBtn.textContent = 'Preview';
+            editPreviewBtn.addEventListener('click', function (ev) {
+              ev.stopPropagation();
+              if (editPreviewDiv) {
+                editPreviewDiv.remove();
+                editPreviewDiv = null;
+                ta.style.display = '';
+                editPreviewBtn.textContent = 'Preview';
+              } else {
+                editPreviewDiv = document.createElement('div');
+                editPreviewDiv.className = 'scholia-message-body scholia-preview-body';
+                editPreviewDiv.innerHTML = renderCommentBody(ta.value);
+                ta.style.display = 'none';
+                theBody.insertBefore(editPreviewDiv, btnRow);
+                editPreviewBtn.textContent = 'Edit';
+              }
+            });
+            btnRow.appendChild(editPreviewBtn);
 
             theBody.appendChild(btnRow);
           };
@@ -739,7 +1018,11 @@
     })(card));
     replyRow.appendChild(replyTextarea);
 
+    var replyBtnRow = document.createElement('div');
+    replyBtnRow.className = 'scholia-reply-buttons';
+
     var replyBtn = document.createElement('button');
+    replyBtn.className = 'scholia-btn-primary';
     replyBtn.textContent = 'Reply';
     replyBtn.addEventListener('click', function () {
       var text = replyTextarea.value.trim();
@@ -752,30 +1035,58 @@
       });
       replyTextarea.value = '';
     });
-    replyRow.appendChild(replyBtn);
+    replyBtnRow.appendChild(replyBtn);
 
-    thread.appendChild(replyRow);
+    // Preview button for sidebar reply
+    var sidebarPreviewDiv = null;
+    var sidebarPreviewBtn = document.createElement('button');
+    sidebarPreviewBtn.className = 'scholia-btn-ghost';
+    sidebarPreviewBtn.textContent = 'Preview';
+    sidebarPreviewBtn.addEventListener('click', (function (ta, row) {
+      return function () {
+        if (sidebarPreviewDiv) {
+          sidebarPreviewDiv.remove();
+          sidebarPreviewDiv = null;
+          ta.style.display = '';
+          sidebarPreviewBtn.textContent = 'Preview';
+        } else {
+          sidebarPreviewDiv = document.createElement('div');
+          sidebarPreviewDiv.className = 'scholia-message-body scholia-preview-body';
+          sidebarPreviewDiv.innerHTML = renderCommentBody(ta.value);
+          ta.style.display = 'none';
+          row.insertBefore(sidebarPreviewDiv, replyBtnRow);
+          sidebarPreviewBtn.textContent = 'Edit';
+          // Keep bottom visible
+          var thr = row.closest('.scholia-thread');
+          if (thr) thr.scrollTop = thr.scrollHeight;
+        }
+      };
+    })(replyTextarea, replyRow));
+    replyBtnRow.appendChild(sidebarPreviewBtn);
 
     // Resolve/unresolve button in the reply row
     if (status === 'open') {
       var resolveBtn = document.createElement('button');
-      resolveBtn.className = 'scholia-btn-resolve';
+      resolveBtn.className = 'scholia-btn-ghost';
       resolveBtn.textContent = 'Resolve';
       resolveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         wsSend({ type: 'resolve', annotation_id: ann.id });
       });
-      replyRow.appendChild(resolveBtn);
+      replyBtnRow.appendChild(resolveBtn);
     } else if (status === 'resolved') {
       var unresolveBtn = document.createElement('button');
-      unresolveBtn.className = 'scholia-btn-unresolve';
+      unresolveBtn.className = 'scholia-btn-ghost';
       unresolveBtn.textContent = 'Unresolve';
       unresolveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         wsSend({ type: 'unresolve', annotation_id: ann.id });
       });
-      replyRow.appendChild(unresolveBtn);
+      replyBtnRow.appendChild(unresolveBtn);
     }
+
+    replyRow.appendChild(replyBtnRow);
+    thread.appendChild(replyRow);
 
     card.appendChild(thread);
 
@@ -813,6 +1124,286 @@
     card.addEventListener('mouseleave', function () { setAnchorHighlight(ann.id, false); });
 
     return card;
+  }
+
+  // ── Pop-out overlay ──────────────────────────────────
+
+  var activeOverlay = null;  // track currently open overlay
+
+  function openOverlay(ann) {
+    if (activeOverlay) closeOverlay();
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'scholia-overlay-backdrop';
+    backdrop.addEventListener('click', closeOverlay);
+
+    var panel = document.createElement('div');
+    panel.className = 'scholia-overlay-panel';
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    // Header
+    var hdr = document.createElement('div');
+    hdr.className = 'scholia-overlay-header';
+
+    var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
+    var hdrText = document.createElement('span');
+    hdrText.className = 'scholia-overlay-anchor';
+    hdrText.textContent = '\u201c' + anchorText.slice(0, 80) + (anchorText.length > 80 ? '\u2026' : '') + '\u201d';
+    hdr.appendChild(hdrText);
+
+    var hdrRight = document.createElement('span');
+    hdrRight.className = 'scholia-overlay-header-right';
+
+    var countLabel = document.createElement('span');
+    countLabel.className = 'scholia-overlay-count';
+    var bodies = ann.body || [];
+    countLabel.textContent = bodies.length + (bodies.length === 1 ? ' message' : ' messages');
+    hdrRight.appendChild(countLabel);
+
+    // Pandoc toggle for whole overlay (on by default)
+    var overlayPandocActive = true;
+    var overlayBodies = []; // collect body elements for bulk toggle
+    var pandocHeaderBtn = document.createElement('button');
+    pandocHeaderBtn.className = 'scholia-btn-pandoc active';
+    pandocHeaderBtn.textContent = 'P';
+    pandocHeaderBtn.title = 'Render citations via Pandoc — click to toggle off';
+    pandocHeaderBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      overlayPandocActive = !overlayPandocActive;
+      pandocHeaderBtn.classList.toggle('active', overlayPandocActive);
+      pandocHeaderBtn.title = overlayPandocActive
+        ? 'Render citations via Pandoc — click to toggle off'
+        : 'Citations off — click to render via Pandoc';
+      for (var bi = 0; bi < overlayBodies.length; bi++) {
+        var b = overlayBodies[bi];
+        if (b.classList.contains('scholia-raw-view')) continue; // skip if in raw mode
+        var raw = b.dataset.raw;
+        if (overlayPandocActive) {
+          if (pandocCache.has(raw)) {
+            b.innerHTML = pandocCache.get(raw);
+            postProcessPandocHtml(b);
+          }
+          // else already requested or will be requested
+        } else {
+          b.innerHTML = renderCommentBody(raw);
+        }
+      }
+    });
+    hdrRight.appendChild(pandocHeaderBtn);
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'scholia-btn-ghost';
+    closeBtn.innerHTML = '&#x2715; Close';
+    closeBtn.addEventListener('click', closeOverlay);
+    hdrRight.appendChild(closeBtn);
+
+    hdr.appendChild(hdrRight);
+    panel.appendChild(hdr);
+
+    // Thread body
+    var threadBody = document.createElement('div');
+    threadBody.className = 'scholia-overlay-thread';
+
+    for (var j = 0; j < bodies.length; j++) {
+      var msg = bodies[j];
+      var msgEl = document.createElement('div');
+      var isSoftware = msg.creator && msg.creator.type === 'Software';
+      var role = isSoftware ? 'ai' : 'human';
+      msgEl.className = 'scholia-overlay-message scholia-' + role;
+
+      var meta = document.createElement('div');
+      meta.className = 'scholia-overlay-message-meta';
+      var msgCreator = (msg.creator && msg.creator.name) || 'unknown';
+
+      var authorSpan = document.createElement('span');
+      authorSpan.style.color = userColor(msgCreator, msg.creator && msg.creator.type);
+      if (isSoftware && msg.creator.nickname) {
+        authorSpan.className = 'scholia-author-label';
+        authorSpan.textContent = msgCreator + ' ';
+        var modelSpan = document.createElement('span');
+        modelSpan.className = 'scholia-model-name';
+        modelSpan.textContent = msg.creator.nickname;
+        authorSpan.appendChild(modelSpan);
+      } else {
+        authorSpan.textContent = msgCreator;
+      }
+      meta.appendChild(authorSpan);
+
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'scholia-message-time';
+      timeSpan.textContent = relativeTime(msg.created);
+      if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
+      meta.appendChild(timeSpan);
+
+      var bodyEl = document.createElement('div');
+      bodyEl.className = 'scholia-message-body';
+      bodyEl.dataset.raw = msg.value;
+      bodyEl.innerHTML = renderCommentBody(msg.value);
+      overlayBodies.push(bodyEl);
+
+      var toggleBtn = document.createElement('button');
+      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.textContent = '</>';
+      toggleBtn.title = 'Toggle raw markdown';
+      toggleBtn.addEventListener('click', (function (theBody, theBtn) {
+        return function (e) {
+          e.stopPropagation();
+          if (theBody.classList.contains('scholia-raw-view')) {
+            theBody.classList.remove('scholia-raw-view');
+            // Restore to Pandoc or markdown-it depending on overlay state
+            var raw = theBody.dataset.raw;
+            if (overlayPandocActive && pandocCache.has(raw)) {
+              theBody.innerHTML = pandocCache.get(raw);
+              postProcessPandocHtml(theBody);
+            } else {
+              theBody.innerHTML = renderCommentBody(raw);
+            }
+            theBtn.classList.remove('active');
+          } else {
+            theBody.classList.add('scholia-raw-view');
+            theBody.textContent = theBody.dataset.raw;
+            theBtn.classList.add('active');
+          }
+        };
+      })(bodyEl, toggleBtn));
+      meta.appendChild(toggleBtn);
+
+      msgEl.appendChild(meta);
+      msgEl.appendChild(bodyEl);
+      threadBody.appendChild(msgEl);
+    }
+    panel.appendChild(threadBody);
+
+    // Reply row
+    var replyRow = document.createElement('div');
+    replyRow.className = 'scholia-overlay-reply';
+
+    var replyTextarea = document.createElement('textarea');
+    replyTextarea.name = 'overlay-reply-' + ann.id;
+    replyTextarea.placeholder = 'Reply\u2026';
+    replyTextarea.rows = 2;
+    autoGrow(replyTextarea);
+    replyRow.appendChild(replyTextarea);
+
+    var btnRow = document.createElement('div');
+    btnRow.className = 'scholia-overlay-reply-buttons';
+
+    var replyBtn = document.createElement('button');
+    replyBtn.className = 'scholia-btn-primary';
+    replyBtn.textContent = 'Reply';
+    replyBtn.addEventListener('click', function () {
+      var text = replyTextarea.value.trim();
+      if (!text) return;
+      wsSend({ type: 'reply', annotation_id: ann.id, body: text, creator: creatorName });
+      replyTextarea.value = '';
+    });
+    btnRow.appendChild(replyBtn);
+
+    // Preview button (uses Pandoc when P is active)
+    var previewDiv = null;
+    var previewBtn = document.createElement('button');
+    previewBtn.className = 'scholia-btn-ghost';
+    previewBtn.textContent = 'Preview';
+    previewBtn.addEventListener('click', function () {
+      if (previewDiv) {
+        // Hide preview, show textarea
+        previewDiv.remove();
+        previewDiv = null;
+        replyTextarea.style.display = '';
+        previewBtn.textContent = 'Preview';
+      } else {
+        // Show preview, hide textarea
+        previewDiv = document.createElement('div');
+        previewDiv.className = 'scholia-message-body scholia-preview-body';
+        previewDiv.innerHTML = renderCommentBody(replyTextarea.value);
+        replyTextarea.style.display = 'none';
+        replyRow.insertBefore(previewDiv, btnRow);
+        previewBtn.textContent = 'Edit';
+        // If Pandoc active, upgrade preview via server
+        if (overlayPandocActive) {
+          var raw = replyTextarea.value;
+          if (pandocCache.has(raw)) {
+            previewDiv.innerHTML = pandocCache.get(raw);
+            postProcessPandocHtml(previewDiv);
+          } else {
+            var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+            pandocCallbacks.set(reqId, function (html) {
+              pandocCache.set(raw, html);
+              if (previewDiv) {
+                previewDiv.innerHTML = html;
+                postProcessPandocHtml(previewDiv);
+              }
+            });
+            wsSend({ type: 'render_markdown', text: raw, request_id: reqId });
+          }
+        }
+      }
+    });
+    btnRow.appendChild(previewBtn);
+
+    var status = ann['scholia:status'] || 'open';
+    if (status === 'open') {
+      var resolveBtn = document.createElement('button');
+      resolveBtn.className = 'scholia-btn-ghost';
+      resolveBtn.textContent = 'Resolve';
+      resolveBtn.addEventListener('click', function () {
+        wsSend({ type: 'resolve', annotation_id: ann.id });
+      });
+      btnRow.appendChild(resolveBtn);
+    } else {
+      var unresolveBtn = document.createElement('button');
+      unresolveBtn.className = 'scholia-btn-ghost';
+      unresolveBtn.textContent = 'Unresolve';
+      unresolveBtn.addEventListener('click', function () {
+        wsSend({ type: 'unresolve', annotation_id: ann.id });
+      });
+      btnRow.appendChild(unresolveBtn);
+    }
+
+    replyRow.appendChild(btnRow);
+    panel.appendChild(replyRow);
+
+    backdrop.appendChild(panel);
+    document.body.appendChild(backdrop);
+    activeOverlay = { backdrop: backdrop, annotationId: ann.id };
+
+    // Escape to close
+    document.addEventListener('keydown', overlayEscHandler);
+
+    // Scroll thread to bottom
+    threadBody.scrollTop = threadBody.scrollHeight;
+
+    // Auto-render all messages via Pandoc (on by default)
+    for (var pi = 0; pi < overlayBodies.length; pi++) {
+      (function (bEl) {
+        var raw = bEl.dataset.raw;
+        if (pandocCache.has(raw)) {
+          bEl.innerHTML = pandocCache.get(raw);
+          postProcessPandocHtml(bEl);
+        } else {
+          var reqId = 'pandoc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+          pandocCallbacks.set(reqId, function (html) {
+            pandocCache.set(raw, html);
+            if (overlayPandocActive && !bEl.classList.contains('scholia-raw-view')) {
+              bEl.innerHTML = html;
+              postProcessPandocHtml(bEl);
+            }
+          });
+          wsSend({ type: 'render_markdown', text: raw, request_id: reqId });
+        }
+      })(overlayBodies[pi]);
+    }
+  }
+
+  function closeOverlay() {
+    if (!activeOverlay) return;
+    activeOverlay.backdrop.remove();
+    activeOverlay = null;
+    document.removeEventListener('keydown', overlayEscHandler);
+  }
+
+  function overlayEscHandler(e) {
+    if (e.key === 'Escape') closeOverlay();
   }
 
   // ── Anchor highlighting ────────────────────────────
@@ -1246,6 +1837,29 @@
     });
     actions.appendChild(submitBtn);
 
+    var newCommentPreviewDiv = null;
+    var newCommentPreviewBtn = document.createElement('button');
+    newCommentPreviewBtn.className = 'scholia-btn scholia-btn-ghost';
+    newCommentPreviewBtn.textContent = 'Preview';
+    newCommentPreviewBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (newCommentPreviewDiv) {
+        newCommentPreviewDiv.remove();
+        newCommentPreviewDiv = null;
+        textarea.style.display = '';
+        newCommentPreviewBtn.textContent = 'Preview';
+      } else {
+        newCommentPreviewDiv = document.createElement('div');
+        newCommentPreviewDiv.className = 'scholia-message-body scholia-preview-body';
+        newCommentPreviewDiv.innerHTML = renderCommentBody(textarea.value);
+        textarea.style.display = 'none';
+        // Insert before the actions row
+        form.insertBefore(newCommentPreviewDiv, actions);
+        newCommentPreviewBtn.textContent = 'Edit';
+      }
+    });
+    actions.appendChild(newCommentPreviewBtn);
+
     form.appendChild(actions);
     sidebarEl.appendChild(form);
     pendingForm = form;
@@ -1468,13 +2082,16 @@
   var citationHideTimer = null;
 
   function setupCitationTooltips() {
+    setupCitationTooltipsIn(docEl);
+  }
+
+  function setupCitationTooltipsIn(container) {
     // Pandoc with link-citations creates <a href="#ref-KEY"> inside <span class="citation">
-    var links = docEl.querySelectorAll('a[href^="#ref-"]');
+    var links = container.querySelectorAll('a[href^="#ref-"]');
     for (var i = 0; i < links.length; i++) {
       links[i].addEventListener('mouseenter', showCitationTooltip);
       links[i].addEventListener('mouseleave', scheduleCitationHide);
       // Prevent clicking the citation from jumping to the bibliography
-      // when the tooltip is showing (user likely wants to interact with tooltip)
       links[i].addEventListener('click', function (e) {
         if (citationTooltip) e.preventDefault();
       });
@@ -1485,7 +2102,10 @@
     var link = e.target.closest('a[href^="#ref-"]');
     if (!link) return;
     var refId = link.getAttribute('href').slice(1); // strip #
-    var refEl = document.getElementById(refId);
+    // Look in the closest message body first (for comment citations), fall back to document
+    var messageBody = link.closest('.scholia-message-body');
+    var refEl = messageBody ? messageBody.querySelector('#' + CSS.escape(refId)) : null;
+    if (!refEl) refEl = document.getElementById(refId);
     if (!refEl) return;
 
     clearTimeout(citationHideTimer);
@@ -1685,10 +2305,18 @@
 
   renderToolbar();
   connectWS();
+  initMarkdownIt();
+  if (!md) {
+    window.addEventListener('load', function () {
+      initMarkdownIt();
+      rerenderCommentBodies();
+    });
+  }
   renderSidebar();
 
   // KaTeX is loaded with defer, so wait for window load before rendering math
   window.addEventListener('load', function () {
+    buildToc();
     rerenderMath();
     rerenderCommentBodies();
     decorateCodeBlocks();

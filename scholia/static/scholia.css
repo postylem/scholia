@@ -70,6 +70,7 @@ body.scholia-dark {
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
@@ -275,11 +276,151 @@ input.margin-toggle { display: none; }
   font-size: 1.5rem;
   font-style: italic;
   margin-top: 2rem;
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 3px);
+  border-left: 3px solid var(--s-accent);
 }
 #scholia-doc h3 {
   font-size: 1.2rem;
   font-style: italic;
   margin-top: 1.5rem;
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 2px);
+  border-left: 2px solid var(--s-border);
+}
+#scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 2px);
+  border-left: 2px solid var(--s-border);
+}
+
+/* ── Collapsible sections ──────────────────────────── */
+
+#scholia-doc section > h1,
+#scholia-doc section > h2,
+#scholia-doc section > h3,
+#scholia-doc section > h4 {
+  cursor: pointer;
+  position: relative;
+}
+#scholia-doc section > h1::after,
+#scholia-doc section > h2::after,
+#scholia-doc section > h3::after,
+#scholia-doc section > h4::after {
+  content: '';
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 2px solid var(--s-text-dim);
+  border-bottom: 2px solid var(--s-text-dim);
+  transform: rotate(45deg);
+  margin-left: 0.5em;
+  vertical-align: middle;
+  transition: transform 0.2s;
+  opacity: 0;
+}
+#scholia-doc section > h1:hover::after,
+#scholia-doc section > h2:hover::after,
+#scholia-doc section > h3:hover::after,
+#scholia-doc section > h4:hover::after {
+  opacity: 0.5;
+}
+#scholia-doc section.scholia-collapsed > h1::after,
+#scholia-doc section.scholia-collapsed > h2::after,
+#scholia-doc section.scholia-collapsed > h3::after,
+#scholia-doc section.scholia-collapsed > h4::after {
+  transform: rotate(-45deg);
+  opacity: 0.5;
+}
+#scholia-doc section.scholia-collapsed > :not(h1):not(h2):not(h3):not(h4):not(h5):not(h6) {
+  display: none;
+}
+#scholia-doc section.scholia-collapsed > section {
+  display: none;
+}
+
+/* ── Table of contents dropdown ────────────────────── */
+
+.scholia-toc-wrap {
+  position: relative;
+}
+.scholia-toc {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 240px;
+  max-width: 340px;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  background: var(--s-card);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 0.4rem 0;
+  z-index: 600;
+  font-family: var(--s-sans);
+  font-size: 0.72rem;
+  margin-top: 0.25rem;
+}
+.scholia-toc.scholia-toc-open {
+  display: block;
+}
+.scholia-toc-body {
+  padding: 0 0.3rem 0 0.8rem;
+}
+.scholia-toc-body ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.scholia-toc-body li {
+  margin: 0;
+}
+.scholia-toc-body a {
+  display: block;
+  padding: 0.15rem 0.4rem;
+  color: var(--s-text-dim);
+  text-decoration: none;
+  border-radius: 2px;
+  line-height: 1.3;
+  transition: color 0.1s, background 0.1s;
+}
+.scholia-toc-body a:hover {
+  color: var(--s-accent);
+  background: var(--s-accent-dim);
+}
+.scholia-toc-body a.scholia-toc-active {
+  color: var(--s-accent);
+  font-weight: 600;
+}
+/* Indent levels — all items at same level align regardless of chevron */
+.scholia-toc-body .scholia-toc-h2 { padding-left: 0.6rem; }
+.scholia-toc-body .scholia-toc-h3 { padding-left: 1.2rem; font-size: 0.68rem; }
+.scholia-toc-body .scholia-toc-h4 { padding-left: 1.8rem; font-size: 0.65rem; }
+
+/* Sub-TOC collapse */
+.scholia-toc-body li {
+  position: relative;
+}
+.scholia-toc-body .scholia-toc-branch > span {
+  display: block;
+  padding: 0;
+  user-select: none;
+}
+.scholia-toc-body .scholia-toc-chevron {
+  position: absolute;
+  left: -0.1rem;
+  top: 0.35rem;
+  font-size: 0.4rem;
+  cursor: pointer;
+  color: var(--s-text-dim);
+  transition: transform 0.2s;
+}
+.scholia-toc-body .scholia-toc-chevron:hover { color: var(--s-accent); }
+.scholia-toc-body .scholia-toc-branch.collapsed > ul { display: none; }
+.scholia-toc-body .scholia-toc-branch.collapsed .scholia-toc-chevron {
+  transform: rotate(-90deg);
 }
 
 /* YAML metadata header */
@@ -427,6 +568,8 @@ input.margin-toggle { display: none; }
 }
 
 .scholia-anchor-text {
+  font-family: var(--s-body);
+  font-style: italic;
   font-size: 0.78rem;
   color: var(--s-text-dim);
   flex: 1;
@@ -466,20 +609,55 @@ input.margin-toggle { display: none; }
 
 .scholia-message-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  align-items: baseline;
+  gap: 0.3em;
+  flex-wrap: wrap;
+  font-family: var(--s-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
   margin-bottom: 0.1rem;
+}
+
+.scholia-message-time {
+  font-size: 0.54rem;
+  color: var(--s-text-dim);
+  font-weight: 400;
+  margin-left: 0.5em;
+}
+
+/* Inline meta-row buttons (tiny, inside author line) */
+.scholia-btn-toggle-raw,
+.scholia-btn-pandoc {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  padding: 0 4px;
+  font-size: 0.6rem;
+  color: var(--s-text-dim);
+  cursor: pointer;
+  line-height: 1.4;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.scholia-btn-toggle-raw { font-family: var(--s-mono); margin-left: auto; }
+.scholia-btn-pandoc { font-weight: 600; min-width: 1.2em; text-align: center; }
+.scholia-btn-toggle-raw:hover,
+.scholia-btn-pandoc:hover { border-color: var(--s-accent); color: var(--s-accent); }
+.scholia-btn-toggle-raw.active,
+.scholia-btn-pandoc.active { background: var(--s-accent-dim); color: var(--s-accent); border-color: var(--s-accent); }
+
+.scholia-message-body.scholia-raw-view {
+  white-space: pre-wrap;
+  font-family: var(--s-mono);
+  font-size: 0.75rem;
+  background: var(--s-code-bg);
+  border-radius: 3px;
+  padding: 0.4em 0.6em;
 }
 
 .scholia-model-name {
   font-size: 0.54rem;
   font-weight: 400;
   opacity: 0.7;
-  text-transform: none;
 }
 
 .scholia-read-toggle {
@@ -553,18 +731,65 @@ input.margin-toggle { display: none; }
 .scholia-ai {
   background: rgba(74, 111, 165, 0.06);
   border-radius: 3px;
-  margin-left: -0.3rem;
-  margin-right: -0.3rem;
-  padding-left: 0.3rem;
-  padding-right: 0.3rem;
+}
+/* Extend AI background in sidebar only (not overlay) */
+.scholia-thread .scholia-ai {
+  margin-left: -10px;
+  margin-right: -10px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .scholia-message-body {
   font-size: 0.8rem;
   line-height: 1.45;
-  white-space: pre-wrap;
   color: #333;
+  overflow-wrap: break-word;
 }
+
+/* Scoped markdown styles within comment bodies */
+.scholia-message-body p { margin: 0.3em 0; }
+.scholia-message-body p:first-child { margin-top: 0; }
+.scholia-message-body p:last-child { margin-bottom: 0; }
+.scholia-message-body ul,
+.scholia-message-body ol { margin: 0.3em 0; padding-left: 1.4em; }
+.scholia-message-body li { margin: 0.15em 0; }
+.scholia-message-body table { border-collapse: collapse; width: 100%; margin: 0.4em 0; font-size: 0.75rem; }
+.scholia-message-body th,
+.scholia-message-body td { border: 1px solid var(--s-border); padding: 0.25em 0.5em; text-align: left; }
+.scholia-message-body th { background: var(--s-surface); font-weight: 600; }
+.scholia-message-body blockquote {
+  margin: 0.3em 0;
+  padding: 0.2em 0.6em;
+  border-left: 3px solid var(--s-accent);
+  color: var(--s-text-dim);
+}
+.scholia-message-body pre {
+  background: var(--s-code-bg);
+  border-radius: 3px;
+  padding: 0.4em 0.6em;
+  overflow-x: auto;
+  margin: 0.3em 0;
+  font-size: 0.75rem;
+}
+.scholia-message-body pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+.scholia-message-body hr { border: none; border-top: 1px solid var(--s-border); margin: 0.5em 0; }
+.scholia-message-body a { color: var(--s-accent); text-decoration: underline; }
+.scholia-message-body img { max-width: 100%; border-radius: 3px; }
+.scholia-message-body h1,
+.scholia-message-body h2,
+.scholia-message-body h3,
+.scholia-message-body h4 { margin: 0.4em 0 0.2em; font-size: 0.85rem; }
+.scholia-message-body strong { font-weight: 600; }
+
+/* Hide Pandoc bibliography in comments — citations shown via hover tooltips */
+.scholia-message-body #refs,
+.scholia-message-body .references { display: none; }
+.scholia-message-body .citation a { color: var(--s-accent); cursor: pointer; }
 .scholia-message-body code {
   background: rgba(0, 0, 0, 0.06);
   padding: 0.1em 0.25em;
@@ -642,19 +867,67 @@ mark.scholia-highlight.scholia-highlight-resolved:hover {
   margin-top: 0.4rem;
 }
 
-.scholia-btn {
-  padding: 0.25rem 0.65rem;
+/* ── Unified button system ──────────────────────────── */
+
+/* Ghost button: outlined, for secondary actions */
+.scholia-btn-ghost {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  font-family: var(--s-sans);
+  color: var(--s-text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.scholia-btn-ghost:hover {
+  color: var(--s-accent);
+  border-color: var(--s-accent);
+}
+.scholia-btn-ghost.active {
+  background: var(--s-accent-dim);
+  color: var(--s-accent);
+  border-color: var(--s-accent);
+}
+
+/* Primary button: filled accent, for main actions */
+.scholia-btn-primary {
+  background: var(--s-accent);
+  color: #fff;
+  border: 1px solid var(--s-accent);
+  border-radius: var(--s-radius);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  font-family: var(--s-sans);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.scholia-btn-primary:hover { opacity: 0.85; }
+
+/* Cancel/text-only button */
+.scholia-btn-cancel {
+  background: transparent;
   border: none;
-  border-radius: 3px;
-  font-size: 0.78rem;
+  border-radius: var(--s-radius);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  font-family: var(--s-sans);
+  color: var(--s-text-dim);
+  cursor: pointer;
+}
+.scholia-btn-cancel:hover { color: var(--s-text); }
+
+/* Legacy .scholia-btn base (new-comment form uses this) */
+.scholia-btn {
+  padding: 0.2rem 0.5rem;
+  border: none;
+  border-radius: var(--s-radius);
+  font-size: 0.72rem;
   cursor: pointer;
   font-family: var(--s-sans);
 }
-.scholia-btn-cancel {
-  background: transparent;
-  color: var(--s-text-dim);
-}
-.scholia-btn-cancel:hover { color: var(--s-text); }
 .scholia-btn-submit {
   background: var(--s-accent);
   color: #fff;
@@ -833,7 +1106,7 @@ mark.scholia-highlight.scholia-pulse {
 
 .scholia-reply-input {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 0.3rem;
   margin: 0 -0.65rem -0.65rem;
   padding: 0.4rem 0.65rem 0.65rem;
@@ -844,11 +1117,11 @@ mark.scholia-highlight.scholia-pulse {
   background: var(--s-header-resolved);
 }
 .scholia-reply-input textarea {
-  flex: 1;
+  width: 100%;
   background: #fff;
   color: var(--s-text);
   border: 1px solid var(--s-border);
-  border-radius: 3px;
+  border-radius: var(--s-radius);
   padding: 0.3rem;
   font-family: var(--s-sans);
   font-size: 0.78rem;
@@ -859,34 +1132,13 @@ mark.scholia-highlight.scholia-pulse {
   outline: none;
   border-color: var(--s-accent);
 }
-.scholia-reply-input button {
-  background: var(--s-accent);
-  color: #fff;
-  border: none;
-  border-radius: 3px;
-  padding: 0 0.5rem;
-  min-height: 2em;
-  font-size: 0.72rem;
-  cursor: pointer;
-  font-family: var(--s-sans);
+.scholia-reply-buttons {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
 }
 
-.scholia-btn-resolve {
-  background: none !important;
-  color: var(--s-text-dim) !important;
-  border: 1px solid var(--s-border) !important;
-}
-.scholia-btn-resolve:hover {
-  border-color: var(--s-accent) !important;
-  color: var(--s-accent) !important;
-}
-.scholia-btn-unresolve {
-  background: var(--s-text-dim) !important;
-  color: var(--s-card) !important;
-}
-.scholia-btn-unresolve:hover {
-  background: var(--s-text) !important;
-}
+/* Resolve/unresolve inherit from .scholia-btn-ghost via JS class */
 
 /* ── Resolved card styling ─────────────────────────── */
 
@@ -999,16 +1251,20 @@ a.scholia-toolbar-brand:hover {
 .scholia-toolbar-btn {
   background: none;
   border: 1px solid var(--s-border);
-  border-radius: 3px;
+  border-radius: var(--s-radius);
   padding: 0.15rem 0.5rem;
+  min-height: 1.6rem;
   font-size: 0.7rem;
   cursor: pointer;
   color: var(--s-text-dim);
   font-family: var(--s-sans);
   transition: color 0.15s, border-color 0.15s, background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .scholia-toolbar-btn:hover {
-  color: var(--s-text);
+  color: var(--s-accent);
   border-color: var(--s-accent);
 }
 .scholia-toolbar-btn svg {
@@ -1208,4 +1464,142 @@ body.scholia-dark .scholia-toolbar-btn.active {
 }
 body.scholia-dark .scholia-ai {
   background: rgba(125, 168, 210, 0.1);
+}
+body.scholia-dark .scholia-overlay-backdrop { background: rgba(0, 0, 0, 0.55); }
+body.scholia-dark .scholia-overlay-message.scholia-ai { background: rgba(125, 168, 210, 0.08); }
+body.scholia-dark .scholia-preview-body { border-color: var(--s-border); }
+body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-code-bg); }
+
+/* ── Pop-out overlay ─────────────────────────────────── */
+
+.scholia-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 5vh;
+}
+
+.scholia-overlay-panel {
+  background: var(--s-card);
+  width: min(80vw, 800px);
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scholia-overlay-header {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--s-border);
+  background: var(--s-surface);
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.scholia-overlay-anchor {
+  font-family: var(--s-body);
+  color: var(--s-text-dim);
+  font-style: italic;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scholia-overlay-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.scholia-overlay-count {
+  font-size: 0.75rem;
+  color: var(--s-text-dim);
+}
+
+/* .scholia-overlay-close inherits from .scholia-btn-ghost via JS class */
+
+.scholia-overlay-thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+}
+
+.scholia-overlay-message {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+}
+.scholia-overlay-message.scholia-ai {
+  background: rgba(74, 111, 165, 0.04);
+  border-radius: 6px;
+}
+
+.scholia-overlay-message-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  font-family: var(--s-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.scholia-overlay-reply {
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--s-border);
+  flex-shrink: 0;
+}
+
+.scholia-overlay-reply textarea {
+  width: 100%;
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  font-family: var(--s-sans);
+  resize: vertical;
+  min-height: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.scholia-overlay-reply-buttons {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* Overlay reply button inherits from .scholia-btn-primary via JS class */
+
+.scholia-btn-popout {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  padding: 0 4px;
+  font-size: 0.7rem;
+  color: var(--s-text-dim);
+  cursor: pointer;
+  line-height: 1.4;
+  margin-left: 0.2rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+.scholia-btn-popout:hover { border-color: var(--s-accent); color: var(--s-accent); }
+
+/* Preview and resolve/unresolve buttons inherit from .scholia-btn-ghost via JS class */
+
+.scholia-preview-body {
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.5rem;
+  min-height: 2.5rem;
 }

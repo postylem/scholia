@@ -82,6 +82,61 @@ async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
+def _extract_bibliography(doc_path: Path) -> tuple[str | None, str | None]:
+    """Extract bibliography and csl paths from document YAML frontmatter."""
+    try:
+        md_text = doc_path.read_text(encoding="utf-8")
+    except OSError:
+        return None, None
+    m = re.match(r"^---\n(.*?)\n---", md_text, re.DOTALL)
+    if not m:
+        return None, None
+    bib = None
+    csl = None
+    for line in m.group(1).splitlines():
+        bm = re.match(r"^bibliography:\s*(.+?)\s*$", line)
+        if bm:
+            bib = bm.group(1).strip("\"'")
+        cm = re.match(r"^csl:\s*(.+?)\s*$", line)
+        if cm:
+            csl = cm.group(1).strip("\"'")
+    return bib, csl
+
+
+def _render_markdown_fragment_sync(
+    text: str, cwd: str = ".", bibliography: str | None = None, csl: str | None = None,
+) -> str:
+    """Render a markdown fragment to HTML via Pandoc (blocking)."""
+    cmd = [
+        "pandoc",
+        "--katex",
+        "--citeproc",
+        "--metadata=link-citations:true",
+        "--from=markdown+tex_math_single_backslash",
+        "--to=html5",
+    ]
+    if bibliography:
+        cmd.append("--bibliography=" + bibliography)
+    if csl:
+        cmd.append("--csl=" + csl)
+    elif not csl:
+        cmd.append("--csl=" + _DEFAULT_CSL)
+    result = subprocess.run(
+        cmd, input=text, capture_output=True, text=True, check=True, cwd=cwd,
+    )
+    return result.stdout
+
+
+async def render_markdown_fragment(
+    text: str, cwd: str = ".", bibliography: str | None = None, csl: str | None = None,
+) -> str:
+    """Render a markdown fragment without blocking the event loop."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _render_markdown_fragment_sync, text, cwd, bibliography, csl
+    )
+
+
 def _extract_title(markdown_text: str) -> str:
     """Extract title from YAML frontmatter, or return 'Scholia'."""
     m = re.match(r"^---\n(.*?)\n---", markdown_text, re.DOTALL)
@@ -238,6 +293,19 @@ class ScholiaServer:
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
                 )
+            elif msg_type == "render_markdown":
+                bib, csl = _extract_bibliography(self.doc_path)
+                html = await render_markdown_fragment(
+                    msg["text"],
+                    cwd=str(self.doc_path.parent),
+                    bibliography=bib,
+                    csl=csl,
+                )
+                await ws.send_json({
+                    "type": "rendered_markdown",
+                    "request_id": msg.get("request_id", ""),
+                    "html": html,
+                })
         except Exception as e:
             try:
                 await ws.send_json({"type": "error", "message": str(e)})
