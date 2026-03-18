@@ -750,7 +750,7 @@
 
             var editPreviewDiv = null;
             var editPreviewBtn = document.createElement('button');
-            editPreviewBtn.className = 'scholia-btn-preview';
+            editPreviewBtn.className = 'scholia-btn-ghost';
             editPreviewBtn.textContent = 'Preview';
             editPreviewBtn.addEventListener('click', function (ev) {
               ev.stopPropagation();
@@ -831,7 +831,11 @@
     })(card));
     replyRow.appendChild(replyTextarea);
 
+    var replyBtnRow = document.createElement('div');
+    replyBtnRow.className = 'scholia-reply-buttons';
+
     var replyBtn = document.createElement('button');
+    replyBtn.className = 'scholia-btn-primary';
     replyBtn.textContent = 'Reply';
     replyBtn.addEventListener('click', function () {
       var text = replyTextarea.value.trim();
@@ -844,12 +848,12 @@
       });
       replyTextarea.value = '';
     });
-    replyRow.appendChild(replyBtn);
+    replyBtnRow.appendChild(replyBtn);
 
     // Preview button for sidebar reply
     var sidebarPreviewDiv = null;
     var sidebarPreviewBtn = document.createElement('button');
-    sidebarPreviewBtn.className = 'scholia-btn-preview';
+    sidebarPreviewBtn.className = 'scholia-btn-ghost';
     sidebarPreviewBtn.textContent = 'Preview';
     sidebarPreviewBtn.addEventListener('click', (function (ta, row) {
       return function () {
@@ -863,35 +867,36 @@
           sidebarPreviewDiv.className = 'scholia-message-body scholia-preview-body';
           sidebarPreviewDiv.innerHTML = renderCommentBody(ta.value);
           ta.style.display = 'none';
-          row.insertBefore(sidebarPreviewDiv, row.querySelector('.scholia-btn-preview'));
+          row.insertBefore(sidebarPreviewDiv, replyBtnRow);
           sidebarPreviewBtn.textContent = 'Edit';
         }
       };
     })(replyTextarea, replyRow));
-    replyRow.appendChild(sidebarPreviewBtn);
-
-    thread.appendChild(replyRow);
+    replyBtnRow.appendChild(sidebarPreviewBtn);
 
     // Resolve/unresolve button in the reply row
     if (status === 'open') {
       var resolveBtn = document.createElement('button');
-      resolveBtn.className = 'scholia-btn-resolve';
+      resolveBtn.className = 'scholia-btn-ghost';
       resolveBtn.textContent = 'Resolve';
       resolveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         wsSend({ type: 'resolve', annotation_id: ann.id });
       });
-      replyRow.appendChild(resolveBtn);
+      replyBtnRow.appendChild(resolveBtn);
     } else if (status === 'resolved') {
       var unresolveBtn = document.createElement('button');
-      unresolveBtn.className = 'scholia-btn-unresolve';
+      unresolveBtn.className = 'scholia-btn-ghost';
       unresolveBtn.textContent = 'Unresolve';
       unresolveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         wsSend({ type: 'unresolve', annotation_id: ann.id });
       });
-      replyRow.appendChild(unresolveBtn);
+      replyBtnRow.appendChild(unresolveBtn);
     }
+
+    replyRow.appendChild(replyBtnRow);
+    thread.appendChild(replyRow);
 
     card.appendChild(thread);
 
@@ -997,7 +1002,7 @@
     hdrRight.appendChild(pandocHeaderBtn);
 
     var closeBtn = document.createElement('button');
-    closeBtn.className = 'scholia-overlay-close';
+    closeBtn.className = 'scholia-btn-ghost';
     closeBtn.innerHTML = '&#x2715; Close';
     closeBtn.addEventListener('click', closeOverlay);
     hdrRight.appendChild(closeBtn);
@@ -1094,7 +1099,7 @@
     btnRow.className = 'scholia-overlay-reply-buttons';
 
     var replyBtn = document.createElement('button');
-    replyBtn.className = 'scholia-overlay-reply-btn';
+    replyBtn.className = 'scholia-btn-primary';
     replyBtn.textContent = 'Reply';
     replyBtn.addEventListener('click', function () {
       var text = replyTextarea.value.trim();
@@ -1107,7 +1112,7 @@
     // Preview button (uses Pandoc when P is active)
     var previewDiv = null;
     var previewBtn = document.createElement('button');
-    previewBtn.className = 'scholia-btn-preview';
+    previewBtn.className = 'scholia-btn-ghost';
     previewBtn.textContent = 'Preview';
     previewBtn.addEventListener('click', function () {
       if (previewDiv) {
@@ -1149,7 +1154,7 @@
     var status = ann['scholia:status'] || 'open';
     if (status === 'open') {
       var resolveBtn = document.createElement('button');
-      resolveBtn.className = 'scholia-btn-resolve';
+      resolveBtn.className = 'scholia-btn-ghost';
       resolveBtn.textContent = 'Resolve';
       resolveBtn.addEventListener('click', function () {
         wsSend({ type: 'resolve', annotation_id: ann.id });
@@ -1157,7 +1162,7 @@
       btnRow.appendChild(resolveBtn);
     } else {
       var unresolveBtn = document.createElement('button');
-      unresolveBtn.className = 'scholia-btn-unresolve';
+      unresolveBtn.className = 'scholia-btn-ghost';
       unresolveBtn.textContent = 'Unresolve';
       unresolveBtn.addEventListener('click', function () {
         wsSend({ type: 'unresolve', annotation_id: ann.id });
@@ -1644,7 +1649,7 @@
 
     var newCommentPreviewDiv = null;
     var newCommentPreviewBtn = document.createElement('button');
-    newCommentPreviewBtn.className = 'scholia-btn scholia-btn-preview';
+    newCommentPreviewBtn.className = 'scholia-btn scholia-btn-ghost';
     newCommentPreviewBtn.textContent = 'Preview';
     newCommentPreviewBtn.addEventListener('click', function (e) {
       e.stopPropagation();
