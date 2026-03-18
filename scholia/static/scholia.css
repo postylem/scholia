@@ -1296,6 +1296,10 @@ body.scholia-dark .scholia-toolbar-btn.active {
 body.scholia-dark .scholia-ai {
   background: rgba(125, 168, 210, 0.1);
 }
+body.scholia-dark .scholia-overlay-backdrop { background: rgba(0, 0, 0, 0.55); }
+body.scholia-dark .scholia-overlay-message.scholia-ai { background: rgba(125, 168, 210, 0.08); }
+body.scholia-dark .scholia-preview-body { border-color: var(--s-border); }
+body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-code-bg); }
 
 /* ── Pop-out overlay ─────────────────────────────────── */
 
