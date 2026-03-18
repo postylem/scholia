@@ -70,6 +70,7 @@ body.scholia-dark {
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
@@ -275,11 +276,165 @@ input.margin-toggle { display: none; }
   font-size: 1.5rem;
   font-style: italic;
   margin-top: 2rem;
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--s-accent);
 }
 #scholia-doc h3 {
   font-size: 1.2rem;
   font-style: italic;
   margin-top: 1.5rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--s-border);
+}
+#scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--s-border);
+}
+
+/* ── Collapsible sections ──────────────────────────── */
+
+#scholia-doc section > h1,
+#scholia-doc section > h2,
+#scholia-doc section > h3,
+#scholia-doc section > h4 {
+  cursor: pointer;
+  position: relative;
+}
+#scholia-doc section > h1::after,
+#scholia-doc section > h2::after,
+#scholia-doc section > h3::after,
+#scholia-doc section > h4::after {
+  content: '';
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 2px solid var(--s-text-dim);
+  border-bottom: 2px solid var(--s-text-dim);
+  transform: rotate(45deg);
+  margin-left: 0.5em;
+  vertical-align: middle;
+  transition: transform 0.2s;
+  opacity: 0;
+}
+#scholia-doc section > h1:hover::after,
+#scholia-doc section > h2:hover::after,
+#scholia-doc section > h3:hover::after,
+#scholia-doc section > h4:hover::after {
+  opacity: 0.5;
+}
+#scholia-doc section.scholia-collapsed > h1::after,
+#scholia-doc section.scholia-collapsed > h2::after,
+#scholia-doc section.scholia-collapsed > h3::after,
+#scholia-doc section.scholia-collapsed > h4::after {
+  transform: rotate(-45deg);
+  opacity: 0.5;
+}
+#scholia-doc section.scholia-collapsed > :not(h1):not(h2):not(h3):not(h4):not(h5):not(h6) {
+  display: none;
+}
+#scholia-doc section.scholia-collapsed > section {
+  display: none;
+}
+
+/* ── Table of contents panel ───────────────────────── */
+
+.scholia-toc {
+  position: fixed;
+  top: 3rem;
+  left: 1rem;
+  max-width: 280px;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  background: var(--s-card);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  padding: 0.5rem 0;
+  z-index: 500;
+  font-family: var(--s-sans);
+  font-size: 0.72rem;
+  transition: opacity 0.15s;
+}
+.scholia-toc.scholia-toc-collapsed {
+  max-height: none;
+  overflow: visible;
+}
+.scholia-toc.scholia-toc-collapsed .scholia-toc-body {
+  display: none;
+}
+.scholia-toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.2rem 0.6rem 0.3rem;
+  font-weight: 600;
+  color: var(--s-text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.scholia-toc-header:hover { color: var(--s-text); }
+.scholia-toc-toggle {
+  font-size: 0.6rem;
+  transition: transform 0.2s;
+}
+.scholia-toc-collapsed .scholia-toc-toggle {
+  transform: rotate(-90deg);
+}
+.scholia-toc-body {
+  padding: 0 0.3rem;
+}
+.scholia-toc-body ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.scholia-toc-body li {
+  margin: 0;
+}
+.scholia-toc-body a {
+  display: block;
+  padding: 0.15rem 0.4rem;
+  color: var(--s-text-dim);
+  text-decoration: none;
+  border-radius: 2px;
+  line-height: 1.3;
+  transition: color 0.1s, background 0.1s;
+}
+.scholia-toc-body a:hover {
+  color: var(--s-accent);
+  background: var(--s-accent-dim);
+}
+.scholia-toc-body a.scholia-toc-active {
+  color: var(--s-accent);
+  font-weight: 600;
+}
+/* Indent levels */
+.scholia-toc-body .scholia-toc-h2 { padding-left: 0.6rem; }
+.scholia-toc-body .scholia-toc-h3 { padding-left: 1.2rem; font-size: 0.68rem; }
+.scholia-toc-body .scholia-toc-h4 { padding-left: 1.8rem; font-size: 0.65rem; }
+
+/* Sub-TOC collapse */
+.scholia-toc-body .scholia-toc-branch > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+  color: var(--s-text-dim);
+  border-radius: 2px;
+  user-select: none;
+}
+.scholia-toc-body .scholia-toc-branch > span:hover {
+  color: var(--s-accent);
+  background: var(--s-accent-dim);
+}
+.scholia-toc-body .scholia-toc-chevron {
+  font-size: 0.5rem;
+  transition: transform 0.2s;
+}
+.scholia-toc-body .scholia-toc-branch.collapsed > ul { display: none; }
+.scholia-toc-body .scholia-toc-branch.collapsed .scholia-toc-chevron {
+  transform: rotate(-90deg);
 }
 
 /* YAML metadata header */

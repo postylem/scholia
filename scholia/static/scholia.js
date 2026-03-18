@@ -86,6 +86,7 @@
         docEl.innerHTML = msg.html;
         rerenderMath();
         decorateCodeBlocks();
+        buildToc();
         setupCitationTooltips();
         if (!sidebarHidden) { reanchorAll(); positionCards(); }
       } else if (msg.type === 'comments_update') {
@@ -349,6 +350,163 @@
   function postProcessPandocHtml(container) {
     renderMathIn(container);
     setupCitationTooltipsIn(container);
+  }
+
+  // ── Table of contents & collapsible sections ────────
+
+  var tocEl = null;
+  var tocCollapsed = false;
+
+  function buildToc() {
+    if (tocEl) tocEl.remove();
+    var headings = docEl.querySelectorAll('h1, h2, h3, h4');
+    // Filter out title-block h1
+    var items = [];
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      if (h.closest('#title-block-header')) continue;
+      var section = h.parentElement;
+      if (!section || section.tagName !== 'SECTION') continue;
+      var level = parseInt(h.tagName[1]);
+      items.push({ heading: h, section: section, level: level, id: section.id || h.id || '' });
+    }
+    if (items.length === 0) return;
+
+    tocEl = document.createElement('div');
+    tocEl.className = 'scholia-toc';
+
+    var hdr = document.createElement('div');
+    hdr.className = 'scholia-toc-header';
+    hdr.innerHTML = 'Contents <span class="scholia-toc-toggle">&#x25BC;</span>';
+    hdr.addEventListener('click', function () {
+      tocCollapsed = !tocCollapsed;
+      tocEl.classList.toggle('scholia-toc-collapsed', tocCollapsed);
+    });
+    tocEl.appendChild(hdr);
+
+    var body = document.createElement('div');
+    body.className = 'scholia-toc-body';
+
+    // Build nested list
+    var root = document.createElement('ul');
+    var stack = [{ ul: root, level: 0 }]; // stack of {ul, level}
+
+    for (var j = 0; j < items.length; j++) {
+      var item = items[j];
+      // Pop stack to find the right parent level
+      while (stack.length > 1 && stack[stack.length - 1].level >= item.level) {
+        stack.pop();
+      }
+      var parentUl = stack[stack.length - 1].ul;
+
+      // Check if this heading has child headings (next item is deeper)
+      var hasChildren = (j + 1 < items.length && items[j + 1].level > item.level);
+
+      var li = document.createElement('li');
+      if (hasChildren) {
+        li.className = 'scholia-toc-branch';
+        var branchSpan = document.createElement('span');
+        branchSpan.className = 'scholia-toc-h' + item.level;
+        var chevron = document.createElement('span');
+        chevron.className = 'scholia-toc-chevron';
+        chevron.textContent = '\u25BC';
+        branchSpan.appendChild(chevron);
+        branchSpan.appendChild(document.createTextNode(' '));
+        var a = document.createElement('a');
+        a.href = '#' + item.id;
+        a.textContent = item.heading.textContent;
+        a.dataset.sectionId = item.id;
+        a.addEventListener('click', tocClickHandler);
+        branchSpan.appendChild(a);
+        // Click chevron to toggle children
+        chevron.addEventListener('click', (function (theLi) {
+          return function (e) {
+            e.stopPropagation();
+            theLi.classList.toggle('collapsed');
+          };
+        })(li));
+        li.appendChild(branchSpan);
+        var childUl = document.createElement('ul');
+        li.appendChild(childUl);
+        stack.push({ ul: childUl, level: item.level });
+      } else {
+        var a = document.createElement('a');
+        a.href = '#' + item.id;
+        a.className = 'scholia-toc-h' + item.level;
+        a.textContent = item.heading.textContent;
+        a.dataset.sectionId = item.id;
+        a.addEventListener('click', tocClickHandler);
+        li.appendChild(a);
+      }
+      parentUl.appendChild(li);
+    }
+
+    body.appendChild(root);
+    tocEl.appendChild(body);
+    document.body.appendChild(tocEl);
+
+    // Set up collapsible sections
+    setupCollapsibleSections();
+
+    // Highlight active section on scroll
+    window.addEventListener('scroll', updateTocActive, { passive: true });
+  }
+
+  function tocClickHandler(e) {
+    e.preventDefault();
+    var target = document.getElementById(this.dataset.sectionId);
+    if (target) {
+      // Uncollapse if collapsed
+      var section = target.tagName === 'SECTION' ? target : target.closest('section');
+      if (section) uncollapseAncestors(section);
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function uncollapseAncestors(el) {
+    var node = el;
+    while (node && node !== docEl) {
+      if (node.tagName === 'SECTION' && node.classList.contains('scholia-collapsed')) {
+        node.classList.remove('scholia-collapsed');
+      }
+      node = node.parentElement;
+    }
+  }
+
+  function setupCollapsibleSections() {
+    var sections = docEl.querySelectorAll('section');
+    for (var i = 0; i < sections.length; i++) {
+      var sec = sections[i];
+      var heading = sec.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4');
+      if (!heading) continue;
+      if (heading.closest('#title-block-header')) continue;
+      // Skip if already has listener (re-render)
+      if (heading.dataset.collapsible) continue;
+      heading.dataset.collapsible = 'true';
+      heading.addEventListener('click', (function (theSec) {
+        return function () {
+          theSec.classList.toggle('scholia-collapsed');
+        };
+      })(sec));
+    }
+  }
+
+  var tocActiveLink = null;
+  function updateTocActive() {
+    if (!tocEl) return;
+    var links = tocEl.querySelectorAll('a[data-section-id]');
+    var current = null;
+    for (var i = 0; i < links.length; i++) {
+      var target = document.getElementById(links[i].dataset.sectionId);
+      if (target && target.getBoundingClientRect().top <= 80) {
+        current = links[i];
+      }
+    }
+    if (current !== tocActiveLink) {
+      if (tocActiveLink) tocActiveLink.classList.remove('scholia-toc-active');
+      if (current) current.classList.add('scholia-toc-active');
+      tocActiveLink = current;
+    }
   }
 
   // ── Code block chrome ──────────────────────────────
@@ -2132,6 +2290,7 @@
     rerenderMath();
     rerenderCommentBodies();
     decorateCodeBlocks();
+    buildToc();
     setupCitationTooltips();
     reanchorAll();
     positionCards();
