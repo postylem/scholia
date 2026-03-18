@@ -1260,11 +1260,15 @@ a.scholia-toolbar-brand:hover {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius);
   padding: 0.15rem 0.5rem;
+  min-height: 1.6rem;
   font-size: 0.7rem;
   cursor: pointer;
   color: var(--s-text-dim);
   font-family: var(--s-sans);
   transition: color 0.15s, border-color 0.15s, background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .scholia-toolbar-btn:hover {
   color: var(--s-accent);
