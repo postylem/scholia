@@ -327,10 +327,10 @@
 
   // ── Math rendering ─────────────────────────────────
 
-  function rerenderMath() {
+  function renderMathIn(container) {
     if (!window.katex) return;
     // Pandoc --katex outputs <span class="math inline"> and <span class="math display">
-    var mathEls = docEl.querySelectorAll('span.math');
+    var mathEls = container.querySelectorAll('span.math');
     for (var i = 0; i < mathEls.length; i++) {
       var el = mathEls[i];
       var displayMode = el.classList.contains('display');
@@ -340,6 +340,10 @@
         // leave raw LaTeX visible on error
       }
     }
+  }
+
+  function rerenderMath() {
+    renderMathIn(docEl);
   }
 
   // ── Code block chrome ──────────────────────────────
@@ -707,6 +711,7 @@
           // Check cache first
           if (pandocCache.has(rawText)) {
             theBody.innerHTML = pandocCache.get(rawText);
+            renderMathIn(theBody);
             theBtn.classList.add('active');
             return;
           }
@@ -715,6 +720,7 @@
           pandocCallbacks.set(reqId, function (html) {
             pandocCache.set(rawText, html);
             theBody.innerHTML = html;
+            renderMathIn(theBody);
             theBtn.classList.add('active');
             theBtn.textContent = 'P';
           });
@@ -1075,6 +1081,7 @@
           }
           if (pandocCache.has(rawText)) {
             theBody.innerHTML = pandocCache.get(rawText);
+            renderMathIn(theBody);
             theBtn.classList.add('active');
             return;
           }
@@ -1082,6 +1089,7 @@
           pandocCallbacks.set(reqId, function (html) {
             pandocCache.set(rawText, html);
             theBody.innerHTML = html;
+            renderMathIn(theBody);
             theBtn.classList.add('active');
             theBtn.textContent = 'P';
           });
