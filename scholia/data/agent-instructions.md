@@ -96,6 +96,27 @@ When asked to review comments, "check the scholia," or equivalent:
 - **Parallelism**: for many independent threads, run multiple `scholia reply` calls in parallel with `-q`. Don't parallelize when one reply depends on a document edit from another, or when threads concern overlapping sections.
 - The human sees replies live in the browser sidebar.
 
+## Cross-references (pandoc-crossref)
+
+When writing or editing documents, use `pandoc-crossref` identifiers so that section numbers, figure numbers, etc. stay correct automatically — even when content is reordered.
+
+### Naming convention
+
+| Type     | Attribute on definition         | Reference syntax  | Renders as      |
+|----------|---------------------------------|-------------------|-----------------|
+| Section  | `## Methods {#sec:methods}`     | `@sec:methods`    | sec. 2          |
+| Figure   | `![Caption](img.png){#fig:arch}`| `@fig:arch`       | fig. 1          |
+| Table    | `: Caption {#tbl:results}`      | `@tbl:results`    | tbl. 1          |
+| Equation | `$$ E=mc^2 $$ {#eq:energy}`     | `@eq:energy`      | eq. 1           |
+| Listing  | `` {#lst:main} ``               | `@lst:main`       | lst. 1          |
+
+### Rules
+
+- Always use the `prefix:label` pattern (`sec:`, `fig:`, `tbl:`, `eq:`, `lst:`) — this is how `pandoc-crossref` dispatches reference types.
+- Never hard-code section/figure numbers (e.g. `[§3](#methods)`). Use `@sec:methods` instead — numbers update automatically when sections are reordered.
+- When creating new headings, always add an explicit id: `## New Section {#sec:new-section}`.
+- When referencing multiple items: `@sec:intro; @sec:methods` renders as "secs. 1, 2".
+
 ## Example Session
 
 ```

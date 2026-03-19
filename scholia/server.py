@@ -37,6 +37,7 @@ def _check_pandoc():
 _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
 _FRAGMENT_TEMPLATE = str(Path(__file__).parent / "pandoc-fragment.html")
+_HAS_CROSSREF = shutil.which("pandoc-crossref") is not None
 
 
 def _has_footnotes(md_text: str) -> bool:
@@ -52,6 +53,10 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
     cmd = [
         "pandoc",
         "--katex",
+    ]
+    if _HAS_CROSSREF:
+        cmd.extend(["--filter", "pandoc-crossref"])
+    cmd += [
         "--citeproc",
         "--section-divs",
         "--syntax-highlighting=pygments",

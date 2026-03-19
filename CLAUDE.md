@@ -17,3 +17,4 @@ Run `scholia skill-init` to install those instructions as a 'skill' globally or 
 ## Configuration
 
 - `SCHOLIA_USERNAME` env var sets creator name in comments (falls back to system username)
+- `pandoc-crossref` (recommended): if installed, scholia automatically uses it as a Pandoc filter, enabling `{#sec:id}` attributes and `@sec:id` cross-references

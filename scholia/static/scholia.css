@@ -70,7 +70,7 @@ body.scholia-dark {
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 3rem; }
 
 body {
   margin: 0;
@@ -79,13 +79,14 @@ body {
   font-family: var(--s-body);
   font-size: 1.1rem;
   line-height: 1.7;
+  overflow-x: hidden;
 }
 
 /* ── Layout ─────────────────────────────────────────── */
 
 #scholia-container {
   display: grid;
-  grid-template-columns: 1fr 4px var(--sidebar-width, 320px);
+  grid-template-columns: minmax(550px, 1fr) 4px minmax(200px, var(--sidebar-width, 320px));
   min-height: 100vh;
 }
 
@@ -103,6 +104,8 @@ body {
 #scholia-doc {
   padding: 2rem 2rem 4rem 6%;
   overflow-wrap: break-word;
+  min-width: 0;              /* allow grid to shrink doc column */
+  overflow-x: hidden;
 }
 
 /* Content elements: leave right margin for sidenotes */
@@ -272,6 +275,12 @@ input.margin-toggle { display: none; }
   margin-top: 2rem;
   margin-bottom: 0.5rem;
 }
+#scholia-doc section > h1 {
+  font-size: 1.8rem;
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 3px);
+  border-left: 3px solid var(--s-accent);
+}
 #scholia-doc h2 {
   font-size: 1.5rem;
   font-style: italic;
@@ -348,9 +357,9 @@ input.margin-toggle { display: none; }
   display: none;
   position: absolute;
   top: 100%;
-  left: 0;
+  right: 0;
+  width: min(28vw, calc(100vw - 1rem));
   min-width: 240px;
-  max-width: 340px;
   max-height: calc(100vh - 4rem);
   overflow-y: auto;
   background: var(--s-card);
@@ -367,7 +376,7 @@ input.margin-toggle { display: none; }
   display: block;
 }
 .scholia-toc-body {
-  padding: 0 0.3rem 0 0.8rem;
+  padding: 0 0.3rem 0 1.1rem;
 }
 .scholia-toc-body ul {
   list-style: none;
@@ -395,27 +404,24 @@ input.margin-toggle { display: none; }
   font-weight: 600;
 }
 /* Indent levels — all items at same level align regardless of chevron */
-.scholia-toc-body .scholia-toc-h2 { padding-left: 0.6rem; }
-.scholia-toc-body .scholia-toc-h3 { padding-left: 1.2rem; font-size: 0.68rem; }
+.scholia-toc-body .scholia-toc-h1 { padding-left: 0.3rem; font-size: 0.88rem; }
+.scholia-toc-body .scholia-toc-h2 { padding-left: 0.6rem; font-style: italic; }
+.scholia-toc-body .scholia-toc-h3 { padding-left: 1.2rem; font-size: 0.68rem; font-style: italic; }
 .scholia-toc-body .scholia-toc-h4 { padding-left: 1.8rem; font-size: 0.65rem; }
 
 /* Sub-TOC collapse */
 .scholia-toc-body li {
   position: relative;
 }
-.scholia-toc-body .scholia-toc-branch > span {
-  display: block;
-  padding: 0;
-  user-select: none;
-}
 .scholia-toc-body .scholia-toc-chevron {
   position: absolute;
-  left: -0.1rem;
+  left: -0.4rem;
   top: 0.35rem;
   font-size: 0.4rem;
   cursor: pointer;
   color: var(--s-text-dim);
   transition: transform 0.2s;
+  user-select: none;
 }
 .scholia-toc-body .scholia-toc-chevron:hover { color: var(--s-accent); }
 .scholia-toc-body .scholia-toc-branch.collapsed > ul { display: none; }
@@ -445,6 +451,9 @@ input.margin-toggle { display: none; }
 }
 
 #scholia-doc p { margin: 1rem 0; }
+
+/* Scale KaTeX to visually match et-book (Computer Modern runs ~10% larger) */
+#scholia-doc .katex { font-size: 0.95em; }
 
 #scholia-doc code {
   font-family: var(--s-mono);
@@ -523,6 +532,8 @@ input.margin-toggle { display: none; }
   font-family: var(--s-sans);
   font-size: 0.85rem;
   line-height: 1.5;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .scholia-empty {
@@ -1179,18 +1190,19 @@ mark.scholia-highlight.scholia-pulse {
 .scholia-offscreen-indicator {
   position: fixed;
   padding: 0.25rem 0.75rem;
-  background: var(--s-surface);
-  border-left: 1px solid var(--s-border);
+  background: var(--s-accent);
+  color: #fff;
+  border-left: 1px solid var(--s-accent);
   font-family: var(--s-sans);
   font-size: 0.7rem;
-  color: var(--s-text-dim);
+  font-weight: 600;
   text-align: center;
   z-index: 99;
   cursor: pointer;
   display: none;
 }
 .scholia-offscreen-indicator:hover {
-  color: var(--s-accent);
+  opacity: 0.85;
 }
 .scholia-offscreen-above {
   border-bottom: 1px solid var(--s-border);
@@ -1275,6 +1287,35 @@ a.scholia-toolbar-brand:hover {
   color: #fff;
   border-color: var(--s-accent);
 }
+
+/* Button group: merge adjacent buttons */
+.scholia-toolbar-group {
+  display: inline-flex;
+}
+.scholia-toolbar-group .scholia-toolbar-btn {
+  border-radius: 0;
+}
+.scholia-toolbar-group .scholia-toolbar-btn + .scholia-toolbar-btn {
+  margin-left: -1px;
+}
+.scholia-toolbar-group .scholia-toolbar-btn:hover,
+.scholia-toolbar-group .scholia-toolbar-btn.active {
+  z-index: 1;
+}
+.scholia-toolbar-group .scholia-toolbar-btn:first-child {
+  border-radius: var(--s-radius) 0 0 var(--s-radius);
+}
+.scholia-toolbar-group .scholia-toolbar-btn:last-child {
+  border-radius: 0 var(--s-radius) var(--s-radius) 0;
+}
+.scholia-toolbar-group .scholia-toolbar-btn:only-child {
+  border-radius: var(--s-radius);
+}
+/* Divider between adjacent active buttons */
+.scholia-toolbar-group .scholia-toolbar-btn.active + .scholia-toolbar-btn.active {
+  box-shadow: -1px 0 0 rgba(255, 255, 255, 0.3);
+}
+
 /* ── Options dropdown ─────────────────────────────── */
 
 .scholia-options-wrap {
@@ -1313,8 +1354,9 @@ a.scholia-toolbar-brand:hover {
 .scholia-options-toggle button {
   background: none;
   border: none;
-  padding: 0.1rem 0.4rem;
-  font-size: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  min-height: 1.6rem;
+  font-size: 0.7rem;
   font-family: var(--s-sans);
   cursor: pointer;
   color: var(--s-text-dim);
@@ -1355,6 +1397,58 @@ a.scholia-toolbar-brand:hover {
 /* Hide highlights when sidebar is hidden */
 #scholia-container.scholia-sidebar-hidden mark.scholia-highlight {
   background: transparent !important;
+}
+
+/* ── Compact mode: sidebar hidden, highlights stay ── */
+#scholia-container.scholia-compact {
+  grid-template-columns: 1fr 0px 0px;
+}
+#scholia-container.scholia-compact #scholia-resize-handle {
+  display: none;
+}
+#scholia-container.scholia-compact #scholia-sidebar {
+  overflow: hidden;
+  padding: 0;
+  opacity: 0;
+  border-left-color: transparent;
+  pointer-events: none;
+}
+
+/* Compact new-comment overlay */
+.scholia-compact-comment {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 500;
+  background: var(--s-card);
+  border-top: 1px solid var(--s-border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+  padding: 0.65rem 1rem;
+  font-family: var(--s-sans);
+  font-size: 0.85rem;
+}
+.scholia-compact-comment textarea {
+  width: 100%;
+  background: #fff;
+  color: var(--s-text);
+  border: 1px solid var(--s-border);
+  border-radius: 3px;
+  padding: 0.45rem;
+  font-family: var(--s-sans);
+  font-size: 0.82rem;
+  resize: vertical;
+  min-height: 3em;
+}
+.scholia-compact-comment textarea:focus {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 2px var(--s-accent-dim);
+}
+body.scholia-dark .scholia-compact-comment { background: var(--s-surface); }
+body.scholia-dark .scholia-compact-comment textarea {
+  background: var(--s-surface);
+  color: var(--s-text);
 }
 
 /* ── No-sidenotes: widen content ───────────────────── */
@@ -1486,6 +1580,7 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
 .scholia-overlay-panel {
   background: var(--s-card);
   width: min(80vw, 800px);
+  max-width: calc(100vw - 1rem);
   max-height: 90vh;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);

@@ -21,7 +21,7 @@ Scholia provides a simple interactive comment-thread interface on top of rendere
 
 ## Install
 
-Requires Python 3.10+ and [Pandoc](https://pandoc.org/installing.html).
+Requires Python 3.10+ and [Pandoc](https://pandoc.org/installing.html). Optionally install [`pandoc-crossref`](https://github.com/lierdakil/pandoc-crossref) for cross-reference support (`{#sec:id}` attributes and `@sec:id` references) — scholia auto-detects and uses it if available.
 
 ### Step 1: Install the `scholia` CLI
 

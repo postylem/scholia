@@ -17,11 +17,19 @@
   var resizeHandle = document.getElementById('scholia-resize-handle');
   var highlights = new Map();   // annotation id → [mark elements]
   var orphanIds = new Set();
-  var filterMode = 'open';      // 'open' or 'all'
+  var showResolved = false;
+  var showRead = true;
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
   var sidebarHidden = false;
+  var compactMode = false;   // auto-set when viewport too narrow for sidebar
   var darkMode = false;
+  var uiZoom = 100;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
+
+  function applyZoom() {
+    document.documentElement.style.fontSize = uiZoom + '%';
+    positionCards();
+  }
 
   // ── Markdown rendering ─────────────────────────────
 
@@ -141,8 +149,7 @@
   // ── Toolbar ──────────────────────────────────────────
 
   // Sidebar toggle icon: panel sliding out (open) or in (closed)
-  var sidebarIconOpen = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="12" height="10" rx="1.5"/><line x1="9" y1="2" x2="9" y2="12"/><line x1="5.5" y1="6" x2="7" y2="7" /><line x1="5.5" y1="8" x2="7" y2="7" /></svg>';
-  var sidebarIconClosed = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="2" width="12" height="10" rx="1.5"/><line x1="9" y1="2" x2="9" y2="12"/><line x1="7" y1="6" x2="5.5" y2="7" /><line x1="7" y1="8" x2="5.5" y2="7" /></svg>';
+  var commentIcon = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H5l-3 2.5v-2.5H2a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/></svg>';
 
   function renderToolbar() {
     toolbarEl.innerHTML = '';
@@ -282,6 +289,44 @@
       fnRow.appendChild(fnTd2);
       tbl.appendChild(fnRow);
 
+      // Zoom row
+      var zoomRow = document.createElement('tr');
+      var zoomTd1 = document.createElement('td');
+      zoomTd1.textContent = 'Zoom';
+      zoomRow.appendChild(zoomTd1);
+      var zoomTd2 = document.createElement('td');
+      var zoomGroup = document.createElement('span');
+      zoomGroup.className = 'scholia-options-toggle';
+      var zoomMinus = document.createElement('button');
+      zoomMinus.textContent = '\u2212';
+      zoomMinus.addEventListener('click', function () {
+        uiZoom = Math.max(70, uiZoom - 10);
+        applyZoom();
+        zoomLabel.textContent = uiZoom + '%';
+      });
+      var zoomLabel = document.createElement('button');
+      zoomLabel.textContent = uiZoom + '%';
+      zoomLabel.style.cursor = 'default';
+      zoomLabel.style.minWidth = '3em';
+      zoomLabel.addEventListener('click', function () {
+        uiZoom = 100;
+        applyZoom();
+        zoomLabel.textContent = uiZoom + '%';
+      });
+      var zoomPlus = document.createElement('button');
+      zoomPlus.textContent = '+';
+      zoomPlus.addEventListener('click', function () {
+        uiZoom = Math.min(150, uiZoom + 10);
+        applyZoom();
+        zoomLabel.textContent = uiZoom + '%';
+      });
+      zoomGroup.appendChild(zoomMinus);
+      zoomGroup.appendChild(zoomLabel);
+      zoomGroup.appendChild(zoomPlus);
+      zoomTd2.appendChild(zoomGroup);
+      zoomRow.appendChild(zoomTd2);
+      tbl.appendChild(zoomRow);
+
       menu.appendChild(tbl);
 
       optionsWrap.appendChild(menu);
@@ -296,43 +341,60 @@
       document.removeEventListener('click', closeMenu);
     });
 
+    var btnGroup = document.createElement('span');
+    btnGroup.className = 'scholia-toolbar-group';
+
     if (!sidebarHidden) {
-      var filterBtn = document.createElement('button');
-      filterBtn.className = 'scholia-toolbar-btn';
-      filterBtn.textContent = filterMode === 'open' ? 'Showing: open threads' : 'Showing: all threads';
-      filterBtn.title = 'Toggle open/all threads';
-      filterBtn.addEventListener('click', function () {
-        filterMode = filterMode === 'open' ? 'all' : 'open';
+      var resolvedBtn = document.createElement('button');
+      resolvedBtn.className = 'scholia-toolbar-btn' + (showResolved ? ' active' : '');
+      resolvedBtn.textContent = 'Resolved';
+      resolvedBtn.title = showResolved ? 'Hide resolved threads' : 'Show resolved threads';
+      resolvedBtn.addEventListener('click', function () {
+        showResolved = !showResolved;
         renderToolbar();
         scheduleRender();
       });
-      toolbarEl.appendChild(filterBtn);
+      btnGroup.appendChild(resolvedBtn);
 
-      var sbBtn = document.createElement('button');
-      sbBtn.className = 'scholia-toolbar-btn';
-      sbBtn.innerHTML = sidebarIconOpen;
-      sbBtn.title = 'Hide comment sidebar';
-      sbBtn.addEventListener('click', function () {
+      var readBtn = document.createElement('button');
+      readBtn.className = 'scholia-toolbar-btn' + (showRead ? ' active' : '');
+      readBtn.textContent = 'Read';
+      readBtn.title = showRead ? 'Hide read threads' : 'Show read threads';
+      readBtn.addEventListener('click', function () {
+        showRead = !showRead;
+        renderToolbar();
+        scheduleRender();
+      });
+      btnGroup.appendChild(readBtn);
+    }
+
+    var cbBtn = document.createElement('button');
+    cbBtn.className = 'scholia-toolbar-btn' + (!sidebarHidden ? ' active' : '');
+    cbBtn.innerHTML = commentIcon;
+    cbBtn.title = !sidebarHidden ? 'Hide comments' : 'Show comments';
+    cbBtn.addEventListener('click', function () {
+      if (sidebarHidden) {
+        sidebarHidden = false;
+        containerEl.classList.remove('scholia-sidebar-hidden');
+        scheduleRender();
+        // Reposition after grid transition completes
+        containerEl.addEventListener('transitionend', function handler(e) {
+          if (e.propertyName === 'grid-template-columns') {
+            containerEl.removeEventListener('transitionend', handler);
+            positionCards();
+          }
+        });
+      } else {
         sidebarHidden = true;
         containerEl.classList.add('scholia-sidebar-hidden');
         clearAllHighlights();
         dismissCommentPrompt();
-        renderToolbar();
-      });
-      toolbarEl.appendChild(sbBtn);
-    } else {
-      var sbBtn = document.createElement('button');
-      sbBtn.className = 'scholia-toolbar-btn';
-      sbBtn.innerHTML = sidebarIconClosed;
-      sbBtn.title = 'Show comment sidebar';
-      sbBtn.addEventListener('click', function () {
-        sidebarHidden = false;
-        containerEl.classList.remove('scholia-sidebar-hidden');
-        scheduleRender();
-        renderToolbar();
-      });
-      toolbarEl.appendChild(sbBtn);
-    }
+      }
+      renderToolbar();
+    });
+    btnGroup.appendChild(cbBtn);
+
+    toolbarEl.appendChild(btnGroup);
   }
 
   function clearAllHighlights() {
@@ -354,12 +416,13 @@
   function renderMathIn(container) {
     if (!window.katex) return;
     // Pandoc --katex outputs <span class="math inline"> and <span class="math display">
-    var mathEls = container.querySelectorAll('span.math');
+    var mathEls = container.querySelectorAll('span.math:not(.scholia-math-rendered)');
     for (var i = 0; i < mathEls.length; i++) {
       var el = mathEls[i];
       var displayMode = el.classList.contains('display');
       try {
         katex.render(el.textContent, el, { displayMode: displayMode, throwOnError: false });
+        el.classList.add('scholia-math-rendered');
       } catch (e) {
         // leave raw LaTeX visible on error
       }
@@ -398,6 +461,17 @@
     }
     if (items.length === 0) return;
 
+    // Clean heading HTML for ToC: flatten citations to text, keep math spans
+    function tocHTML(heading) {
+      var tmp = document.createElement('span');
+      tmp.innerHTML = heading.innerHTML;
+      var cites = tmp.querySelectorAll('.citation');
+      for (var i = 0; i < cites.length; i++) {
+        cites[i].replaceWith(document.createTextNode(cites[i].textContent));
+      }
+      return tmp.innerHTML;
+    }
+
     tocEl = document.createElement('div');
     tocEl.className = 'scholia-toc';
 
@@ -419,26 +493,23 @@
       var li = document.createElement('li');
       if (hasChildren) {
         li.className = 'scholia-toc-branch';
-        var branchSpan = document.createElement('span');
-        branchSpan.className = 'scholia-toc-h' + item.level;
         var chevron = document.createElement('span');
         chevron.className = 'scholia-toc-chevron';
         chevron.textContent = '\u25BC';
-        branchSpan.appendChild(chevron);
-        // chevron is absolutely positioned, no space needed
-        var a = document.createElement('a');
-        a.href = '#' + item.id;
-        a.innerHTML = item.heading.innerHTML;
-        a.dataset.sectionId = item.id;
-        a.addEventListener('click', tocClickHandler);
-        branchSpan.appendChild(a);
         chevron.addEventListener('click', (function (theLi) {
           return function (e) {
             e.stopPropagation();
             theLi.classList.toggle('collapsed');
           };
         })(li));
-        li.appendChild(branchSpan);
+        li.appendChild(chevron);
+        var a = document.createElement('a');
+        a.href = '#' + item.id;
+        a.className = 'scholia-toc-h' + item.level;
+        a.innerHTML = tocHTML(item.heading);
+        a.dataset.sectionId = item.id;
+        a.addEventListener('click', tocClickHandler);
+        li.appendChild(a);
         var childUl = document.createElement('ul');
         li.appendChild(childUl);
         stack.push({ ul: childUl, level: item.level });
@@ -446,7 +517,7 @@
         var a = document.createElement('a');
         a.href = '#' + item.id;
         a.className = 'scholia-toc-h' + item.level;
-        a.innerHTML = item.heading.innerHTML;
+        a.innerHTML = tocHTML(item.heading);
         a.dataset.sectionId = item.id;
         a.addEventListener('click', tocClickHandler);
         li.appendChild(a);
@@ -696,16 +767,22 @@
     for (var i = 0; i < comments.length; i++) {
       var ann = comments[i];
       var status = ann['scholia:status'] || 'open';
-      if (filterMode === 'open' && status !== 'open') continue;
+      if (!showResolved && status === 'resolved') continue;
+      if (!showRead && !isUnread(ann)) continue;
       filtered.push(ann);
     }
 
     if (filtered.length === 0) {
       var empty = document.createElement('div');
       empty.className = 'scholia-empty';
-      empty.textContent = filterMode === 'open'
-        ? 'No open comments. Select text to add one.'
-        : 'No comments yet. Select text to add one.';
+      var reason = !showResolved && !showRead
+        ? 'No unread open comments.'
+        : !showResolved
+          ? 'No open comments.'
+          : !showRead
+            ? 'No unresolved unread comments.'
+            : 'No comments yet.';
+      empty.textContent = reason + ' Select text to add one.';
       sidebarEl.appendChild(empty);
       return;
     }
@@ -1072,6 +1149,7 @@
       resolveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         wsSend({ type: 'resolve', annotation_id: ann.id });
+        markRead(ann.id, card);
       });
       replyBtnRow.appendChild(resolveBtn);
     } else if (status === 'resolved') {
@@ -1348,6 +1426,8 @@
       resolveBtn.textContent = 'Resolve';
       resolveBtn.addEventListener('click', function () {
         wsSend({ type: 'resolve', annotation_id: ann.id });
+        wsSend({ type: 'mark_read', annotation_id: ann.id });
+        state[ann.id] = { lastReadAt: new Date().toISOString() };
       });
       btnRow.appendChild(resolveBtn);
     } else {
@@ -1426,7 +1506,8 @@
       var ann = comments[i];
       var status = ann['scholia:status'] || 'open';
 
-      if (filterMode === 'open' && status === 'resolved') continue;
+      if (!showResolved && status === 'resolved') continue;
+      if (!showRead && !isUnread(ann)) continue;
 
       var selector = ann.target && ann.target.selector;
       if (!selector || !selector.exact) {
@@ -1731,6 +1812,20 @@
     setAnchorHighlight(mark.dataset.annotationId, false);
   });
 
+  // ── Compact mode: click highlight → open overlay ───
+  docEl.addEventListener('click', function (e) {
+    if (!compactMode) return;
+    var mark = e.target.closest && e.target.closest('.scholia-highlight');
+    if (!mark) return;
+    var annId = mark.dataset.annotationId;
+    for (var i = 0; i < comments.length; i++) {
+      if (comments[i].id === annId) {
+        openOverlay(comments[i]);
+        return;
+      }
+    }
+  });
+
   // ── Text selection → new comment ───────────────────
   // Flow: user selects text → lightweight prompt appears in sidebar aligned
   // with the selection → native selection stays visible (no yellow highlight yet).
@@ -1742,7 +1837,7 @@
   var pendingSelector = null;
 
   docEl.addEventListener('mouseup', function () {
-    if (sidebarHidden) return;
+    if (sidebarHidden && !compactMode) return;
     if (reanchorAnnotationId) return;  // re-anchor mode handles selection
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return;
@@ -1755,6 +1850,11 @@
 
     var selector = TextQuoteAnchor.fromRange(docEl, range);
     if (!selector.exact.trim()) return;
+
+    if (compactMode) {
+      showCompactCommentForm(selector);
+      return;
+    }
 
     // Position: at selection top, or viewport top if selection starts off-screen
     var rangeRect = range.getBoundingClientRect();
@@ -1901,13 +2001,20 @@
 
   // Dismiss on mousedown outside the form
   document.addEventListener('mousedown', function (e) {
-    if (!pendingForm) return;
-    if (pendingForm.contains(e.target)) return;
-    dismissCommentPrompt();
+    if (pendingForm && !pendingForm.contains(e.target)) {
+      dismissCommentPrompt();
+    }
+    if (compactForm && !compactForm.contains(e.target)) {
+      dismissCompactComment();
+    }
   });
 
   // Forward keyboard to textarea when prompt is visible but not focused
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && compactForm) {
+      dismissCompactComment();
+      return;
+    }
     if (sidebarHidden || !pendingForm) return;
     var textarea = pendingForm.querySelector('textarea');
     if (!textarea || document.activeElement === textarea) return;
@@ -1935,6 +2042,118 @@
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) dismissCommentPrompt();
   });
+
+  // ── Compact mode: bottom-sheet new comment form ────
+
+  var compactForm = null;
+  var compactSelector = null;
+
+  function showCompactCommentForm(selector) {
+    dismissCompactComment();
+    compactSelector = selector;
+
+    // Highlight the selected text
+    var r = TextQuoteAnchor.toRange(docEl, selector);
+    if (r) {
+      window.getSelection().removeAllRanges();
+      var marks = wrapRange(r, '__pending__');
+      highlights.set('__pending__', marks);
+    }
+
+    var form = document.createElement('div');
+    form.className = 'scholia-compact-comment';
+
+    var anchorDiv = document.createElement('div');
+    anchorDiv.className = 'scholia-new-comment-anchor';
+    var excerpt = selector.exact.slice(0, 80);
+    anchorDiv.textContent = '\u201c' + excerpt + (selector.exact.length > 80 ? '\u2026' : '') + '\u201d';
+    form.appendChild(anchorDiv);
+
+    var textarea = document.createElement('textarea');
+    textarea.name = 'compact-new-comment';
+    textarea.placeholder = 'Add a comment\u2026';
+    textarea.rows = 2;
+    autoGrow(textarea);
+    form.appendChild(textarea);
+
+    var actions = document.createElement('div');
+    actions.className = 'scholia-new-comment-actions';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'scholia-btn scholia-btn-cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      dismissCompactComment();
+    });
+    actions.appendChild(cancelBtn);
+
+    var submitBtn = document.createElement('button');
+    submitBtn.className = 'scholia-btn scholia-btn-submit';
+    submitBtn.textContent = 'Comment';
+    submitBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var text = textarea.value.trim();
+      if (!text) return;
+      wsSend({
+        type: 'new_comment',
+        exact: compactSelector.exact,
+        prefix: compactSelector.prefix,
+        suffix: compactSelector.suffix,
+        body: text
+      });
+      dismissCompactComment();
+    });
+    actions.appendChild(submitBtn);
+
+    var compactPreviewDiv = null;
+    var previewBtn = document.createElement('button');
+    previewBtn.className = 'scholia-btn scholia-btn-ghost';
+    previewBtn.textContent = 'Preview';
+    previewBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (compactPreviewDiv) {
+        compactPreviewDiv.remove();
+        compactPreviewDiv = null;
+        textarea.style.display = '';
+        previewBtn.textContent = 'Preview';
+      } else {
+        compactPreviewDiv = document.createElement('div');
+        compactPreviewDiv.className = 'scholia-message-body scholia-preview-body';
+        compactPreviewDiv.innerHTML = renderCommentBody(textarea.value);
+        textarea.style.display = 'none';
+        form.insertBefore(compactPreviewDiv, actions);
+        previewBtn.textContent = 'Edit';
+      }
+    });
+    actions.appendChild(previewBtn);
+
+    form.appendChild(actions);
+    document.body.appendChild(form);
+    compactForm = form;
+    textarea.focus();
+  }
+
+  function dismissCompactComment() {
+    if (compactForm) {
+      compactForm.remove();
+      compactForm = null;
+    }
+    compactSelector = null;
+    // Remove pending highlight marks
+    var marks = highlights.get('__pending__');
+    if (marks) {
+      for (var i = 0; i < marks.length; i++) {
+        var m = marks[i];
+        var p = m.parentNode;
+        if (p) {
+          while (m.firstChild) p.insertBefore(m.firstChild, m);
+          p.removeChild(m);
+        }
+      }
+      highlights.delete('__pending__');
+    }
+  }
 
   // ── Re-anchor orphaned threads ─────────────────────
   // Click orphan ? icon → inline prompt on card → select text → auto-accepts
@@ -2327,6 +2546,32 @@
 
   // Reposition cards on resize (layout may change)
   window.addEventListener('resize', positionCards);
+
+  // ── Compact mode: viewport too narrow for sidebar ──
+  var COMPACT_ENTER = 754;
+  var COMPACT_LEAVE = 800;
+
+  function checkCompact() {
+    var vw = window.innerWidth;
+    if (!compactMode && vw < COMPACT_ENTER) {
+      compactMode = true;
+      containerEl.classList.add('scholia-compact');
+      dismissCommentPrompt();
+      if (!sidebarHidden) { reanchorAll(); }
+      renderToolbar();
+    } else if (compactMode && vw > COMPACT_LEAVE) {
+      compactMode = false;
+      containerEl.classList.remove('scholia-compact');
+      dismissCompactComment();
+      if (!sidebarHidden) {
+        scheduleRender();
+      }
+      renderToolbar();
+    }
+  }
+
+  window.addEventListener('resize', checkCompact);
+  checkCompact();
 
   // Responsive sidenotes: toggle based on doc pane width, not viewport.
   // Hysteresis prevents oscillation at the boundary — content width changes
