@@ -70,7 +70,7 @@ scholia skill-init ~/.codex/skills/scholia/SKILL.md      # Codex (global)
 scholia skill-init ~/.cursor/skills/scholia/SKILL.md     # Cursor (global)
 ```
 
-This copies a single markdown file describing the CLI commands and review workflow. Inspect it at [`data/agent-instructions.md`](data/agent-instructions.md) to see exactly what your agent will be told.
+This copies a single markdown file describing the CLI commands and review workflow. Inspect it at [`scholia/data/agent-instructions.md`](scholia/data/agent-instructions.md) to see exactly what your agent will be told.
 
 ## Files
 
