@@ -7,3 +7,6 @@ scholia/_version.py
 *.scholia.state.json
 # Uncomment to also ignore annotation thread data:
 # *.scholia.jsonl
+
+# Local design docs / plans (not version-controlled)
+docs/superpowers/
