@@ -179,20 +179,23 @@ async def build_page(
 
 
 class _FileChangeHandler(FileSystemEventHandler):
-    """Watch .md and .scholia.jsonl for changes."""
+    """Watch for changes to any registered doc or its .scholia.jsonl."""
 
-    def __init__(self, doc_path: Path, loop: asyncio.AbstractEventLoop, callback):
-        self.doc_path = doc_path.resolve()
-        self.scholia_path = annotation_path(doc_path).resolve()
+    def __init__(self, server: 'ScholiaServer', loop: asyncio.AbstractEventLoop):
+        self.server = server
         self.loop = loop
-        self.callback = callback
 
     def _check_path(self, path: Path):
         resolved = path.resolve()
-        if resolved == self.doc_path:
-            self.loop.call_soon_threadsafe(self.callback, self.doc_path, "doc")
-        elif resolved == self.scholia_path:
-            self.loop.call_soon_threadsafe(self.callback, self.doc_path, "comments")
+        for doc_path in list(self.server.ws_clients.keys()):
+            if resolved == doc_path:
+                self.loop.call_soon_threadsafe(
+                    self.server._on_file_change, doc_path, "doc"
+                )
+            elif resolved == annotation_path(doc_path).resolve():
+                self.loop.call_soon_threadsafe(
+                    self.server._on_file_change, doc_path, "comments"
+                )
 
     def on_modified(self, event):
         self._check_path(Path(event.src_path))
@@ -201,7 +204,6 @@ class _FileChangeHandler(FileSystemEventHandler):
         self._check_path(Path(event.src_path))
 
     def on_moved(self, event):
-        # Atomic writes: temp file renamed over target
         self._check_path(Path(event.dest_path))
 
 
@@ -223,6 +225,8 @@ class ScholiaServer:
         self._setup_routes()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._debounce_handles: dict[tuple, asyncio.TimerHandle] = {}
+        self._observers: dict[Path, Observer] = {}  # parent_dir -> Observer
+        self._observer_refcount: dict[Path, int] = {}  # parent_dir -> count
 
     def _load_template(self) -> str:
         template_path = Path(__file__).parent / "template.html"
@@ -335,6 +339,8 @@ class ScholiaServer:
                 self.ws_clients[doc].discard(ws)
                 if not self.ws_clients[doc]:
                     del self.ws_clients[doc]
+            if doc:
+                self._stop_watching(doc)
         return ws
 
     async def _handle_ws_message(self, data: str, ws: web.WebSocketResponse):
@@ -347,6 +353,8 @@ class ScholiaServer:
                 if file_path not in self.ws_clients:
                     self.ws_clients[file_path] = set()
                 self.ws_clients[file_path].add(ws)
+                if self._loop:
+                    self._start_watching(file_path)
                 return
             doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
@@ -450,6 +458,32 @@ class ScholiaServer:
             self.ws_file.pop(ws, None)
             self.ws_sidenotes.pop(ws, None)
 
+    def _start_watching(self, doc_path: Path):
+        """Start watching doc_path's parent directory if not already watched."""
+        parent = doc_path.parent.resolve()
+        if parent in self._observers:
+            self._observer_refcount[parent] += 1
+            return
+        handler = _FileChangeHandler(self, self._loop)
+        observer = Observer()
+        observer.schedule(handler, str(parent), recursive=False)
+        observer.start()
+        self._observers[parent] = observer
+        self._observer_refcount[parent] = 1
+
+    def _stop_watching(self, doc_path: Path):
+        """Decrement refcount; stop observer if it reaches zero."""
+        parent = doc_path.parent.resolve()
+        if parent not in self._observer_refcount:
+            return
+        self._observer_refcount[parent] -= 1
+        if self._observer_refcount[parent] <= 0:
+            observer = self._observers.pop(parent, None)
+            del self._observer_refcount[parent]
+            if observer:
+                observer.stop()
+                observer.join(timeout=1)
+
     def _on_file_change(self, doc_path: Path, change_type: str):
         """Debounced file change handler (called from watchdog thread via call_soon_threadsafe)."""
         key = (doc_path, change_type)
@@ -474,11 +508,8 @@ class ScholiaServer:
         for sig in (signal.SIGINT, signal.SIGTERM):
             self._loop.add_signal_handler(sig, _request_stop)
 
-        # Start watchdog
-        handler = _FileChangeHandler(self.doc_path, self._loop, self._on_file_change)
-        observer = Observer()
-        observer.schedule(handler, str(self.doc_path.parent), recursive=False)
-        observer.start()
+        # Start watchdog for the initial document
+        self._start_watching(self.doc_path)
 
         # Start web server
         runner = web.AppRunner(self.app)
@@ -509,13 +540,19 @@ class ScholiaServer:
         await stop_event.wait()
 
         # Close all WebSocket connections so runner.cleanup() doesn't block
-        for clients in self.ws_clients.values():
+        for clients in list(self.ws_clients.values()):
             for ws in list(clients):
                 await ws.close()
         self.ws_clients.clear()
         self.ws_file.clear()
         self.ws_sidenotes.clear()
 
-        observer.stop()
-        observer.join(timeout=1)
+        # Stop all observers
+        for observer in self._observers.values():
+            observer.stop()
+        for observer in self._observers.values():
+            observer.join(timeout=1)
+        self._observers.clear()
+        self._observer_refcount.clear()
+
         await runner.cleanup()
