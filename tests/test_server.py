@@ -51,6 +51,7 @@ async def test_static_files(client):
 @pytest.mark.asyncio
 async def test_ws_new_comment(client, tmp_doc):
     ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
     await ws.send_json({
         "type": "new_comment",
         "exact": "Some text",
@@ -68,6 +69,7 @@ async def test_ws_new_comment(client, tmp_doc):
 async def test_ws_reply(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
     await ws.send_json({
         "type": "reply",
         "annotation_id": ann["id"],
@@ -83,6 +85,7 @@ async def test_ws_reply(client, tmp_doc):
 async def test_ws_resolve(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
     await ws.send_json({
         "type": "resolve",
         "annotation_id": ann["id"],
@@ -100,6 +103,7 @@ async def test_ws_resolve(client, tmp_doc):
 async def test_ws_edit_body(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="original")
     ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
     await ws.send_json({
         "type": "edit_body",
         "annotation_id": ann["id"],
@@ -114,6 +118,7 @@ async def test_ws_edit_body(client, tmp_doc):
 async def test_ws_mark_read(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
     await ws.send_json({
         "type": "mark_read",
         "annotation_id": ann["id"],
@@ -125,8 +130,9 @@ async def test_ws_mark_read(client, tmp_doc):
 
 
 @pytest.mark.asyncio
-async def test_ws_render_markdown(client):
+async def test_ws_render_markdown(client, tmp_doc):
     ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
     await ws.send_json({
         "type": "render_markdown",
         "text": "**bold** and *italic*",
@@ -144,6 +150,7 @@ async def test_ws_render_markdown(client):
 async def test_ws_mark_unread(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
     await ws.send_json({"type": "mark_read", "annotation_id": ann["id"]})
     await ws.send_json({"type": "mark_unread", "annotation_id": ann["id"]})
     await ws.close()
@@ -328,3 +335,44 @@ async def test_index_render_error(client, tmp_doc):
     text = await resp.text()
     assert "scholia-container" in text  # still a valid page
     assert "error" in text.lower()
+
+
+# ── Per-file WebSocket tracking tests ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_ws_watch_registers_file(client, tmp_doc):
+    """WS client sending 'watch' is registered for that file."""
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    await ws.send_json({
+        "type": "new_comment",
+        "exact": "Some text",
+        "prefix": "",
+        "suffix": "",
+        "body": "after watch",
+    })
+    await ws.close()
+    comments = load_comments(tmp_doc)
+    assert len(comments) == 1
+    assert comments[0]["body"][0]["value"] == "after watch"
+
+
+@pytest.mark.asyncio
+async def test_ws_operations_use_watched_file(client, tmp_doc):
+    """WS operations target the watched file, not the default doc."""
+    other = tmp_doc.parent / "other.md"
+    other.write_text("---\ntitle: Other\n---\n\nOther text.\n")
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(other.resolve())})
+    await ws.send_json({
+        "type": "new_comment",
+        "exact": "Other text",
+        "prefix": "",
+        "suffix": "",
+        "body": "comment on other",
+    })
+    await ws.close()
+    from scholia.comments import load_comments
+    assert len(load_comments(other)) == 1
+    assert len(load_comments(tmp_doc)) == 0

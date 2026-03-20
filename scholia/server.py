@@ -55,7 +55,11 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         "--katex",
     ]
     if _HAS_CROSSREF:
-        cmd.extend(["--filter", "pandoc-crossref"])
+        cmd.extend([
+            "--filter", "pandoc-crossref",
+            "--metadata=linkReferences:true",
+            "--metadata=secPrefix:§",
+        ])
     cmd += [
         "--citeproc",
         "--section-divs",
@@ -186,9 +190,9 @@ class _FileChangeHandler(FileSystemEventHandler):
     def _check_path(self, path: Path):
         resolved = path.resolve()
         if resolved == self.doc_path:
-            self.loop.call_soon_threadsafe(self.callback, "doc")
+            self.loop.call_soon_threadsafe(self.callback, self.doc_path, "doc")
         elif resolved == self.scholia_path:
-            self.loop.call_soon_threadsafe(self.callback, "comments")
+            self.loop.call_soon_threadsafe(self.callback, self.doc_path, "comments")
 
     def on_modified(self, event):
         self._check_path(Path(event.src_path))
@@ -211,15 +215,14 @@ class ScholiaServer:
         self.host = host
         self.port = port
         self.launch_dir = Path.cwd().resolve()
-        self.ws_clients: set[web.WebSocketResponse] = set()
-        # Auto-detect sidenotes: on if doc has footnotes
-        md_text = self.doc_path.read_text(encoding="utf-8")
-        self.sidenotes_enabled = _has_footnotes(md_text)
+        self.ws_clients: dict[Path, set[web.WebSocketResponse]] = {}
+        self.ws_file: dict[web.WebSocketResponse, Path] = {}
+        self.ws_sidenotes: dict[web.WebSocketResponse, bool] = {}
         self.template = self._load_template()
         self.app = web.Application()
         self._setup_routes()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._debounce_handles: dict[str, asyncio.TimerHandle] = {}
+        self._debounce_handles: dict[tuple, asyncio.TimerHandle] = {}
 
     def _load_template(self) -> str:
         template_path = Path(__file__).parent / "template.html"
@@ -319,7 +322,6 @@ class ScholiaServer:
     async def _handle_ws(self, request):
         ws = web.WebSocketResponse()
         await ws.prepare(request)
-        self.ws_clients.add(ws)
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
@@ -327,16 +329,29 @@ class ScholiaServer:
                 elif msg.type == web.WSMsgType.ERROR:
                     break
         finally:
-            self.ws_clients.discard(ws)
+            doc = self.ws_file.pop(ws, None)
+            self.ws_sidenotes.pop(ws, None)
+            if doc and doc in self.ws_clients:
+                self.ws_clients[doc].discard(ws)
+                if not self.ws_clients[doc]:
+                    del self.ws_clients[doc]
         return ws
 
     async def _handle_ws_message(self, data: str, ws: web.WebSocketResponse):
         try:
             msg = json.loads(data)
             msg_type = msg["type"]
+            if msg_type == "watch":
+                file_path = Path(msg["file"]).resolve()
+                self.ws_file[ws] = file_path
+                if file_path not in self.ws_clients:
+                    self.ws_clients[file_path] = set()
+                self.ws_clients[file_path].add(ws)
+                return
+            doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
                 append_comment(
-                    self.doc_path,
+                    doc,
                     exact=msg["exact"],
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
@@ -345,42 +360,42 @@ class ScholiaServer:
                 )
             elif msg_type == "reply":
                 append_reply(
-                    self.doc_path,
+                    doc,
                     annotation_id=msg["annotation_id"],
                     body_text=msg["body"],
                     creator=msg.get("creator", get_human_username()),
                 )
             elif msg_type == "edit_body":
                 edit_body(
-                    self.doc_path,
+                    doc,
                     annotation_id=msg["annotation_id"],
                     new_text=msg["body"],
                 )
             elif msg_type == "resolve":
-                resolve(self.doc_path, msg["annotation_id"])
-                mark_read(self.doc_path, msg["annotation_id"])
+                resolve(doc, msg["annotation_id"])
+                mark_read(doc, msg["annotation_id"])
             elif msg_type == "unresolve":
-                unresolve(self.doc_path, msg["annotation_id"])
+                unresolve(doc, msg["annotation_id"])
             elif msg_type == "toggle_sidenotes":
-                self.sidenotes_enabled = msg["enabled"]
-                await self._broadcast("doc")
+                self.ws_sidenotes[ws] = msg["enabled"]
+                await self._broadcast(doc, "doc")
             elif msg_type == "mark_read":
-                mark_read(self.doc_path, msg["annotation_id"])
+                mark_read(doc, msg["annotation_id"])
             elif msg_type == "mark_unread":
-                mark_unread(self.doc_path, msg["annotation_id"])
+                mark_unread(doc, msg["annotation_id"])
             elif msg_type == "reanchor":
                 reanchor(
-                    self.doc_path,
+                    doc,
                     annotation_id=msg["annotation_id"],
                     exact=msg["exact"],
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
                 )
             elif msg_type == "render_markdown":
-                bib, csl = _extract_bibliography(self.doc_path)
+                bib, csl = _extract_bibliography(doc)
                 html = await render_markdown_fragment(
                     msg["text"],
-                    cwd=str(self.doc_path.parent),
+                    cwd=str(doc.parent),
                     bibliography=bib,
                     csl=csl,
                 )
@@ -395,35 +410,54 @@ class ScholiaServer:
             except Exception:
                 pass
 
-    async def _broadcast(self, msg_type: str):
-        if msg_type == "doc":
-            html = await render_pandoc(
-                self.doc_path, sidenotes=self.sidenotes_enabled
-            )
-            payload = json.dumps({
-                "type": "doc_update",
-                "html": html,
-                "sidenotes": self.sidenotes_enabled,
-            })
-        else:
-            comments = load_comments(self.doc_path)
+    async def _broadcast(self, doc_path: Path, change_type: str):
+        clients = self.ws_clients.get(doc_path, set())
+        if not clients:
+            return
+
+        if change_type == "comments":
+            comments = load_comments(doc_path)
             payload = json.dumps({"type": "comments_update", "comments": comments})
+            closed = set()
+            for ws in clients:
+                try:
+                    await ws.send_str(payload)
+                except Exception:
+                    closed.add(ws)
+        else:
+            default_sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
+            by_sidenotes: dict[bool, list] = {}
+            for ws in clients:
+                sn = self.ws_sidenotes.get(ws, default_sidenotes)
+                by_sidenotes.setdefault(sn, []).append(ws)
 
-        closed = set()
-        for ws in self.ws_clients:
-            try:
-                await ws.send_str(payload)
-            except Exception:
-                closed.add(ws)
-        self.ws_clients -= closed
+            closed = set()
+            for sn_val, ws_list in by_sidenotes.items():
+                html = await render_pandoc(doc_path, sidenotes=sn_val)
+                payload = json.dumps({
+                    "type": "doc_update",
+                    "html": html,
+                    "sidenotes": sn_val,
+                })
+                for ws in ws_list:
+                    try:
+                        await ws.send_str(payload)
+                    except Exception:
+                        closed.add(ws)
 
-    def _on_file_change(self, change_type: str):
+        for ws in closed:
+            clients.discard(ws)
+            self.ws_file.pop(ws, None)
+            self.ws_sidenotes.pop(ws, None)
+
+    def _on_file_change(self, doc_path: Path, change_type: str):
         """Debounced file change handler (called from watchdog thread via call_soon_threadsafe)."""
-        handle = self._debounce_handles.get(change_type)
+        key = (doc_path, change_type)
+        handle = self._debounce_handles.get(key)
         if handle:
             handle.cancel()
-        self._debounce_handles[change_type] = self._loop.call_later(
-            0.2, lambda: asyncio.ensure_future(self._broadcast(change_type))
+        self._debounce_handles[key] = self._loop.call_later(
+            0.2, lambda dp=doc_path, ct=change_type: asyncio.ensure_future(self._broadcast(dp, ct))
         )
 
     async def start(self):
@@ -475,9 +509,12 @@ class ScholiaServer:
         await stop_event.wait()
 
         # Close all WebSocket connections so runner.cleanup() doesn't block
-        for ws in list(self.ws_clients):
-            await ws.close()
+        for clients in self.ws_clients.values():
+            for ws in list(clients):
+                await ws.close()
         self.ws_clients.clear()
+        self.ws_file.clear()
+        self.ws_sidenotes.clear()
 
         observer.stop()
         observer.join(timeout=1)
