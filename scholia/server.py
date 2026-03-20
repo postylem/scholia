@@ -38,6 +38,11 @@ _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
 _FRAGMENT_TEMPLATE = str(Path(__file__).parent / "pandoc-fragment.html")
 _HAS_CROSSREF = shutil.which("pandoc-crossref") is not None
+_MARKDOWN_EXTENSIONS = {".md", ".markdown", ".qmd", ".rmd"}
+
+
+def _is_markdown(path: Path) -> bool:
+    return path.suffix.lower() in _MARKDOWN_EXTENSIONS
 
 
 def _has_footnotes(md_text: str) -> bool:
@@ -163,19 +168,66 @@ async def build_page(
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     html = await render_pandoc(doc_path, sidenotes=sidenotes)
-    md_text = doc_path.read_text(encoding="utf-8")
-    title = _extract_title(md_text)
-    comments = load_comments(doc_path)
-    state = load_state(doc_path)
+    title = _extract_title(doc_path.read_text(encoding="utf-8"))
+    return _fill_template(
+        template, title=title, html=html, doc_path=doc_path,
+        display_path=display_path, sidenotes=sidenotes,
+        comments=load_comments(doc_path), state=load_state(doc_path),
+    )
+
+
+def _is_binary(path: Path) -> bool:
+    """Heuristic: file is binary if the first 8KB contains null bytes."""
+    try:
+        chunk = path.read_bytes()[:8192]
+        return b"\x00" in chunk
+    except OSError:
+        return False
+
+
+def _fill_template(
+    template: str, *, title: str, html: str, doc_path: Path,
+    display_path: str = "", sidenotes: bool = False,
+    comments: list | None = None, state: dict | None = None,
+    readonly: bool = False,
+) -> str:
+    """Fill the page template with the given content and metadata."""
     page = template.replace("{{TITLE}}", title)
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
-    page = page.replace("{{DOC_PATH}}", json.dumps(display_path or str(doc_path)))
-    page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
+    dp = (display_path or str(doc_path)).replace("\\", "/")
+    page = page.replace("{{DOC_PATH}}", json.dumps(dp))
+    page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path).replace("\\", "/")))
     page = page.replace("{{SIDENOTES_ENABLED}}", json.dumps(sidenotes))
-    page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments))
-    page = page.replace("{{STATE_JSON}}", json.dumps(state))
+    page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments or []))
+    page = page.replace("{{STATE_JSON}}", json.dumps(state or {}))
+    page = page.replace("{{READONLY}}", json.dumps(readonly))
     return page
+
+
+def _build_raw_page(
+    doc_path: Path, template: str, display_path: str = "", force: bool = False,
+) -> str:
+    """Build HTML page for a non-markdown file, displayed as raw text."""
+    import html as html_mod
+    if not force and _is_binary(doc_path):
+        content = (
+            '<p>This appears to be a binary file.</p>'
+            f'<p><a href="/?file={html_mod.escape(display_path or str(doc_path))}&amp;raw=1">'
+            'Display anyway</a></p>'
+        )
+        return _fill_template(
+            template, title=doc_path.name + " — Scholia", html=content,
+            doc_path=doc_path, display_path=display_path, readonly=True,
+        )
+    raw = doc_path.read_text(encoding="utf-8", errors="replace")
+    escaped = html_mod.escape(raw)
+    content = f'<pre class="scholia-raw-file"><code>{escaped}</code></pre>'
+    return _fill_template(
+        template, title=doc_path.name + " — Scholia", html=content,
+        doc_path=doc_path, display_path=display_path,
+        comments=load_comments(doc_path), state=load_state(doc_path),
+    )
 
 
 class _FileChangeHandler(FileSystemEventHandler):
@@ -259,38 +311,38 @@ class ScholiaServer:
             display = self.display_path
 
         try:
-            sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
-            page = await build_page(
-                doc_path, self.template,
-                sidenotes=sidenotes,
-                display_path=display,
-            )
+            if _is_markdown(doc_path):
+                sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
+                page = await build_page(
+                    doc_path, self.template,
+                    sidenotes=sidenotes,
+                    display_path=display,
+                )
+            else:
+                force_raw = request.query.get("raw") == "1"
+                page = _build_raw_page(
+                    doc_path, self.template, display_path=display, force=force_raw,
+                )
         except (FileNotFoundError, OSError) as e:
+            import html as html_mod
             error_html = (
-                '<div style="padding:2rem;color:#c33;font-family:sans-serif;">'
-                f'<h2>File not found</h2><p>{doc_path}</p></div>'
+                '<h2>File not found</h2>'
+                f'<p><code>{html_mod.escape(str(doc_path))}</code></p>'
             )
-            page = self.template.replace("{{TITLE}}", "Error — Scholia")
-            page = page.replace("{{PANDOC_HTML}}", error_html)
-            page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
-            page = page.replace("{{DOC_PATH}}", json.dumps(display))
-            page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
-            page = page.replace("{{SIDENOTES_ENABLED}}", "false")
-            page = page.replace("{{COMMENTS_JSON}}", "[]")
-            page = page.replace("{{STATE_JSON}}", "{}")
+            page = _fill_template(
+                self.template, title="Error — Scholia", html=error_html,
+                doc_path=doc_path, display_path=display, readonly=True,
+            )
         except subprocess.CalledProcessError as e:
+            import html as html_mod
             error_html = (
-                '<div style="padding:2rem;color:#c33;font-family:sans-serif;">'
-                f'<h2>Render error</h2><pre>{e.stderr or e}</pre></div>'
+                '<h2>Render error</h2>'
+                f'<p><code>{html_mod.escape(str(e.stderr or str(e)))}</code></p>'
             )
-            page = self.template.replace("{{TITLE}}", "Error — Scholia")
-            page = page.replace("{{PANDOC_HTML}}", error_html)
-            page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
-            page = page.replace("{{DOC_PATH}}", json.dumps(display))
-            page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
-            page = page.replace("{{SIDENOTES_ENABLED}}", "false")
-            page = page.replace("{{COMMENTS_JSON}}", "[]")
-            page = page.replace("{{STATE_JSON}}", "{}")
+            page = _fill_template(
+                self.template, title="Error — Scholia", html=error_html,
+                doc_path=doc_path, display_path=display, readonly=True,
+            )
 
         return web.Response(text=page, content_type="text/html")
 
@@ -310,7 +362,7 @@ class ScholiaServer:
             entry = {"name": child.name}
             is_link = child.is_symlink()
             if is_link:
-                entry["link"] = str(child.resolve())
+                entry["link"] = str(child.resolve()).replace("\\", "/")
             if child.is_dir():
                 entry["type"] = "dir"
                 dirs.append(entry)
@@ -321,7 +373,7 @@ class ScholiaServer:
         files.sort(key=lambda e: e["name"].lower())
         entries.extend(dirs)
         entries.extend(files)
-        return web.json_response({"path": str(p), "entries": entries})
+        return web.json_response({"path": str(p).replace("\\", "/"), "entries": entries})
 
     async def _handle_ws(self, request):
         ws = web.WebSocketResponse()
