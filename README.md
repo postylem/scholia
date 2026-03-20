@@ -42,6 +42,7 @@ Notes:
 - If you've already installed, and want to update to the latest version:
   ```bash
   uv tool upgrade scholia
+  scholia skill-init --force  # re-init to pick up any skill changes
   ```
 
 - Alternately, you can clone a local version and install in editable mode so local code changes take effect immediately:

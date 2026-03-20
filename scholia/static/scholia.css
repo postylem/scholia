@@ -44,6 +44,7 @@
   --s-body: et-book, Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif;
   --s-mono: Consolas, 'Liberation Mono', Menlo, Monaco, Courier, monospace;
   --s-sans: 'Gill Sans', 'Gill Sans MT', Calibri, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --s-comment: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* ── Dark mode ─────────────────────────────────────── */
@@ -69,6 +70,28 @@ body.scholia-dark {
   --s-mono: Consolas, 'Liberation Mono', Menlo, Monaco, Courier, monospace;
 }
 
+/* ── Typeface: system (content only) ──────────────── */
+
+body.scholia-font-system {
+  --s-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+body.scholia-font-system #scholia-doc .katex {
+  font-size: 1em;
+}
+
+/* ── Typeface: latex (content only) ──────────────── */
+
+@import url('https://cdn.jsdelivr.net/gh/aaaakshat/cm-web-fonts@latest/fonts.css');
+
+body.scholia-font-latex {
+  --s-body: 'Computer Modern Serif', 'Latin Modern Roman', 'DejaVu Serif', Georgia, serif;
+  --s-mono: 'Computer Modern Typewriter', 'Latin Modern Mono', 'DejaVu Sans Mono', monospace;
+}
+
+body.scholia-font-latex #scholia-doc .katex {
+  font-size: 1.05em;
+}
 *, *::before, *::after { box-sizing: border-box; }
 html { scroll-behavior: smooth; scroll-padding-top: 3rem; }
 
@@ -368,31 +391,47 @@ input.margin-toggle { display: none; }
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   padding: 0.4rem 0;
   z-index: 600;
-  font-family: var(--s-sans);
-  font-size: 0.72rem;
+  font-family: var(--s-body);
+  font-size: 0.8rem;
   margin-top: 0.25rem;
 }
 .scholia-toc.scholia-toc-open {
   display: block;
 }
 .scholia-toc-body {
-  padding: 0 0.3rem 0 1.1rem;
+  padding: 0 0.3rem 0 0;
 }
 .scholia-toc-body ul {
   list-style: none;
   margin: 0;
   padding: 0;
 }
+.scholia-toc-body ul ul {
+  margin-left: -0.6rem;
+  padding-left: 0.8rem;
+}
+.scholia-toc-body .scholia-toc-branch > ul {
+  border-left: 1px solid var(--s-border);
+}
 .scholia-toc-body li {
   margin: 0;
+  /* Hanging indent: wrapped text aligns with text start, not the +/− */
+  padding-left: 1.1em;
+  text-indent: -1.1em;
 }
+/* Heading sizes */
+.scholia-toc-body .scholia-toc-h1 { font-size: 0.9rem; }
+.scholia-toc-body .scholia-toc-h2 { font-size: 0.82rem; }
+.scholia-toc-body .scholia-toc-h3 { font-size: 0.76rem; }
+.scholia-toc-body .scholia-toc-h4 { font-size: 0.72rem; }
+
 .scholia-toc-body a {
-  display: block;
-  padding: 0.15rem 0.4rem;
+  text-indent: 0;
+  padding: 0.1rem 0.2rem;
   color: var(--s-text-dim);
   text-decoration: none;
   border-radius: 2px;
-  line-height: 1.3;
+  line-height: 1.6;
   transition: color 0.1s, background 0.1s;
 }
 .scholia-toc-body a:hover {
@@ -403,31 +442,24 @@ input.margin-toggle { display: none; }
   color: var(--s-accent);
   font-weight: 600;
 }
-/* Indent levels — all items at same level align regardless of chevron */
-.scholia-toc-body .scholia-toc-h1 { padding-left: 0.3rem; font-size: 0.88rem; }
-.scholia-toc-body .scholia-toc-h2 { padding-left: 0.6rem; font-style: italic; }
-.scholia-toc-body .scholia-toc-h3 { padding-left: 1.2rem; font-size: 0.68rem; font-style: italic; }
-.scholia-toc-body .scholia-toc-h4 { padding-left: 1.8rem; font-size: 0.65rem; }
 
-/* Sub-TOC collapse */
-.scholia-toc-body li {
-  position: relative;
+/* +/− toggle and spacer */
+.scholia-toc-body .scholia-toc-chevron,
+.scholia-toc-body .scholia-toc-spacer {
+  display: inline-block;
+  width: 1.1em;
+  text-align: center;
+  text-indent: 0;
+  font-size: 0.7em;
+  vertical-align: baseline;
+  user-select: none;
 }
 .scholia-toc-body .scholia-toc-chevron {
-  position: absolute;
-  left: -0.4rem;
-  top: 0.35rem;
-  font-size: 0.4rem;
   cursor: pointer;
   color: var(--s-text-dim);
-  transition: transform 0.2s;
-  user-select: none;
 }
 .scholia-toc-body .scholia-toc-chevron:hover { color: var(--s-accent); }
 .scholia-toc-body .scholia-toc-branch.collapsed > ul { display: none; }
-.scholia-toc-body .scholia-toc-branch.collapsed .scholia-toc-chevron {
-  transform: rotate(-90deg);
-}
 
 /* YAML metadata header */
 #scholia-doc header {
@@ -580,13 +612,16 @@ input.margin-toggle { display: none; }
 
 .scholia-anchor-text {
   font-family: var(--s-body);
-  font-style: italic;
+  font-style: normal;
   font-size: 0.78rem;
-  color: var(--s-text-dim);
+  color: var(--s-text);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.scholia-anchor-quote {
+  color: var(--s-text-dim);
 }
 
 .scholia-unread-dot {
@@ -698,7 +733,7 @@ input.margin-toggle { display: none; }
 .scholia-btn-edit:hover { color: var(--s-accent); }
 .scholia-edit-textarea {
   width: 100%;
-  font-family: var(--s-sans);
+  font-family: var(--s-comment);
   font-size: 0.75rem;
   padding: 0.3rem;
   border: 1px solid var(--s-border);
@@ -752,6 +787,7 @@ input.margin-toggle { display: none; }
 }
 
 .scholia-message-body {
+  font-family: var(--s-comment);
   font-size: 0.8rem;
   line-height: 1.45;
   color: #333;
@@ -860,7 +896,7 @@ mark.scholia-highlight.scholia-highlight-resolved:hover {
   border: 1px solid var(--s-border);
   border-radius: 3px;
   padding: 0.45rem;
-  font-family: var(--s-sans);
+  font-family: var(--s-comment);
   font-size: 0.82rem;
   resize: vertical;
   min-height: 3em;
@@ -1134,7 +1170,7 @@ mark.scholia-highlight.scholia-pulse {
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius);
   padding: 0.3rem;
-  font-family: var(--s-sans);
+  font-family: var(--s-comment);
   font-size: 0.78rem;
   resize: none;
   min-height: 2em;
@@ -1157,7 +1193,10 @@ mark.scholia-highlight.scholia-pulse {
   opacity: 0.7;
 }
 .scholia-card.scholia-resolved .scholia-anchor-text {
-  color: #aaa;
+  color: var(--s-text-dim);
+}
+.scholia-card.scholia-resolved .scholia-anchor-quote {
+  color: var(--s-border);
 }
 .scholia-resolved-label {
   font-size: 0.6rem;
@@ -1238,15 +1277,144 @@ mark.scholia-highlight.scholia-pulse {
   font-size: 0.72rem;
   color: var(--s-text-dim);
   opacity: 0.6;
+  display: flex;
+  align-items: baseline;
+  overflow: hidden;
+  min-width: 0;
+}
+.scholia-toolbar-path-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.scholia-breadcrumb-wrap {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  min-width: 0;
 }
-.scholia-toolbar-path .scholia-toolbar-filename {
+.scholia-breadcrumb-sep {
+  color: var(--s-text-dim);
+  opacity: 0.5;
+  font-weight: 600;
+  padding: 0 0.5px;
+}
+.scholia-breadcrumb-seg {
+  cursor: pointer;
+  text-decoration: underline dashed var(--s-border);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  padding: 1px 2px;
+  border-radius: 2px;
   color: var(--s-text);
+  opacity: 0.7;
+  transition: background 0.15s, opacity 0.15s;
+}
+.scholia-breadcrumb-file {
+  font-weight: 600;
+  opacity: 1;
+}
+.scholia-breadcrumb-seg:hover {
+  background: rgba(128, 128, 128, 0.15);
+  opacity: 1;
+}
+.scholia-breadcrumb-seg.active {
+  background: rgba(128, 128, 128, 0.2);
+  text-decoration-style: solid;
   opacity: 1;
 }
 
+/* ── Breadcrumb dropdown ──────────────────────────── */
+
+.scholia-breadcrumb-dropdown {
+  /* position set by JS (fixed, via getBoundingClientRect) */
+  background: var(--s-card);
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  z-index: 200;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  min-width: 240px;
+  max-width: 400px;
+  max-height: 60vh;
+  overflow-y: auto;
+  font-family: var(--s-mono, monospace);
+  font-size: 0.72rem;
+}
+.scholia-breadcrumb-dropdown-header {
+  padding: 0.2rem 0.45rem;
+  color: var(--s-text-dim);
+  font-size: 0.65rem;
+  border-bottom: 1px solid var(--s-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.6;
+}
+.scholia-breadcrumb-dropdown-body {
+  padding: 0.2rem 0;
+}
+.scholia-breadcrumb-entry {
+  display: block;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  color: var(--s-text);
+  transition: background 0.1s;
+}
+.scholia-breadcrumb-entry:hover {
+  background: rgba(128, 128, 128, 0.12);
+}
+.scholia-breadcrumb-entry-dir {
+  color: var(--s-ai);
+  }
+  
+  .scholia-breadcrumb-dir-chevron {
+    font-size: 0.8em;
+    opacity: 0.5;
+    margin-left: 1px;
+}
+.scholia-breadcrumb-entry-dimmed {
+  opacity: 0.4;
+}
+.scholia-breadcrumb-entry-symlink {
+  color: var(--s-accent);
+  opacity: 0.85;
+}
+.scholia-breadcrumb-symlink-arrow {
+  font-size: 0.65rem;
+  vertical-align: super;
+}
+.scholia-breadcrumb-current-dir {
+  border-left: 2px solid var(--s-accent);
+  padding-left: calc(0.45rem - 2px);
+  background: rgba(124, 138, 255, 0.08);
+}
+.scholia-breadcrumb-current-file {
+  border-left: 3px solid var(--s-accent);
+  padding-left: calc(0.45rem - 3px);
+  background: rgba(124, 138, 255, 0.14);
+  font-weight: 600;
+}
+.scholia-breadcrumb-viewing-badge {
+  font-weight: 400;
+  font-size: 0.6rem;
+  color: var(--s-accent);
+}
+
+/* ── Raw file display ─────────────────────────────── */
+
+pre.scholia-raw-file {
+  font-family: var(--s-mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  tab-size: 4;
+}
 a.scholia-toolbar-brand {
   color: inherit;
   text-decoration: underline;
@@ -1329,8 +1497,8 @@ a.scholia-toolbar-brand:hover {
   border: 1px solid var(--s-border);
   border-radius: 4px;
   padding: 0.4rem 0.6rem;
-  z-index: 100;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  z-index: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
   white-space: nowrap;
   font-size: 0.7rem;
   font-family: var(--s-sans);
@@ -1601,8 +1769,7 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
 
 .scholia-overlay-anchor {
   font-family: var(--s-body);
-  color: var(--s-text-dim);
-  font-style: italic;
+  color: var(--s-text);
   font-size: 0.85rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1662,7 +1829,7 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
   border-radius: 4px;
   padding: 0.5rem 0.6rem;
   font-size: 0.85rem;
-  font-family: var(--s-sans);
+  font-family: var(--s-comment);
   resize: vertical;
   min-height: 2.5rem;
   margin-bottom: 0.5rem;

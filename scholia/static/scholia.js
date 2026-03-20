@@ -22,9 +22,201 @@
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
   var sidebarHidden = false;
   var compactMode = false;   // auto-set when viewport too narrow for sidebar
-  var darkMode = false;
-  var uiZoom = 100;
+  var themeMode = localStorage.getItem('scholia-theme') || 'system'; // 'light' | 'dark' | 'system'
+  var darkMode = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var fontMode = localStorage.getItem('scholia-font') || 'default';  // 'default' | 'system' | 'latex'
+  var uiZoom = parseInt(localStorage.getItem('scholia-zoom'), 10) || 100;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
+  var readonlyMode = window.__SCHOLIA_READONLY__ || false;
+
+  var MD_EXTENSIONS = ['.md', '.markdown', '.qmd', '.rmd'];
+
+  function abbreviatePath(p, maxLen) {
+    if (p.length <= maxLen) return p;
+    var parts = p.split('/').filter(function (s) { return s !== ''; });
+    if (parts.length <= 3) return p;
+    var first = parts[0];
+    var last2 = parts.slice(-2).join('/');
+    return '/' + first + '/[...]/' + last2 + '/';
+  }
+
+  function isMarkdownExt(name) {
+    var lower = name.toLowerCase();
+    for (var i = 0; i < MD_EXTENSIONS.length; i++) {
+      if (lower.endsWith(MD_EXTENSIONS[i])) return true;
+    }
+    return false;
+  }
+
+  // ── Breadcrumb dropdown file browser ─────────────────
+
+  var activeBreadcrumbDropdown = null;
+
+  function closeBreadcrumbDropdown() {
+    if (activeBreadcrumbDropdown) {
+      activeBreadcrumbDropdown.dropdown.remove();
+      activeBreadcrumbDropdown.seg.classList.remove('active');
+      activeBreadcrumbDropdown = null;
+    }
+  }
+
+  function openBreadcrumbDropdown(segEl, dirPath) {
+    if (activeBreadcrumbDropdown && activeBreadcrumbDropdown.seg === segEl) {
+      closeBreadcrumbDropdown();
+      return;
+    }
+    closeAllDropdowns();
+
+    var dropdown = document.createElement('div');
+    dropdown.className = 'scholia-breadcrumb-dropdown';
+    segEl.classList.add('active');
+
+    // Append to body to escape overflow:hidden on toolbar-path
+    document.body.appendChild(dropdown);
+    var rect = segEl.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = rect.bottom + 4 + 'px';
+    dropdown.style.left = rect.left + 'px';
+
+    activeBreadcrumbDropdown = {seg: segEl, dropdown: dropdown};
+
+    loadDirIntoDropdown(dropdown, dirPath);
+  }
+
+  function loadDirIntoDropdown(dropdown, dirPath) {
+    dropdown.innerHTML = '';
+
+    var header = document.createElement('div');
+    header.className = 'scholia-breadcrumb-dropdown-header';
+    header.textContent = abbreviatePath(dirPath, 50);
+    header.title = dirPath;
+    dropdown.appendChild(header);
+
+    var body = document.createElement('div');
+    body.className = 'scholia-breadcrumb-dropdown-body';
+    body.textContent = 'Loading...';
+    dropdown.appendChild(body);
+
+    fetch('/api/list-dir?path=' + encodeURIComponent(dirPath))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          body.textContent = data.error;
+          return;
+        }
+        body.innerHTML = '';
+        var docFullPath = window.__SCHOLIA_DOC_FULLPATH__ || '';
+        var docDisplayPath = window.__SCHOLIA_DOC_PATH__ || '';
+
+        // Derive launch_dir so we can build relative ?file= links
+        var launchDir = '';
+        if (docDisplayPath && docFullPath.endsWith(docDisplayPath)) {
+          launchDir = docFullPath.substring(0, docFullPath.length - docDisplayPath.length);
+          if (launchDir.endsWith('/')) launchDir = launchDir.substring(0, launchDir.length - 1);
+        }
+
+        data.entries.forEach(function (entry) {
+          var el;
+          var entryFullPath = dirPath.replace(/\/$/, '') + '/' + entry.name;
+
+          if (entry.type === 'dir' || entry.name === '..') {
+            el = document.createElement('div');
+            el.className = 'scholia-breadcrumb-entry scholia-breadcrumb-entry-dir';
+            el.textContent = entry.name === '..' ? '..' : entry.name + '/';
+            var chevron = document.createElement('span');
+            chevron.className = 'scholia-breadcrumb-dir-chevron';
+            chevron.textContent = ' \u203A';
+            el.appendChild(chevron);
+            var targetDir = entry.name === '..'
+              ? dirPath.replace(/\/$/, '').replace(/\/[^/]+$/, '') || '/'
+              : entryFullPath;
+            el.addEventListener('click', function (e) {
+              e.stopPropagation();
+              loadDirIntoDropdown(dropdown, targetDir);
+            });
+            if (entry.name !== '..' && docFullPath.indexOf(entryFullPath + '/') === 0) {
+              el.classList.add('scholia-breadcrumb-current-dir');
+            }
+          } else {
+            el = document.createElement('a');
+            el.className = 'scholia-breadcrumb-entry scholia-breadcrumb-entry-file';
+            // Use relative path when under launch_dir, readable slashes always
+            var fileParam = entryFullPath;
+            if (launchDir && entryFullPath.indexOf(launchDir + '/') === 0) {
+              fileParam = entryFullPath.substring(launchDir.length + 1);
+            }
+            el.href = '/?file=' + encodeURIComponent(fileParam).replace(/%2F/g, '/');
+            el.textContent = entry.name;
+            if (!isMarkdownExt(entry.name)) {
+              el.classList.add('scholia-breadcrumb-entry-dimmed');
+            }
+            if (entryFullPath === docFullPath) {
+              el.classList.add('scholia-breadcrumb-current-file');
+              var badge = document.createElement('span');
+              badge.className = 'scholia-breadcrumb-viewing-badge';
+              badge.textContent = ' \u2022 viewing';
+              el.appendChild(badge);
+            }
+          }
+
+          if (entry.link) {
+            el.classList.add('scholia-breadcrumb-entry-symlink');
+            el.title = 'Symlink \u2192 ' + entry.link;
+            var arrow = document.createElement('span');
+            arrow.className = 'scholia-breadcrumb-symlink-arrow';
+            arrow.textContent = ' \u2197';
+            el.appendChild(arrow);
+          } else if (entry.name !== '..') {
+            el.title = entry.name;
+          }
+
+          body.appendChild(el);
+        });
+
+        if (data.entries.length === 1 && data.entries[0].name === '..') {
+          var empty = document.createElement('div');
+          empty.className = 'scholia-breadcrumb-entry';
+          empty.style.color = 'var(--s-text-dim)';
+          empty.style.fontStyle = 'italic';
+          empty.textContent = 'No files';
+          body.appendChild(empty);
+        }
+      })
+      .catch(function (err) {
+        body.textContent = 'Error: ' + err.message;
+      });
+  }
+
+  // ── Unified dropdown dismiss (click-outside + Escape) ──
+
+  function closeOptionsMenu() {
+    var menu = document.querySelector('.scholia-options-menu');
+    if (menu) menu.remove();
+  }
+
+  function closeAllDropdowns(except) {
+    if (except !== 'breadcrumb') closeBreadcrumbDropdown();
+    if (except !== 'toc') closeToc();
+    if (except !== 'options') closeOptionsMenu();
+  }
+
+  document.addEventListener('click', function (e) {
+    // Breadcrumb
+    if (activeBreadcrumbDropdown && !activeBreadcrumbDropdown.dropdown.contains(e.target) &&
+        !activeBreadcrumbDropdown.seg.contains(e.target)) {
+      closeBreadcrumbDropdown();
+    }
+    // TOC — handled in renderToolbar listener
+    // Options
+    var optMenu = document.querySelector('.scholia-options-menu');
+    var optWrap = document.querySelector('.scholia-options-wrap');
+    if (optMenu && optWrap && !optWrap.contains(e.target)) {
+      closeOptionsMenu();
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeAllDropdowns();
+  });
 
   function applyZoom() {
     document.documentElement.style.fontSize = uiZoom + '%';
@@ -82,6 +274,10 @@
   function connectWS() {
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(proto + '//' + location.host + '/ws');
+
+    ws.onopen = function () {
+      wsSend({type: 'watch', file: window.__SCHOLIA_DOC_FULLPATH__});
+    };
 
     ws.onmessage = function (e) {
       var msg = JSON.parse(e.data);
@@ -157,27 +353,60 @@
     // "scholia on <filename>" at left
     var brandPath = document.createElement('span');
     brandPath.className = 'scholia-toolbar-path';
+    var brandLabel = document.createElement('span');
+    brandLabel.className = 'scholia-toolbar-path-label';
     var brandLink = document.createElement('a');
     brandLink.className = 'scholia-toolbar-brand';
     brandLink.href = 'https://github.com/postylem/scholia';
     brandLink.target = '_blank';
     brandLink.rel = 'noopener';
     brandLink.textContent = 'scholia';
-    brandPath.appendChild(brandLink);
-    var onText = document.createTextNode(' on ');
-    brandPath.appendChild(onText);
+    brandLabel.appendChild(brandLink);
+    brandLabel.appendChild(document.createTextNode(' on '));
+    brandPath.appendChild(brandLabel);
+
+    var crumbWrap = document.createElement('span');
+    crumbWrap.className = 'scholia-breadcrumb-wrap';
     var docPath = window.__SCHOLIA_DOC_PATH__ || '';
     var docFullPath = window.__SCHOLIA_DOC_FULLPATH__ || docPath;
-    var fileSpan = document.createElement('span');
-    fileSpan.className = 'scholia-toolbar-filename';
-    fileSpan.textContent = docPath;
-    fileSpan.addEventListener('mouseenter', function () {
-      fileSpan.textContent = docFullPath;
-    });
-    fileSpan.addEventListener('mouseleave', function () {
-      fileSpan.textContent = docPath;
-    });
-    brandPath.appendChild(fileSpan);
+
+    // Build breadcrumb segments
+    var parts = docPath.split('/').filter(function (p) { return p !== ''; });
+    // Compute absolute dir parts from full path
+    var fullParts = docFullPath.replace(/\/$/, '').split('/');
+    // fullParts ends with filename; dirs are everything before
+    for (var si = 0; si < parts.length; si++) {
+      var isFile = (si === parts.length - 1);
+
+      // Add "/" separator before all segments except the first
+      if (si > 0) {
+        var sep = document.createElement('span');
+        sep.className = 'scholia-breadcrumb-sep';
+        sep.textContent = '/';
+        crumbWrap.appendChild(sep);
+      }
+
+      var seg = document.createElement('span');
+      seg.className = 'scholia-breadcrumb-seg' + (isFile ? ' scholia-breadcrumb-file' : '');
+      seg.textContent = parts[si];
+
+      // data-dir = absolute path of the directory whose contents to list
+      // This is the parent of the item this segment names
+      var fullIdx = fullParts.length - parts.length + si;
+      var parentDir = fullParts.slice(0, fullIdx).join('/') || '/';
+      seg.setAttribute('data-dir', parentDir);
+      seg.setAttribute('data-name', parts[si]);
+
+      seg.addEventListener('click', (function (dirPath, segEl) {
+        return function (e) {
+          e.stopPropagation();
+          openBreadcrumbDropdown(segEl, dirPath);
+        };
+      })(parentDir, seg));
+
+      crumbWrap.appendChild(seg);
+    }
+    brandPath.appendChild(crumbWrap);
     toolbarEl.appendChild(brandPath);
 
     // Contents (TOC) dropdown — before Options
@@ -214,6 +443,7 @@
       e.stopPropagation();
       var menu = optionsWrap.querySelector('.scholia-options-menu');
       if (menu) { menu.remove(); return; }
+      closeAllDropdowns('options');
       menu = document.createElement('div');
       menu.className = 'scholia-options-menu';
 
@@ -227,29 +457,55 @@
       var themeTd2 = document.createElement('td');
       var themeGroup = document.createElement('span');
       themeGroup.className = 'scholia-options-toggle';
-      var lightBtn = document.createElement('button');
-      lightBtn.textContent = 'light';
-      lightBtn.className = darkMode ? '' : 'active';
-      lightBtn.addEventListener('click', function () {
-        darkMode = false;
-        document.body.classList.remove('scholia-dark');
-        menu.remove();
-        renderToolbar();
+      var themeModes = ['system', 'light', 'dark'];
+      themeModes.forEach(function (mode) {
+        var btn = document.createElement('button');
+        btn.textContent = mode;
+        btn.className = themeMode === mode ? 'active' : '';
+        btn.addEventListener('click', function () {
+          themeMode = mode;
+          localStorage.setItem('scholia-theme', mode);
+          if (mode === 'system') {
+            darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          } else {
+            darkMode = mode === 'dark';
+          }
+          document.body.classList.toggle('scholia-dark', darkMode);
+          menu.remove();
+          renderToolbar();
+        });
+        themeGroup.appendChild(btn);
       });
-      var darkBtn = document.createElement('button');
-      darkBtn.textContent = 'dark';
-      darkBtn.className = darkMode ? 'active' : '';
-      darkBtn.addEventListener('click', function () {
-        darkMode = true;
-        document.body.classList.add('scholia-dark');
-        menu.remove();
-        renderToolbar();
-      });
-      themeGroup.appendChild(lightBtn);
-      themeGroup.appendChild(darkBtn);
       themeTd2.appendChild(themeGroup);
       themeRow.appendChild(themeTd2);
       tbl.appendChild(themeRow);
+
+      // Typeface row
+      var fontRow = document.createElement('tr');
+      var fontTd1 = document.createElement('td');
+      fontTd1.textContent = 'Typeface';
+      fontRow.appendChild(fontTd1);
+      var fontTd2 = document.createElement('td');
+      var fontGroup = document.createElement('span');
+      fontGroup.className = 'scholia-options-toggle';
+      var fontModes = ['default', 'system', 'latex'];
+      fontModes.forEach(function (mode) {
+        var btn = document.createElement('button');
+        btn.textContent = mode;
+        btn.className = fontMode === mode ? 'active' : '';
+        btn.addEventListener('click', function () {
+          document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
+          fontMode = mode;
+          localStorage.setItem('scholia-font', mode);
+          if (mode !== 'default') document.body.classList.add('scholia-font-' + mode);
+          menu.remove();
+          renderToolbar();
+        });
+        fontGroup.appendChild(btn);
+      });
+      fontTd2.appendChild(fontGroup);
+      fontRow.appendChild(fontTd2);
+      tbl.appendChild(fontRow);
 
       // Footnote display row
       var fnRow = document.createElement('tr');
@@ -302,6 +558,7 @@
       zoomMinus.addEventListener('click', function () {
         uiZoom = Math.max(70, uiZoom - 10);
         applyZoom();
+        localStorage.setItem('scholia-zoom', uiZoom);
         zoomLabel.textContent = uiZoom + '%';
       });
       var zoomLabel = document.createElement('button');
@@ -311,6 +568,7 @@
       zoomLabel.addEventListener('click', function () {
         uiZoom = 100;
         applyZoom();
+        localStorage.setItem('scholia-zoom', uiZoom);
         zoomLabel.textContent = uiZoom + '%';
       });
       var zoomPlus = document.createElement('button');
@@ -318,6 +576,7 @@
       zoomPlus.addEventListener('click', function () {
         uiZoom = Math.min(150, uiZoom + 10);
         applyZoom();
+        localStorage.setItem('scholia-zoom', uiZoom);
         zoomLabel.textContent = uiZoom + '%';
       });
       zoomGroup.appendChild(zoomMinus);
@@ -333,13 +592,6 @@
     });
     optionsWrap.appendChild(optionsBtn);
     toolbarEl.appendChild(optionsWrap);
-
-    // Close options menu on click outside
-    document.addEventListener('click', function closeMenu() {
-      var menu = optionsWrap.querySelector('.scholia-options-menu');
-      if (menu) menu.remove();
-      document.removeEventListener('click', closeMenu);
-    });
 
     var btnGroup = document.createElement('span');
     btnGroup.className = 'scholia-toolbar-group';
@@ -487,21 +739,31 @@
       while (stack.length > 1 && stack[stack.length - 1].level >= item.level) {
         stack.pop();
       }
+      // Ensure proper nesting depth even if heading levels skip (e.g. h2 before any h1)
+      while (item.level > stack[stack.length - 1].level + 1) {
+        var wrapLi = document.createElement('li');
+        var wrapUl = document.createElement('ul');
+        wrapLi.appendChild(wrapUl);
+        stack[stack.length - 1].ul.appendChild(wrapLi);
+        stack.push({ ul: wrapUl, level: stack[stack.length - 1].level + 1 });
+      }
       var parentUl = stack[stack.length - 1].ul;
       var hasChildren = (j + 1 < items.length && items[j + 1].level > item.level);
 
       var li = document.createElement('li');
       if (hasChildren) {
-        li.className = 'scholia-toc-branch';
+        var startCollapsed = item.level >= 3;
+        li.className = 'scholia-toc-branch' + (startCollapsed ? ' collapsed' : '');
         var chevron = document.createElement('span');
         chevron.className = 'scholia-toc-chevron';
-        chevron.textContent = '\u25BC';
-        chevron.addEventListener('click', (function (theLi) {
+        chevron.textContent = startCollapsed ? '+' : '\u2212';
+        chevron.addEventListener('click', (function (theLi, theChevron) {
           return function (e) {
             e.stopPropagation();
             theLi.classList.toggle('collapsed');
+            theChevron.textContent = theLi.classList.contains('collapsed') ? '+' : '\u2212';
           };
-        })(li));
+        })(li, chevron));
         li.appendChild(chevron);
         var a = document.createElement('a');
         a.href = '#' + item.id;
@@ -514,6 +776,9 @@
         li.appendChild(childUl);
         stack.push({ ul: childUl, level: item.level });
       } else {
+        var spacer = document.createElement('span');
+        spacer.className = 'scholia-toc-spacer';
+        li.appendChild(spacer);
         var a = document.createElement('a');
         a.href = '#' + item.id;
         a.className = 'scholia-toc-h' + item.level;
@@ -543,8 +808,10 @@
   }
 
   function toggleToc() {
-    tocOpen = !tocOpen;
-    if (tocEl) tocEl.classList.toggle('scholia-toc-open', tocOpen);
+    if (tocOpen) { closeToc(); return; }
+    closeAllDropdowns();
+    tocOpen = true;
+    if (tocEl) tocEl.classList.add('scholia-toc-open');
   }
 
   function closeToc() {
@@ -753,6 +1020,7 @@
   // ── Sidebar ────────────────────────────────────────
 
   function renderSidebar() {
+    if (readonlyMode) { sidebarEl.innerHTML = ''; return; }
     // Preserve any open new-comment form
     var existingForm = document.getElementById('scholia-new-comment');
 
@@ -837,7 +1105,15 @@
     var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
     var anchorSpan = document.createElement('span');
     anchorSpan.className = 'scholia-anchor-text';
-    anchorSpan.textContent = '\u201c' + anchorText.slice(0, 50) + (anchorText.length > 50 ? '\u2026' : '') + '\u201d';
+    var openQ = document.createElement('span');
+    openQ.className = 'scholia-anchor-quote';
+    openQ.textContent = '\u201c';
+    var closeQ = document.createElement('span');
+    closeQ.className = 'scholia-anchor-quote';
+    closeQ.textContent = (anchorText.length > 50 ? '\u2026' : '') + '\u201d';
+    anchorSpan.appendChild(openQ);
+    anchorSpan.appendChild(document.createTextNode(anchorText.slice(0, 50)));
+    anchorSpan.appendChild(closeQ);
     if (anchorText.length > 50) anchorSpan.title = anchorText;
     header.appendChild(anchorSpan);
 
@@ -1226,7 +1502,15 @@
     var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
     var hdrText = document.createElement('span');
     hdrText.className = 'scholia-overlay-anchor';
-    hdrText.textContent = '\u201c' + anchorText.slice(0, 80) + (anchorText.length > 80 ? '\u2026' : '') + '\u201d';
+    var oOpenQ = document.createElement('span');
+    oOpenQ.className = 'scholia-anchor-quote';
+    oOpenQ.textContent = '\u201c';
+    var oCloseQ = document.createElement('span');
+    oCloseQ.className = 'scholia-anchor-quote';
+    oCloseQ.textContent = (anchorText.length > 80 ? '\u2026' : '') + '\u201d';
+    hdrText.appendChild(oOpenQ);
+    hdrText.appendChild(document.createTextNode(anchorText.slice(0, 80)));
+    hdrText.appendChild(oCloseQ);
     hdr.appendChild(hdrText);
 
     var hdrRight = document.createElement('span');
@@ -1837,6 +2121,7 @@
   var pendingSelector = null;
 
   docEl.addEventListener('mouseup', function () {
+    if (readonlyMode) return;
     if (sidebarHidden && !compactMode) return;
     if (reanchorAnnotationId) return;  // re-anchor mode handles selection
     var sel = window.getSelection();
@@ -2521,6 +2806,19 @@
 
   // Set initial sidenotes CSS state
   if (!sidenotesEnabled) docEl.classList.add('scholia-no-sidenotes');
+
+  // Apply persisted preferences
+  if (darkMode) document.body.classList.add('scholia-dark');
+  if (fontMode !== 'default') document.body.classList.add('scholia-font-' + fontMode);
+  if (uiZoom !== 100) applyZoom();
+
+  // Track system theme changes for 'system' mode
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+    if (themeMode !== 'system') return;
+    darkMode = e.matches;
+    document.body.classList.toggle('scholia-dark', darkMode);
+    renderToolbar();
+  });
 
   renderToolbar();
   connectWS();

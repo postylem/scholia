@@ -38,6 +38,11 @@ _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
 _FRAGMENT_TEMPLATE = str(Path(__file__).parent / "pandoc-fragment.html")
 _HAS_CROSSREF = shutil.which("pandoc-crossref") is not None
+_MARKDOWN_EXTENSIONS = {".md", ".markdown", ".qmd", ".rmd"}
+
+
+def _is_markdown(path: Path) -> bool:
+    return path.suffix.lower() in _MARKDOWN_EXTENSIONS
 
 
 def _has_footnotes(md_text: str) -> bool:
@@ -55,7 +60,11 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         "--katex",
     ]
     if _HAS_CROSSREF:
-        cmd.extend(["--filter", "pandoc-crossref"])
+        cmd.extend([
+            "--filter", "pandoc-crossref",
+            "--metadata=linkReferences:true",
+            "--metadata=secPrefix:§",
+        ])
     cmd += [
         "--citeproc",
         "--section-divs",
@@ -159,36 +168,86 @@ async def build_page(
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     html = await render_pandoc(doc_path, sidenotes=sidenotes)
-    md_text = doc_path.read_text(encoding="utf-8")
-    title = _extract_title(md_text)
-    comments = load_comments(doc_path)
-    state = load_state(doc_path)
+    title = _extract_title(doc_path.read_text(encoding="utf-8"))
+    return _fill_template(
+        template, title=title, html=html, doc_path=doc_path,
+        display_path=display_path, sidenotes=sidenotes,
+        comments=load_comments(doc_path), state=load_state(doc_path),
+    )
+
+
+def _is_binary(path: Path) -> bool:
+    """Heuristic: file is binary if the first 8KB contains null bytes."""
+    try:
+        chunk = path.read_bytes()[:8192]
+        return b"\x00" in chunk
+    except OSError:
+        return False
+
+
+def _fill_template(
+    template: str, *, title: str, html: str, doc_path: Path,
+    display_path: str = "", sidenotes: bool = False,
+    comments: list | None = None, state: dict | None = None,
+    readonly: bool = False,
+) -> str:
+    """Fill the page template with the given content and metadata."""
     page = template.replace("{{TITLE}}", title)
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
-    page = page.replace("{{DOC_PATH}}", json.dumps(display_path or str(doc_path)))
-    page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
+    dp = (display_path or str(doc_path)).replace("\\", "/")
+    page = page.replace("{{DOC_PATH}}", json.dumps(dp))
+    page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path).replace("\\", "/")))
     page = page.replace("{{SIDENOTES_ENABLED}}", json.dumps(sidenotes))
-    page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments))
-    page = page.replace("{{STATE_JSON}}", json.dumps(state))
+    page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments or []))
+    page = page.replace("{{STATE_JSON}}", json.dumps(state or {}))
+    page = page.replace("{{READONLY}}", json.dumps(readonly))
     return page
 
 
-class _FileChangeHandler(FileSystemEventHandler):
-    """Watch .md and .scholia.jsonl for changes."""
+def _build_raw_page(
+    doc_path: Path, template: str, display_path: str = "", force: bool = False,
+) -> str:
+    """Build HTML page for a non-markdown file, displayed as raw text."""
+    import html as html_mod
+    if not force and _is_binary(doc_path):
+        content = (
+            '<p>This appears to be a binary file.</p>'
+            f'<p><a href="/?file={html_mod.escape(display_path or str(doc_path))}&amp;raw=1">'
+            'Display anyway</a></p>'
+        )
+        return _fill_template(
+            template, title=doc_path.name + " — Scholia", html=content,
+            doc_path=doc_path, display_path=display_path, readonly=True,
+        )
+    raw = doc_path.read_text(encoding="utf-8", errors="replace")
+    escaped = html_mod.escape(raw)
+    content = f'<pre class="scholia-raw-file"><code>{escaped}</code></pre>'
+    return _fill_template(
+        template, title=doc_path.name + " — Scholia", html=content,
+        doc_path=doc_path, display_path=display_path,
+        comments=load_comments(doc_path), state=load_state(doc_path),
+    )
 
-    def __init__(self, doc_path: Path, loop: asyncio.AbstractEventLoop, callback):
-        self.doc_path = doc_path.resolve()
-        self.scholia_path = annotation_path(doc_path).resolve()
+
+class _FileChangeHandler(FileSystemEventHandler):
+    """Watch for changes to any registered doc or its .scholia.jsonl."""
+
+    def __init__(self, server: 'ScholiaServer', loop: asyncio.AbstractEventLoop):
+        self.server = server
         self.loop = loop
-        self.callback = callback
 
     def _check_path(self, path: Path):
         resolved = path.resolve()
-        if resolved == self.doc_path:
-            self.loop.call_soon_threadsafe(self.callback, "doc")
-        elif resolved == self.scholia_path:
-            self.loop.call_soon_threadsafe(self.callback, "comments")
+        for doc_path in list(self.server.ws_clients.keys()):
+            if resolved == doc_path:
+                self.loop.call_soon_threadsafe(
+                    self.server._on_file_change, doc_path, "doc"
+                )
+            elif resolved == annotation_path(doc_path).resolve():
+                self.loop.call_soon_threadsafe(
+                    self.server._on_file_change, doc_path, "comments"
+                )
 
     def on_modified(self, event):
         self._check_path(Path(event.src_path))
@@ -197,7 +256,6 @@ class _FileChangeHandler(FileSystemEventHandler):
         self._check_path(Path(event.src_path))
 
     def on_moved(self, event):
-        # Atomic writes: temp file renamed over target
         self._check_path(Path(event.dest_path))
 
 
@@ -210,38 +268,116 @@ class ScholiaServer:
             raise FileNotFoundError(f"Document not found: {self.doc_path}")
         self.host = host
         self.port = port
-        self.ws_clients: set[web.WebSocketResponse] = set()
-        # Auto-detect sidenotes: on if doc has footnotes
-        md_text = self.doc_path.read_text(encoding="utf-8")
-        self.sidenotes_enabled = _has_footnotes(md_text)
+        self.launch_dir = Path.cwd().resolve()
+        self.ws_clients: dict[Path, set[web.WebSocketResponse]] = {}
+        self.ws_file: dict[web.WebSocketResponse, Path] = {}
+        self.ws_sidenotes: dict[web.WebSocketResponse, bool] = {}
         self.template = self._load_template()
         self.app = web.Application()
         self._setup_routes()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._debounce_handles: dict[str, asyncio.TimerHandle] = {}
+        self._debounce_handles: dict[tuple, asyncio.TimerHandle] = {}
+        self._observers: dict[Path, Observer] = {}  # parent_dir -> Observer
+        self._observer_refcount: dict[Path, int] = {}  # parent_dir -> count
 
     def _load_template(self) -> str:
         template_path = Path(__file__).parent / "template.html"
         return template_path.read_text(encoding="utf-8")
 
+    def _display_path(self, abs_path: Path) -> str:
+        """Compute display path: relative if under launch_dir, else absolute."""
+        try:
+            return str(abs_path.relative_to(self.launch_dir))
+        except ValueError:
+            return str(abs_path)
+
     def _setup_routes(self):
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ws", self._handle_ws)
+        self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
 
     async def _handle_index(self, request):
-        page = await build_page(
-            self.doc_path, self.template,
-            sidenotes=self.sidenotes_enabled,
-            display_path=self.display_path,
-        )
+        file_param = request.query.get("file")
+        if file_param:
+            file_path = Path(file_param)
+            if not file_path.is_absolute():
+                file_path = self.launch_dir / file_path
+            doc_path = file_path.resolve()
+            display = self._display_path(doc_path)
+        else:
+            doc_path = self.doc_path
+            display = self.display_path
+
+        try:
+            if _is_markdown(doc_path):
+                sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
+                page = await build_page(
+                    doc_path, self.template,
+                    sidenotes=sidenotes,
+                    display_path=display,
+                )
+            else:
+                force_raw = request.query.get("raw") == "1"
+                page = _build_raw_page(
+                    doc_path, self.template, display_path=display, force=force_raw,
+                )
+        except (FileNotFoundError, OSError) as e:
+            import html as html_mod
+            error_html = (
+                '<h2>File not found</h2>'
+                f'<p><code>{html_mod.escape(str(doc_path))}</code></p>'
+            )
+            page = _fill_template(
+                self.template, title="Error — Scholia", html=error_html,
+                doc_path=doc_path, display_path=display, readonly=True,
+            )
+        except subprocess.CalledProcessError as e:
+            import html as html_mod
+            error_html = (
+                '<h2>Render error</h2>'
+                f'<p><code>{html_mod.escape(str(e.stderr or str(e)))}</code></p>'
+            )
+            page = _fill_template(
+                self.template, title="Error — Scholia", html=error_html,
+                doc_path=doc_path, display_path=display, readonly=True,
+            )
+
         return web.Response(text=page, content_type="text/html")
+
+    async def _handle_list_dir(self, request):
+        """Return directory listing as JSON."""
+        dir_path = request.query.get("path", "")
+        p = Path(dir_path).resolve()
+        if not p.is_dir():
+            return web.json_response({"error": f"Not a directory: {dir_path}"})
+
+        entries = [{"name": "..", "type": "dir"}]
+        dirs = []
+        files = []
+        for child in p.iterdir():
+            if child.name.startswith("."):
+                continue
+            entry = {"name": child.name}
+            is_link = child.is_symlink()
+            if is_link:
+                entry["link"] = str(child.resolve()).replace("\\", "/")
+            if child.is_dir():
+                entry["type"] = "dir"
+                dirs.append(entry)
+            else:
+                entry["type"] = "file"
+                files.append(entry)
+        dirs.sort(key=lambda e: e["name"].lower())
+        files.sort(key=lambda e: e["name"].lower())
+        entries.extend(dirs)
+        entries.extend(files)
+        return web.json_response({"path": str(p).replace("\\", "/"), "entries": entries})
 
     async def _handle_ws(self, request):
         ws = web.WebSocketResponse()
         await ws.prepare(request)
-        self.ws_clients.add(ws)
         try:
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
@@ -249,16 +385,33 @@ class ScholiaServer:
                 elif msg.type == web.WSMsgType.ERROR:
                     break
         finally:
-            self.ws_clients.discard(ws)
+            doc = self.ws_file.pop(ws, None)
+            self.ws_sidenotes.pop(ws, None)
+            if doc and doc in self.ws_clients:
+                self.ws_clients[doc].discard(ws)
+                if not self.ws_clients[doc]:
+                    del self.ws_clients[doc]
+            if doc:
+                self._stop_watching(doc)
         return ws
 
     async def _handle_ws_message(self, data: str, ws: web.WebSocketResponse):
         try:
             msg = json.loads(data)
             msg_type = msg["type"]
+            if msg_type == "watch":
+                file_path = Path(msg["file"]).resolve()
+                self.ws_file[ws] = file_path
+                if file_path not in self.ws_clients:
+                    self.ws_clients[file_path] = set()
+                self.ws_clients[file_path].add(ws)
+                if self._loop:
+                    self._start_watching(file_path)
+                return
+            doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
                 append_comment(
-                    self.doc_path,
+                    doc,
                     exact=msg["exact"],
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
@@ -267,42 +420,42 @@ class ScholiaServer:
                 )
             elif msg_type == "reply":
                 append_reply(
-                    self.doc_path,
+                    doc,
                     annotation_id=msg["annotation_id"],
                     body_text=msg["body"],
                     creator=msg.get("creator", get_human_username()),
                 )
             elif msg_type == "edit_body":
                 edit_body(
-                    self.doc_path,
+                    doc,
                     annotation_id=msg["annotation_id"],
                     new_text=msg["body"],
                 )
             elif msg_type == "resolve":
-                resolve(self.doc_path, msg["annotation_id"])
-                mark_read(self.doc_path, msg["annotation_id"])
+                resolve(doc, msg["annotation_id"])
+                mark_read(doc, msg["annotation_id"])
             elif msg_type == "unresolve":
-                unresolve(self.doc_path, msg["annotation_id"])
+                unresolve(doc, msg["annotation_id"])
             elif msg_type == "toggle_sidenotes":
-                self.sidenotes_enabled = msg["enabled"]
-                await self._broadcast("doc")
+                self.ws_sidenotes[ws] = msg["enabled"]
+                await self._broadcast(doc, "doc")
             elif msg_type == "mark_read":
-                mark_read(self.doc_path, msg["annotation_id"])
+                mark_read(doc, msg["annotation_id"])
             elif msg_type == "mark_unread":
-                mark_unread(self.doc_path, msg["annotation_id"])
+                mark_unread(doc, msg["annotation_id"])
             elif msg_type == "reanchor":
                 reanchor(
-                    self.doc_path,
+                    doc,
                     annotation_id=msg["annotation_id"],
                     exact=msg["exact"],
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
                 )
             elif msg_type == "render_markdown":
-                bib, csl = _extract_bibliography(self.doc_path)
+                bib, csl = _extract_bibliography(doc)
                 html = await render_markdown_fragment(
                     msg["text"],
-                    cwd=str(self.doc_path.parent),
+                    cwd=str(doc.parent),
                     bibliography=bib,
                     csl=csl,
                 )
@@ -317,35 +470,80 @@ class ScholiaServer:
             except Exception:
                 pass
 
-    async def _broadcast(self, msg_type: str):
-        if msg_type == "doc":
-            html = await render_pandoc(
-                self.doc_path, sidenotes=self.sidenotes_enabled
-            )
-            payload = json.dumps({
-                "type": "doc_update",
-                "html": html,
-                "sidenotes": self.sidenotes_enabled,
-            })
-        else:
-            comments = load_comments(self.doc_path)
+    async def _broadcast(self, doc_path: Path, change_type: str):
+        clients = self.ws_clients.get(doc_path, set())
+        if not clients:
+            return
+
+        if change_type == "comments":
+            comments = load_comments(doc_path)
             payload = json.dumps({"type": "comments_update", "comments": comments})
+            closed = set()
+            for ws in clients:
+                try:
+                    await ws.send_str(payload)
+                except Exception:
+                    closed.add(ws)
+        else:
+            default_sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
+            by_sidenotes: dict[bool, list] = {}
+            for ws in clients:
+                sn = self.ws_sidenotes.get(ws, default_sidenotes)
+                by_sidenotes.setdefault(sn, []).append(ws)
 
-        closed = set()
-        for ws in self.ws_clients:
-            try:
-                await ws.send_str(payload)
-            except Exception:
-                closed.add(ws)
-        self.ws_clients -= closed
+            closed = set()
+            for sn_val, ws_list in by_sidenotes.items():
+                html = await render_pandoc(doc_path, sidenotes=sn_val)
+                payload = json.dumps({
+                    "type": "doc_update",
+                    "html": html,
+                    "sidenotes": sn_val,
+                })
+                for ws in ws_list:
+                    try:
+                        await ws.send_str(payload)
+                    except Exception:
+                        closed.add(ws)
 
-    def _on_file_change(self, change_type: str):
+        for ws in closed:
+            clients.discard(ws)
+            self.ws_file.pop(ws, None)
+            self.ws_sidenotes.pop(ws, None)
+
+    def _start_watching(self, doc_path: Path):
+        """Start watching doc_path's parent directory if not already watched."""
+        parent = doc_path.parent.resolve()
+        if parent in self._observers:
+            self._observer_refcount[parent] += 1
+            return
+        handler = _FileChangeHandler(self, self._loop)
+        observer = Observer()
+        observer.schedule(handler, str(parent), recursive=False)
+        observer.start()
+        self._observers[parent] = observer
+        self._observer_refcount[parent] = 1
+
+    def _stop_watching(self, doc_path: Path):
+        """Decrement refcount; stop observer if it reaches zero."""
+        parent = doc_path.parent.resolve()
+        if parent not in self._observer_refcount:
+            return
+        self._observer_refcount[parent] -= 1
+        if self._observer_refcount[parent] <= 0:
+            observer = self._observers.pop(parent, None)
+            del self._observer_refcount[parent]
+            if observer:
+                observer.stop()
+                observer.join(timeout=1)
+
+    def _on_file_change(self, doc_path: Path, change_type: str):
         """Debounced file change handler (called from watchdog thread via call_soon_threadsafe)."""
-        handle = self._debounce_handles.get(change_type)
+        key = (doc_path, change_type)
+        handle = self._debounce_handles.get(key)
         if handle:
             handle.cancel()
-        self._debounce_handles[change_type] = self._loop.call_later(
-            0.2, lambda: asyncio.ensure_future(self._broadcast(change_type))
+        self._debounce_handles[key] = self._loop.call_later(
+            0.2, lambda dp=doc_path, ct=change_type: asyncio.ensure_future(self._broadcast(dp, ct))
         )
 
     async def start(self):
@@ -362,11 +560,8 @@ class ScholiaServer:
         for sig in (signal.SIGINT, signal.SIGTERM):
             self._loop.add_signal_handler(sig, _request_stop)
 
-        # Start watchdog
-        handler = _FileChangeHandler(self.doc_path, self._loop, self._on_file_change)
-        observer = Observer()
-        observer.schedule(handler, str(self.doc_path.parent), recursive=False)
-        observer.start()
+        # Start watchdog for the initial document
+        self._start_watching(self.doc_path)
 
         # Start web server
         runner = web.AppRunner(self.app)
@@ -397,10 +592,19 @@ class ScholiaServer:
         await stop_event.wait()
 
         # Close all WebSocket connections so runner.cleanup() doesn't block
-        for ws in list(self.ws_clients):
-            await ws.close()
+        for clients in list(self.ws_clients.values()):
+            for ws in list(clients):
+                await ws.close()
         self.ws_clients.clear()
+        self.ws_file.clear()
+        self.ws_sidenotes.clear()
 
-        observer.stop()
-        observer.join(timeout=1)
+        # Stop all observers
+        for observer in self._observers.values():
+            observer.stop()
+        for observer in self._observers.values():
+            observer.join(timeout=1)
+        self._observers.clear()
+        self._observer_refcount.clear()
+
         await runner.cleanup()
