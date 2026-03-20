@@ -52,6 +52,30 @@ def resolve_id(doc_path: str | Path, prefix: str) -> str:
     raise ValueError(f"Annotation {prefix} not found")
 
 
+def short_id_map(doc_path: str | Path) -> dict[str, str]:
+    """Map full annotation IDs to minimum unique prefixes (floor 4 chars).
+
+    Strips the urn:uuid: prefix before computing uniqueness.
+    Computes against ALL annotations in the file for stable results
+    regardless of display filters. Returns {} for empty annotation files.
+    """
+    comments = load_comments(doc_path)
+    if not comments:
+        return {}
+    full_ids = [c["id"] for c in comments]
+    uuid_parts = [fid.removeprefix("urn:uuid:") for fid in full_ids]
+
+    # Find minimum prefix length where all UUIDs are unique
+    min_len = 4
+    while min_len < max(len(u) for u in uuid_parts):
+        prefixes = [u[:min_len] for u in uuid_parts]
+        if len(set(prefixes)) == len(prefixes):
+            break
+        min_len += 1
+
+    return {fid: uuid[:min_len] for fid, uuid in zip(full_ids, uuid_parts)}
+
+
 def load_comments(doc_path: str | Path) -> list[dict]:
     """Load all annotations, deduplicated by id (last version wins)."""
     path = annotation_path(doc_path)

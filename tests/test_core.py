@@ -15,8 +15,10 @@ from scholia.comments import (
     list_open,
     load_comments,
     resolve,
+    short_id_map,
     unresolve,
 )
+from scholia.context import locate_anchor
 from scholia.state import is_unread, load_state, mark_read, mark_unread, state_path
 
 
@@ -102,6 +104,53 @@ def test_error_on_missing_id(tmp_doc):
         append_reply(tmp_doc, "urn:uuid:nonexistent", "text")
     with pytest.raises(ValueError, match="not found"):
         resolve(tmp_doc, "urn:uuid:nonexistent")
+
+
+def test_short_id_map_empty(tmp_doc):
+    """Empty annotation file returns empty dict."""
+    assert short_id_map(tmp_doc) == {}
+
+
+def test_short_id_map_single(tmp_doc):
+    """Single annotation gets 4-char prefix (floor)."""
+    ann = append_comment(tmp_doc, exact="text", body_text="hi")
+    mapping = short_id_map(tmp_doc)
+    full_id = ann["id"]
+    uuid_part = full_id.removeprefix("urn:uuid:")
+    assert full_id in mapping
+    assert mapping[full_id] == uuid_part[:4]
+
+
+def test_short_id_map_collision(tmp_doc):
+    """Colliding prefixes auto-extend beyond 4 chars."""
+    a1 = append_comment(tmp_doc, exact="text1", body_text="one")
+    a2 = append_comment(tmp_doc, exact="text2", body_text="two")
+    from scholia.comments import annotation_path
+    import json
+    path = annotation_path(tmp_doc)
+    lines = path.read_text().splitlines()
+    obj1 = json.loads(lines[-2])
+    obj2 = json.loads(lines[-1])
+    obj1["id"] = "urn:uuid:abcd1111-0000-0000-0000-000000000000"
+    obj2["id"] = "urn:uuid:abcd2222-0000-0000-0000-000000000000"
+    path.write_text(json.dumps(obj1) + "\n" + json.dumps(obj2) + "\n")
+
+    mapping = short_id_map(tmp_doc)
+    assert len(mapping) == 2
+    for short in mapping.values():
+        assert len(short) >= 5
+    shorts = list(mapping.values())
+    assert shorts[0] != shorts[1]
+
+
+def test_short_id_map_stability(tmp_doc):
+    """Map includes ALL annotations (including resolved) for stable results."""
+    a1 = append_comment(tmp_doc, exact="keep", body_text="hi")
+    a2 = append_comment(tmp_doc, exact="close", body_text="bye")
+    resolve(tmp_doc, a2["id"])
+    mapping = short_id_map(tmp_doc)
+    assert a1["id"] in mapping
+    assert a2["id"] in mapping
 
 
 # ── Read/unread state ──────────────────────────────────
@@ -215,3 +264,34 @@ def test_cli_list_since(tmp_doc):
     ann = append_comment(tmp_doc, exact="text", body_text="hi")
     code, out, _ = _run_cli("list", str(tmp_doc), "--since", "2020-01-01")
     assert code == 0 and ann["id"] in out
+
+
+# ── locate_anchor context window ───────────────────────
+
+
+def test_locate_anchor_default_context(tmp_doc):
+    """Default context_before=2, context_after=2."""
+    selector = {"exact": "Some text to anchor comments to."}
+    ctx = locate_anchor(tmp_doc, selector)
+    assert ctx["found"]
+    # Anchor is at line 7 of an 11-line doc.
+    # 2 before (lines 5-6) + anchor (line 7) + caret + 2 after (lines 8-9) = 6 items
+    assert len(ctx["context_lines"]) == 6
+
+
+def test_locate_anchor_custom_context(tmp_doc):
+    """Custom context_before=0, context_after=0 shows only anchor line."""
+    selector = {"exact": "Some text to anchor comments to."}
+    ctx_narrow = locate_anchor(tmp_doc, selector, context_before=0, context_after=0)
+    ctx_wide = locate_anchor(tmp_doc, selector, context_before=5, context_after=5)
+    assert ctx_narrow["found"] and ctx_wide["found"]
+    # Narrow should have fewer context lines than wide
+    assert len(ctx_narrow["context_lines"]) < len(ctx_wide["context_lines"])
+
+
+def test_locate_anchor_context_zero_zero(tmp_doc):
+    """--context 0 0 still shows the anchor line itself."""
+    selector = {"exact": "Some text to anchor comments to."}
+    ctx = locate_anchor(tmp_doc, selector, context_before=0, context_after=0)
+    assert ctx["found"]
+    assert len(ctx["context_lines"]) >= 1  # at least anchor + caret
