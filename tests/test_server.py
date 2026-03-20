@@ -269,3 +269,62 @@ def test_display_path_outside(tmp_doc, tmp_path):
     outside = tmp_path.parent / "elsewhere" / "doc.md"
     result = server._display_path(outside.resolve())
     assert result.startswith("/")
+
+
+# ── ?file= routing tests ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_index_file_param(client, tmp_doc):
+    """GET /?file=path renders the specified file."""
+    other = tmp_doc.parent / "other.md"
+    other.write_text("---\ntitle: Other Doc\n---\n\nOther content.\n")
+    resp = await client.get("/", params={"file": str(other)})
+    assert resp.status == 200
+    text = await resp.text()
+    assert "Other Doc" in text
+    assert "Other content" in text
+
+
+@pytest.mark.asyncio
+async def test_index_file_not_found(client):
+    """GET /?file=nonexistent returns error page, not 500."""
+    resp = await client.get("/", params={"file": "/nonexistent/doc.md"})
+    assert resp.status == 200
+    text = await resp.text()
+    assert "scholia-container" in text  # still a valid page
+    assert "not found" in text.lower() or "error" in text.lower()
+
+
+@pytest.mark.asyncio
+async def test_index_no_param_uses_default(client, tmp_doc):
+    """GET / with no file param renders the default doc."""
+    resp = await client.get("/")
+    assert resp.status == 200
+    text = await resp.text()
+    assert "Test Document" in text
+
+
+@pytest.mark.asyncio
+async def test_index_relative_file_param(client, tmp_doc, server_app, monkeypatch):
+    """GET /?file=relative resolves relative to launch_dir."""
+    other = tmp_doc.parent / "rel.md"
+    other.write_text("---\ntitle: Relative\n---\n\nRelative content.\n")
+    # Set launch_dir so relative path resolves correctly
+    monkeypatch.setattr(server_app, "launch_dir", tmp_doc.parent.resolve())
+    resp = await client.get("/", params={"file": "rel.md"})
+    assert resp.status == 200
+    text = await resp.text()
+    assert "Relative" in text
+
+
+@pytest.mark.asyncio
+async def test_index_render_error(client, tmp_doc):
+    """A file that causes Pandoc to fail shows an error page, not a 500."""
+    bad = tmp_doc.parent / "bad.md"
+    bad.write_text("---\nbibliography: /nonexistent/refs.bib\n---\n\n@cite_this\n")
+    resp = await client.get("/", params={"file": str(bad)})
+    assert resp.status == 200
+    text = await resp.text()
+    assert "scholia-container" in text  # still a valid page
+    assert "error" in text.lower()

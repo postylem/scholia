@@ -240,11 +240,51 @@ class ScholiaServer:
         self.app.router.add_static("/static/", static_dir)
 
     async def _handle_index(self, request):
-        page = await build_page(
-            self.doc_path, self.template,
-            sidenotes=self.sidenotes_enabled,
-            display_path=self.display_path,
-        )
+        file_param = request.query.get("file")
+        if file_param:
+            file_path = Path(file_param)
+            if not file_path.is_absolute():
+                file_path = self.launch_dir / file_path
+            doc_path = file_path.resolve()
+            display = self._display_path(doc_path)
+        else:
+            doc_path = self.doc_path
+            display = self.display_path
+
+        try:
+            sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
+            page = await build_page(
+                doc_path, self.template,
+                sidenotes=sidenotes,
+                display_path=display,
+            )
+        except (FileNotFoundError, OSError) as e:
+            error_html = (
+                '<div style="padding:2rem;color:#c33;font-family:sans-serif;">'
+                f'<h2>File not found</h2><p>{doc_path}</p></div>'
+            )
+            page = self.template.replace("{{TITLE}}", "Error — Scholia")
+            page = page.replace("{{PANDOC_HTML}}", error_html)
+            page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
+            page = page.replace("{{DOC_PATH}}", json.dumps(display))
+            page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
+            page = page.replace("{{SIDENOTES_ENABLED}}", "false")
+            page = page.replace("{{COMMENTS_JSON}}", "[]")
+            page = page.replace("{{STATE_JSON}}", "{}")
+        except subprocess.CalledProcessError as e:
+            error_html = (
+                '<div style="padding:2rem;color:#c33;font-family:sans-serif;">'
+                f'<h2>Render error</h2><pre>{e.stderr or e}</pre></div>'
+            )
+            page = self.template.replace("{{TITLE}}", "Error — Scholia")
+            page = page.replace("{{PANDOC_HTML}}", error_html)
+            page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
+            page = page.replace("{{DOC_PATH}}", json.dumps(display))
+            page = page.replace("{{DOC_FULLPATH}}", json.dumps(str(doc_path)))
+            page = page.replace("{{SIDENOTES_ENABLED}}", "false")
+            page = page.replace("{{COMMENTS_JSON}}", "[]")
+            page = page.replace("{{STATE_JSON}}", "{}")
+
         return web.Response(text=page, content_type="text/html")
 
     async def _handle_list_dir(self, request):
