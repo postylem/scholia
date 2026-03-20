@@ -189,3 +189,83 @@ def test_form_elements_have_name_or_id():
         "Form elements created without name or id attribute:\n"
         + "\n".join(violations)
     )
+
+
+# ── list-dir and _display_path tests ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_dir_returns_sorted_entries(client, tmp_doc):
+    """list-dir returns dirs first (sorted), then files (sorted), no dotfiles."""
+    d = tmp_doc.parent
+    (d / "subdir").mkdir()
+    (d / "another.md").write_text("# Another")
+    (d / "zebra.txt").write_text("txt")
+    (d / ".hidden").write_text("secret")
+    resp = await client.get("/api/list-dir", params={"path": str(d)})
+    assert resp.status == 200
+    data = await resp.json()
+    names = [e["name"] for e in data["entries"]]
+    assert names[0] == ".."
+    assert ".hidden" not in names
+    # dirs before files
+    dir_names = [e["name"] for e in data["entries"] if e["type"] == "dir" and e["name"] != ".."]
+    file_names = [e["name"] for e in data["entries"] if e["type"] == "file"]
+    assert dir_names == sorted(dir_names)
+    assert file_names == sorted(file_names)
+    dir_idx = max(i for i, e in enumerate(data["entries"]) if e["type"] == "dir")
+    file_idx = min(i for i, e in enumerate(data["entries"]) if e["type"] == "file")
+    assert dir_idx < file_idx
+
+
+@pytest.mark.asyncio
+async def test_list_dir_symlinks(client, tmp_doc):
+    """Symlinks include a 'link' field with the resolved target."""
+    d = tmp_doc.parent
+    target = d / "real.md"
+    target.write_text("# Real")
+    link = d / "linked.md"
+    link.symlink_to(target)
+    resp = await client.get("/api/list-dir", params={"path": str(d)})
+    data = await resp.json()
+    linked_entry = next(e for e in data["entries"] if e["name"] == "linked.md")
+    assert linked_entry["type"] == "file"
+    assert linked_entry["link"] == str(target.resolve())
+
+
+@pytest.mark.asyncio
+async def test_list_dir_bad_path(client):
+    """Non-existent path returns error JSON."""
+    resp = await client.get("/api/list-dir", params={"path": "/nonexistent/path"})
+    assert resp.status == 200
+    data = await resp.json()
+    assert "error" in data
+
+
+@pytest.mark.asyncio
+async def test_list_dir_empty(client, tmp_doc):
+    """Empty directory returns only '..' entry."""
+    d = tmp_doc.parent / "empty"
+    d.mkdir()
+    resp = await client.get("/api/list-dir", params={"path": str(d)})
+    data = await resp.json()
+    assert len(data["entries"]) == 1
+    assert data["entries"][0]["name"] == ".."
+
+
+def test_display_path_relative(tmp_doc, monkeypatch):
+    """Files under launch_dir get relative display paths."""
+    monkeypatch.chdir(tmp_doc.parent)
+    server = ScholiaServer(str(tmp_doc))
+    abs_path = tmp_doc.resolve()
+    result = server._display_path(abs_path)
+    # Should be relative (not start with /)
+    assert not result.startswith("/")
+
+
+def test_display_path_outside(tmp_doc, tmp_path):
+    """Files outside launch_dir get absolute display paths."""
+    server = ScholiaServer(str(tmp_doc))
+    outside = tmp_path.parent / "elsewhere" / "doc.md"
+    result = server._display_path(outside.resolve())
+    assert result.startswith("/")

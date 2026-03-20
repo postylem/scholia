@@ -210,6 +210,7 @@ class ScholiaServer:
             raise FileNotFoundError(f"Document not found: {self.doc_path}")
         self.host = host
         self.port = port
+        self.launch_dir = Path.cwd().resolve()
         self.ws_clients: set[web.WebSocketResponse] = set()
         # Auto-detect sidenotes: on if doc has footnotes
         md_text = self.doc_path.read_text(encoding="utf-8")
@@ -224,9 +225,17 @@ class ScholiaServer:
         template_path = Path(__file__).parent / "template.html"
         return template_path.read_text(encoding="utf-8")
 
+    def _display_path(self, abs_path: Path) -> str:
+        """Compute display path: relative if under launch_dir, else absolute."""
+        try:
+            return str(abs_path.relative_to(self.launch_dir))
+        except ValueError:
+            return str(abs_path)
+
     def _setup_routes(self):
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ws", self._handle_ws)
+        self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
 
@@ -237,6 +246,35 @@ class ScholiaServer:
             display_path=self.display_path,
         )
         return web.Response(text=page, content_type="text/html")
+
+    async def _handle_list_dir(self, request):
+        """Return directory listing as JSON."""
+        dir_path = request.query.get("path", "")
+        p = Path(dir_path).resolve()
+        if not p.is_dir():
+            return web.json_response({"error": f"Not a directory: {dir_path}"})
+
+        entries = [{"name": "..", "type": "dir"}]
+        dirs = []
+        files = []
+        for child in p.iterdir():
+            if child.name.startswith("."):
+                continue
+            entry = {"name": child.name}
+            is_link = child.is_symlink()
+            if is_link:
+                entry["link"] = str(child.resolve())
+            if child.is_dir():
+                entry["type"] = "dir"
+                dirs.append(entry)
+            else:
+                entry["type"] = "file"
+                files.append(entry)
+        dirs.sort(key=lambda e: e["name"].lower())
+        files.sort(key=lambda e: e["name"].lower())
+        entries.extend(dirs)
+        entries.extend(files)
+        return web.json_response({"path": str(p), "entries": entries})
 
     async def _handle_ws(self, request):
         ws = web.WebSocketResponse()
