@@ -123,7 +123,7 @@ def format_orphan_context(selector: dict) -> list[str]:
     return _fmt_gutter_line(gutter, full_line, (col_s, col_e), color)
 
 
-def locate_anchor(doc_path: str | Path, selector: dict) -> dict:
+def locate_anchor(doc_path: str | Path, selector: dict, *, context_before: int = 2, context_after: int = 2) -> dict:
     """Find an annotation's anchor in the document and return context.
 
     Returns a dict with:
@@ -156,9 +156,9 @@ def locate_anchor(doc_path: str | Path, selector: dict) -> dict:
     end_line = text[:exact_end].count("\n")
     exact_line_count = end_line - anchor_line + 1
 
-    # Context window: 2 lines before anchor, anchor line(s), 2 lines after
-    ctx_start = max(0, anchor_line - 2)
-    ctx_end = min(len(lines), anchor_line + exact_line_count + 2)
+    # Context window: configurable lines before/after anchor
+    ctx_start = max(0, anchor_line - context_before)
+    ctx_end = min(len(lines), anchor_line + exact_line_count + context_after)
 
     # Line number gutter width
     max_lineno = ctx_end
