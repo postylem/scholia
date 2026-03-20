@@ -30,7 +30,12 @@ scholia list <doc.md> --since 2026-03-10
 # Output formats: context (default), messages-only, summary, raw
 scholia list <doc.md> --format summary
 
+# Control context lines around anchored text (default: 2 before, 2 after)
+scholia list <doc.md> --context 1 1
+scholia list <doc.md> --context 0 0   # anchor line(s) only
+
 # Show a single thread (accepts ID prefix — e.g. 'a8c0' instead of full urn:uuid:...)
+# Also accepts --context N M to control surrounding lines
 scholia show <doc.md> <id>
 ```
 
@@ -86,8 +91,11 @@ When asked to review comments, "check the scholia," or equivalent:
 
 5. **Resolve** threads that are done. Resolved threads are hidden from `scholia list` by default.
 
+6. **Follow-up reviews.** For iterative review sessions (when you've already reviewed this document before), use `scholia list <doc.md> --since <ISO-timestamp>` to see only threads with activity since your last pass. Note the current time before listing so you can use it as the `--since` value next time.
+
 ## Guidelines
 
+- **Use short IDs default**: Always pass the short 4-8 character ID prefix (e.g. `a8c0`) instead of the full `urn:uuid:...` to save context tokens.
 - **Always pass `--author-ai-model "<model>"`** on every `reply` and `comment`. This is required — it marks your message as written by software and records your model name. Examples: `"Claude Opus 4.6"`, `"GPT-4o"`, `"Gemini 2.5 Pro"`.
 - **Never respond to resolved threads** — they are closed.
 - **Keep replies concise** — this is margin dialogue, not an essay.
@@ -121,35 +129,35 @@ When writing or editing documents, use `pandoc-crossref` identifiers so that sec
 
 ```
 $ scholia list doc.md
-[open] urn:uuid:a8c086ab-3949-4abe-9679-4e41e05827b8
-  doc.md:13:8-28
+d599
+  doc.md:7:8-28
   in § Consistency Model
-  11 |  ## Consistency Model
-  12 |
-  13 |  We use eventual consistency with a maximum staleness window of 30 seconds.
-     |         ^^^^^^^^^^^^^^^^^^^^
-  14 |  Write-through caching ensures the database is always the source of truth,
-  15 |  but read replicas may serve slightly stale data during the convergence window.
+  5 |  ## Consistency Model
+  6 |
+  7 |  We use eventual consistency with a maximum staleness window of 30 seconds.
+    |         ^^^^^^^^^^^^^^^^^^^^
+  8 |  Write-through caching ensures the database is always the source of truth,
+  9 |  but read replicas may serve slightly stale data during the convergence window.
 
   [alice] Is 30 seconds too long? Users might see stale prices.
 
-[open] urn:uuid:c4e21203-dafa-4530-a6c9-afecdb2f7b60
-  doc.md:19:39-76
+2f4f
+  doc.md:13:39-76
   in § Failure Modes
-  17 |  ## Failure Modes
-  18 |
-  19 |  When Redis is unavailable, the system falls back to direct database queries.
+  11 |  ## Failure Modes
+  12 |
+  13 |  When Redis is unavailable, the system falls back to direct database queries.
      |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  20 |  This degradation is transparent to the caller but increases p99 latency
-  21 |  from ~5ms to ~50ms.
+  14 |  This degradation is transparent to the caller but increases p99 latency
+  15 |  from ~5ms to ~50ms.
 
   [alice] Should we add a circuit breaker here instead of unbounded fallback?
 
-$ scholia reply doc.md a8c0 "Good catch. For pricing data we should tighten this to 5s. I'll update the config." --author-ai-model "Claude Opus 4.6"
-Reply added to urn:uuid:a8c086ab-3949-4abe-9679-4e41e05827b8
+$ scholia reply doc.md d599 "Good catch. For pricing data we should tighten this to 5s. I'll update the config." --author-ai-model "Claude Opus 4.6"
+Reply added to urn:uuid:d5998950-b501-4cb8-a323-aae0409b1aa1
 
-$ scholia resolve doc.md a8c0
-Resolved urn:uuid:a8c086ab-3949-4abe-9679-4e41e05827b8
+$ scholia resolve doc.md d599
+Resolved urn:uuid:d5998950-b501-4cb8-a323-aae0409b1aa1
 ```
 
 ## Configuration

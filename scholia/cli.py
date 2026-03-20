@@ -370,6 +370,9 @@ def cmd_show(args):
     comments = load_comments(args.doc)
     id_map = short_id_map(args.doc)
     context_before, context_after = args.context
+    if context_before < 0 or context_after < 0:
+        print("Error: --context values must be non-negative", file=sys.stderr)
+        sys.exit(1)
     for ann in comments:
         if ann["id"] == full_id:
             _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
