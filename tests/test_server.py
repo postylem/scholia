@@ -376,3 +376,45 @@ async def test_ws_operations_use_watched_file(client, tmp_doc):
     from scholia.comments import load_comments
     assert len(load_comments(other)) == 1
     assert len(load_comments(tmp_doc)) == 0
+
+
+# ── Full navigation flow ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_full_navigation_flow(client, tmp_doc):
+    """Full flow: load default → list dir → navigate to other file."""
+    # Create another file
+    other = tmp_doc.parent / "other.md"
+    other.write_text("---\ntitle: Other\n---\n\nOther content.\n")
+
+    # Load default page
+    resp = await client.get("/")
+    assert resp.status == 200
+    text = await resp.text()
+    assert "Test Document" in text
+
+    # List directory
+    resp = await client.get("/api/list-dir", params={"path": str(tmp_doc.parent)})
+    data = await resp.json()
+    file_names = [e["name"] for e in data["entries"] if e["type"] == "file"]
+    assert "other.md" in file_names
+
+    # Navigate to other file
+    resp = await client.get("/", params={"file": str(other)})
+    assert resp.status == 200
+    text = await resp.text()
+    assert "Other" in text
+
+    # WS works on the new file
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(other.resolve())})
+    await ws.send_json({
+        "type": "new_comment",
+        "exact": "Other content",
+        "prefix": "",
+        "suffix": "",
+        "body": "comment on other",
+    })
+    await ws.close()
+    assert len(load_comments(other)) == 1
