@@ -16,6 +16,7 @@ from scholia.comments import (
     load_comments,
     resolve,
     resolve_id,
+    short_id_map,
     unresolve,
 )
 from scholia.context import format_orphan_context, locate_anchor
@@ -71,9 +72,10 @@ def _author_label(creator: dict) -> str:
     return name
 
 
-def _print_annotation(ann, fmt=FORMAT_CONTEXT, doc_path=None):
+def _print_annotation(ann, fmt=FORMAT_CONTEXT, doc_path=None, *,
+                      short_id=None, show_status=True, ctx=None,
+                      context_before=2, context_after=2):
     """Print a single annotation in the requested format."""
-    status = ann.get("scholia:status", "?")
     selector = ann.get("target", {}).get("selector", {})
     exact = selector.get("exact", "")
     bodies = ann.get("body", [])
@@ -84,8 +86,16 @@ def _print_annotation(ann, fmt=FORMAT_CONTEXT, doc_path=None):
         _print_raw(ann)
         return
 
-    # Header line
-    print(f"[{status}] {ann['id']}")
+    # Header line: [status] short_id (N messages)
+    display_id = short_id or ann["id"]
+    parts = []
+    if show_status:
+        status = ann.get("scholia:status", "?")
+        parts.append(f"[{status}]")
+    parts.append(display_id)
+    if fmt != FORMAT_SUMMARY and n_msgs > 1:
+        parts.append(f"({n_msgs} messages)")
+    print(" ".join(parts))
 
     if fmt == FORMAT_SUMMARY:
         anchor_display = exact[:60] + ("\u2026" if len(exact) > 60 else "")
@@ -95,7 +105,10 @@ def _print_annotation(ann, fmt=FORMAT_CONTEXT, doc_path=None):
 
     # Context lookup (for FORMAT_CONTEXT)
     if fmt == FORMAT_CONTEXT and doc_path:
-        ctx = locate_anchor(doc_path, selector)
+        if ctx is None:
+            ctx = locate_anchor(doc_path, selector,
+                                context_before=context_before,
+                                context_after=context_after)
         if ctx["found"]:
             # File location reference
             loc = f"{doc_path}:{ctx['line']}:{ctx['col']}"
@@ -292,13 +305,11 @@ def cmd_list(args):
                 print(f"Error: invalid date format '{args.since}', use YYYY-MM-DD", file=sys.stderr)
                 sys.exit(1)
 
-    # Default is open-only; --all widens to include resolved
     if args.all:
         items = load_comments(args.doc)
     else:
         items = list_open(args.doc)
 
-    # --since composes with the above filter
     if since:
         filtered = []
         for ann in items:
@@ -314,38 +325,58 @@ def cmd_list(args):
         print("No comments.")
         return
 
-    # In context format, sort orphans to the end.
-    # NOTE: this does the anchor lookup twice per annotation (once here to
-    # classify, once in _print_annotation to render). Could be optimized by
-    # caching the lookup result if this becomes a performance issue.
+    id_map = short_id_map(args.doc)
+    context_before, context_after = args.context
+    if context_before < 0 or context_after < 0:
+        print("Error: --context values must be non-negative", file=sys.stderr)
+        sys.exit(1)
+    show_status = args.all
+
     if args.fmt == FORMAT_CONTEXT and args.doc:
         anchored = []
         orphaned = []
         for ann in items:
             selector = ann.get("target", {}).get("selector", {})
-            ctx = locate_anchor(args.doc, selector)
+            ctx = locate_anchor(args.doc, selector,
+                                context_before=context_before,
+                                context_after=context_after)
             if ctx["found"]:
-                anchored.append(ann)
+                anchored.append((ann, ctx))
             else:
                 orphaned.append(ann)
-        for ann in anchored:
-            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc)
+        anchored.sort(key=lambda pair: pair[1]["line"])
+        for ann, ctx in anchored:
+            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
+                              short_id=id_map.get(ann["id"]),
+                              show_status=show_status, ctx=ctx)
         if orphaned:
             print(f"── orphaned threads ({len(orphaned)}) ──\n")
             for ann in orphaned:
-                _print_annotation(ann, fmt=args.fmt, doc_path=args.doc)
+                _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
+                                  short_id=id_map.get(ann["id"]),
+                                  show_status=show_status,
+                                  context_before=context_before,
+                                  context_after=context_after)
     else:
         for ann in items:
-            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc)
+            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
+                              short_id=id_map.get(ann["id"]),
+                              show_status=show_status)
 
 
 def cmd_show(args):
     _check_doc_exists(args.doc)
     full_id = resolve_id(args.doc, args.id)
     comments = load_comments(args.doc)
+    id_map = short_id_map(args.doc)
+    context_before, context_after = args.context
     for ann in comments:
         if ann["id"] == full_id:
-            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc)
+            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
+                              short_id=id_map.get(ann["id"]),
+                              show_status=True,
+                              context_before=context_before,
+                              context_after=context_after)
             return
 
 
@@ -514,6 +545,11 @@ def main():
         help="Filter to threads modified since DATE (YYYY-MM-DD)",
     )
     _add_format_arg(p_list)
+    p_list.add_argument(
+        "--context", nargs=2, type=int, default=[2, 2],
+        metavar=("BEFORE", "AFTER"),
+        help="Lines of context before/after anchor (default: 2 2)",
+    )
 
     # show
     p_show = sub.add_parser(
@@ -523,6 +559,11 @@ def main():
     p_show.add_argument("doc", help="Markdown document path")
     p_show.add_argument("id", help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')")
     _add_format_arg(p_show)
+    p_show.add_argument(
+        "--context", nargs=2, type=int, default=[2, 2],
+        metavar=("BEFORE", "AFTER"),
+        help="Lines of context before/after anchor (default: 2 2)",
+    )
 
     # reply
     p_reply = sub.add_parser("reply", help="Reply to an annotation thread")

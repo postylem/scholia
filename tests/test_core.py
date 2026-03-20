@@ -225,7 +225,8 @@ def test_cli_comment_reply_resolve(tmp_doc):
     assert ann_id not in out
 
     code, out, _ = _run_cli("list", str(tmp_doc), "--all")
-    assert ann_id in out
+    short_prefix = ann_id.removeprefix("urn:uuid:")[:4]
+    assert short_prefix in out
 
     code, _, _ = _run_cli("unresolve", str(tmp_doc), ann_id)
     assert code == 0
@@ -263,7 +264,81 @@ def test_cli_error_cases(tmp_doc):
 def test_cli_list_since(tmp_doc):
     ann = append_comment(tmp_doc, exact="text", body_text="hi")
     code, out, _ = _run_cli("list", str(tmp_doc), "--since", "2020-01-01")
-    assert code == 0 and ann["id"] in out
+    short_prefix = ann["id"].removeprefix("urn:uuid:")[:4]
+    assert code == 0 and short_prefix in out
+
+
+def test_cli_list_short_ids(tmp_doc):
+    """Default listing shows short IDs, not full urn:uuid:..."""
+    append_comment(tmp_doc, exact="Some text", body_text="hi")
+    code, out, _ = _run_cli("list", str(tmp_doc))
+    assert code == 0
+    assert "urn:uuid:" not in out
+
+
+def test_cli_list_no_open_tag(tmp_doc):
+    """Default listing (open-only) omits [open] status tag."""
+    ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
+    short_prefix = ann["id"].removeprefix("urn:uuid:")[:4]
+    code, out, _ = _run_cli("list", str(tmp_doc))
+    assert code == 0
+    assert short_prefix in out
+    assert "[open]" not in out
+
+
+def test_cli_list_all_shows_status(tmp_doc):
+    """--all listing shows [open]/[resolved] status tags."""
+    ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
+    resolve(tmp_doc, ann["id"])
+    code, out, _ = _run_cli("list", str(tmp_doc), "--all")
+    assert code == 0
+    assert "[resolved]" in out
+
+
+def test_cli_list_message_count(tmp_doc):
+    """Threads with >1 message show count in header."""
+    ann = append_comment(tmp_doc, exact="Some text", body_text="first")
+    append_reply(tmp_doc, ann["id"], "second")
+    append_reply(tmp_doc, ann["id"], "third")
+    code, out, _ = _run_cli("list", str(tmp_doc))
+    assert code == 0
+    assert "(3 messages)" in out
+
+
+def test_cli_list_single_message_no_count(tmp_doc):
+    """Single-message threads show no count."""
+    append_comment(tmp_doc, exact="Some text", body_text="only one")
+    code, out, _ = _run_cli("list", str(tmp_doc))
+    assert code == 0
+    assert "message" not in out.split("\n")[0]
+
+
+def test_cli_list_context_flag(tmp_doc):
+    """--context controls surrounding line count."""
+    append_comment(tmp_doc, exact="Some text", body_text="hi")
+    _, out_default, _ = _run_cli("list", str(tmp_doc))
+    _, out_narrow, _ = _run_cli("list", str(tmp_doc), "--context", "0", "0")
+    assert len(out_narrow) < len(out_default)
+
+
+def test_cli_list_doc_position_sort(tmp_doc):
+    """Anchored threads are sorted by document position, not creation order."""
+    append_comment(tmp_doc, exact="Duplicate text here.", body_text="later in doc")
+    append_comment(tmp_doc, exact="Some text", body_text="earlier in doc")
+    code, out, _ = _run_cli("list", str(tmp_doc))
+    assert code == 0
+    pos_earlier = out.index("earlier in doc")
+    pos_later = out.index("later in doc")
+    assert pos_earlier < pos_later
+
+
+def test_cli_show_has_status(tmp_doc):
+    """show command always displays status."""
+    ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
+    short_prefix = ann["id"].removeprefix("urn:uuid:")[:4]
+    code, out, _ = _run_cli("show", str(tmp_doc), short_prefix)
+    assert code == 0
+    assert "[open]" in out
 
 
 # ── locate_anchor context window ───────────────────────
