@@ -1262,6 +1262,80 @@ mark.scholia-highlight.scholia-pulse {
   border-bottom-style: solid;
 }
 
+/* ── Breadcrumb dropdown ──────────────────────────── */
+
+.scholia-breadcrumb-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--s-card);
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  z-index: 200;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  min-width: 240px;
+  max-width: 400px;
+  max-height: 60vh;
+  overflow-y: auto;
+  font-family: var(--s-mono, monospace);
+  font-size: 0.72rem;
+}
+.scholia-breadcrumb-dropdown-header {
+  padding: 0.3rem 0.6rem;
+  color: var(--s-text-dim);
+  font-size: 0.65rem;
+  border-bottom: 1px solid var(--s-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.6;
+}
+.scholia-breadcrumb-dropdown-body {
+  padding: 0.2rem 0;
+}
+.scholia-breadcrumb-entry {
+  display: block;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  color: var(--s-text);
+  transition: background 0.1s;
+}
+.scholia-breadcrumb-entry:hover {
+  background: rgba(128, 128, 128, 0.12);
+}
+.scholia-breadcrumb-entry-dir {
+  color: var(--s-accent);
+}
+.scholia-breadcrumb-entry-dimmed {
+  opacity: 0.4;
+}
+.scholia-breadcrumb-entry-symlink {
+  color: var(--s-accent);
+  opacity: 0.85;
+}
+.scholia-breadcrumb-symlink-arrow {
+  font-size: 0.65rem;
+  vertical-align: super;
+}
+.scholia-breadcrumb-current-dir {
+  border-left: 2px solid var(--s-accent);
+  background: rgba(124, 138, 255, 0.08);
+}
+.scholia-breadcrumb-current-file {
+  border-left: 3px solid var(--s-accent);
+  background: rgba(124, 138, 255, 0.14);
+  font-weight: 600;
+}
+.scholia-breadcrumb-viewing-badge {
+  font-weight: 400;
+  font-size: 0.6rem;
+  color: var(--s-accent);
+}
+
 a.scholia-toolbar-brand {
   color: inherit;
   text-decoration: underline;

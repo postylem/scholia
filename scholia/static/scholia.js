@@ -26,11 +26,156 @@
   var uiZoom = 100;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
 
-  // Breadcrumb navigation (stub — implemented in Task 6)
-  function openBreadcrumbDropdown(segEl, dirPath) {
-    // Will be implemented with dropdown file browser
-    console.log('openBreadcrumbDropdown', dirPath);
+  var MD_EXTENSIONS = ['.md', '.markdown', '.qmd', '.rmd'];
+
+  function abbreviatePath(p, maxLen) {
+    if (p.length <= maxLen) return p;
+    var parts = p.split('/').filter(function (s) { return s !== ''; });
+    if (parts.length <= 3) return p;
+    var first = parts[0];
+    var last2 = parts.slice(-2).join('/');
+    return '/' + first + '/[...]/' + last2 + '/';
   }
+
+  function isMarkdownExt(name) {
+    var lower = name.toLowerCase();
+    for (var i = 0; i < MD_EXTENSIONS.length; i++) {
+      if (lower.endsWith(MD_EXTENSIONS[i])) return true;
+    }
+    return false;
+  }
+
+  // ── Breadcrumb dropdown file browser ─────────────────
+
+  var activeBreadcrumbDropdown = null;
+
+  function closeBreadcrumbDropdown() {
+    if (activeBreadcrumbDropdown) {
+      activeBreadcrumbDropdown.dropdown.remove();
+      activeBreadcrumbDropdown.seg.classList.remove('active');
+      activeBreadcrumbDropdown = null;
+    }
+  }
+
+  function openBreadcrumbDropdown(segEl, dirPath) {
+    if (activeBreadcrumbDropdown && activeBreadcrumbDropdown.seg === segEl) {
+      closeBreadcrumbDropdown();
+      return;
+    }
+    closeBreadcrumbDropdown();
+
+    var dropdown = document.createElement('div');
+    dropdown.className = 'scholia-breadcrumb-dropdown';
+    segEl.classList.add('active');
+
+    segEl.style.position = 'relative';
+    segEl.appendChild(dropdown);
+
+    activeBreadcrumbDropdown = {seg: segEl, dropdown: dropdown};
+
+    loadDirIntoDropdown(dropdown, dirPath);
+  }
+
+  function loadDirIntoDropdown(dropdown, dirPath) {
+    dropdown.innerHTML = '';
+
+    var header = document.createElement('div');
+    header.className = 'scholia-breadcrumb-dropdown-header';
+    header.textContent = abbreviatePath(dirPath, 50);
+    header.title = dirPath;
+    dropdown.appendChild(header);
+
+    var body = document.createElement('div');
+    body.className = 'scholia-breadcrumb-dropdown-body';
+    body.textContent = 'Loading...';
+    dropdown.appendChild(body);
+
+    fetch('/api/list-dir?path=' + encodeURIComponent(dirPath))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          body.textContent = data.error;
+          return;
+        }
+        body.innerHTML = '';
+        var docFullPath = window.__SCHOLIA_DOC_FULLPATH__ || '';
+        var currentDir = docFullPath.substring(0, docFullPath.lastIndexOf('/'));
+        var currentFileName = docFullPath.substring(docFullPath.lastIndexOf('/') + 1);
+
+        data.entries.forEach(function (entry) {
+          var el;
+          var entryFullPath = dirPath.replace(/\/$/, '') + '/' + entry.name;
+
+          if (entry.type === 'dir' || entry.name === '..') {
+            el = document.createElement('div');
+            el.className = 'scholia-breadcrumb-entry scholia-breadcrumb-entry-dir';
+            var label = entry.name === '..' ? '> ..' : '> ' + entry.name + '/';
+            el.textContent = label;
+            var targetDir = entry.name === '..'
+              ? dirPath.replace(/\/$/, '').replace(/\/[^/]+$/, '') || '/'
+              : entryFullPath;
+            el.addEventListener('click', function (e) {
+              e.stopPropagation();
+              loadDirIntoDropdown(dropdown, targetDir);
+            });
+            if (entry.name !== '..' && entryFullPath === currentDir) {
+              el.classList.add('scholia-breadcrumb-current-dir');
+            }
+          } else {
+            el = document.createElement('a');
+            el.className = 'scholia-breadcrumb-entry scholia-breadcrumb-entry-file';
+            el.href = '/?file=' + encodeURIComponent(entryFullPath);
+            el.textContent = entry.name;
+            if (!isMarkdownExt(entry.name)) {
+              el.classList.add('scholia-breadcrumb-entry-dimmed');
+            }
+            if (dirPath.replace(/\/$/, '') === currentDir && entry.name === currentFileName) {
+              el.classList.add('scholia-breadcrumb-current-file');
+              var badge = document.createElement('span');
+              badge.className = 'scholia-breadcrumb-viewing-badge';
+              badge.textContent = ' \u2022 viewing';
+              el.appendChild(badge);
+            }
+          }
+
+          if (entry.link) {
+            el.classList.add('scholia-breadcrumb-entry-symlink');
+            el.title = 'Symlink \u2192 ' + entry.link;
+            var arrow = document.createElement('span');
+            arrow.className = 'scholia-breadcrumb-symlink-arrow';
+            arrow.textContent = ' \u2197';
+            el.appendChild(arrow);
+          } else if (entry.name !== '..') {
+            el.title = entry.name;
+          }
+
+          body.appendChild(el);
+        });
+
+        if (data.entries.length === 1 && data.entries[0].name === '..') {
+          var empty = document.createElement('div');
+          empty.className = 'scholia-breadcrumb-entry';
+          empty.style.color = 'var(--s-text-dim)';
+          empty.style.fontStyle = 'italic';
+          empty.textContent = 'No files';
+          body.appendChild(empty);
+        }
+      })
+      .catch(function (err) {
+        body.textContent = 'Error: ' + err.message;
+      });
+  }
+
+  // Dismiss on click-outside and Escape
+  document.addEventListener('click', function (e) {
+    if (activeBreadcrumbDropdown && !activeBreadcrumbDropdown.dropdown.contains(e.target) &&
+        !activeBreadcrumbDropdown.seg.contains(e.target)) {
+      closeBreadcrumbDropdown();
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeBreadcrumbDropdown();
+  });
 
   function applyZoom() {
     document.documentElement.style.fontSize = uiZoom + '%';
