@@ -26,6 +26,12 @@
   var uiZoom = 100;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
 
+  // Breadcrumb navigation (stub — implemented in Task 6)
+  function openBreadcrumbDropdown(segEl, dirPath) {
+    // Will be implemented with dropdown file browser
+    console.log('openBreadcrumbDropdown', dirPath);
+  }
+
   function applyZoom() {
     document.documentElement.style.fontSize = uiZoom + '%';
     positionCards();
@@ -82,6 +88,10 @@
   function connectWS() {
     var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(proto + '//' + location.host + '/ws');
+
+    ws.onopen = function () {
+      wsSend({type: 'watch', file: window.__SCHOLIA_DOC_FULLPATH__});
+    };
 
     ws.onmessage = function (e) {
       var msg = JSON.parse(e.data);
@@ -168,16 +178,37 @@
     brandPath.appendChild(onText);
     var docPath = window.__SCHOLIA_DOC_PATH__ || '';
     var docFullPath = window.__SCHOLIA_DOC_FULLPATH__ || docPath;
-    var fileSpan = document.createElement('span');
-    fileSpan.className = 'scholia-toolbar-filename';
-    fileSpan.textContent = docPath;
-    fileSpan.addEventListener('mouseenter', function () {
-      fileSpan.textContent = docFullPath;
-    });
-    fileSpan.addEventListener('mouseleave', function () {
-      fileSpan.textContent = docPath;
-    });
-    brandPath.appendChild(fileSpan);
+
+    // Build breadcrumb segments
+    var parts = docPath.split('/').filter(function (p) { return p !== ''; });
+    // Compute absolute dir parts from full path
+    var fullParts = docFullPath.replace(/\/$/, '').split('/');
+    // fullParts ends with filename; dirs are everything before
+    for (var si = 0; si < parts.length; si++) {
+      var seg = document.createElement('span');
+      seg.className = 'scholia-breadcrumb-seg';
+      var isFile = (si === parts.length - 1);
+      seg.textContent = isFile ? parts[si] : parts[si] + '/';
+
+      // data-dir = absolute path of the directory whose contents to list
+      // This is the parent of the item this segment names
+      var fullIdx = fullParts.length - parts.length + si;
+      var parentDir = fullParts.slice(0, fullIdx).join('/') || '/';
+      seg.setAttribute('data-dir', parentDir);
+      seg.setAttribute('data-name', parts[si]);
+
+      seg.addEventListener('click', (function (dirPath, segEl) {
+        return function (e) {
+          e.stopPropagation();
+          openBreadcrumbDropdown(segEl, dirPath);
+        };
+      })(parentDir, seg));
+
+      brandPath.appendChild(seg);
+      if (!isFile) {
+        brandPath.appendChild(document.createTextNode(' '));
+      }
+    }
     toolbarEl.appendChild(brandPath);
 
     // Contents (TOC) dropdown — before Options
