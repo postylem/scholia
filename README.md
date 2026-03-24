@@ -107,6 +107,30 @@ If you've set up the agent skill, tell your agent to respond when you're ready:
 
 The agent will go through open comment threads, reply to each, and/or edit the document. Replies appear live in the sidebar.
 
+### LaTeX macros
+
+If your document uses custom LaTeX macros, you can define them in an external file (e.g. `macros.sty`) and reference it in the YAML frontmatter:
+
+```yaml
+---
+title: My Document
+macros: macros.sty
+---
+```
+
+where `macros.sty` contains standard `\newcommand` definitions:
+
+```latex
+\newcommand{\E}[2]{\operatorname*{\mathbb{E}}_{#1}\!\left[#2\right]}
+\newcommand{\KL}[2]{D_{\mathrm{KL}}\!\left(#1 \,\|\, #2\right)}
+```
+
+Pandoc expands these at parse time, so the same `.sty` file can be shared with a LaTeX/PDF workflow. To render the same document with plain Pandoc (outside scholia), pass the macros file as an additional input:
+
+```bash
+pandoc macros.sty document.md --katex -o output.html
+```
+
 ## For agents
 
 This section is for AI agents reading this README. You rely on the skill installed by `scholia skill-init` for the full workflow, but here's an overview of the CLI API:

@@ -54,6 +54,21 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
     """Render markdown to HTML fragment using Pandoc (blocking)."""
     md_text = doc_path.read_text(encoding="utf-8")
     has_own_csl = re.search(r"^csl:", md_text, re.MULTILINE) is not None
+    number_sections = re.search(r"^number-sections:\s*true", md_text, re.MULTILINE) is not None
+
+    # Load external LaTeX macros file if specified in frontmatter
+    macros_match = re.search(r"^macros:\s*['\"]?(.+?)['\"]?\s*$", md_text, re.MULTILINE)
+    if macros_match:
+        macros_path = doc_path.parent / macros_match.group(1).strip()
+        if macros_path.is_file():
+            macros_content = macros_path.read_text(encoding="utf-8")
+            # Insert after YAML frontmatter so Pandoc parses macros at block level
+            fm_end = re.search(
+                r"\A---\s*\n.*?^(---|\.\.\.)\s*$", md_text, re.MULTILINE | re.DOTALL
+            )
+            if fm_end:
+                pos = fm_end.end()
+                md_text = md_text[:pos] + "\n" + macros_content + "\n" + md_text[pos:]
 
     cmd = [
         "pandoc",
@@ -78,6 +93,8 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         cmd.extend(["--lua-filter", _SIDENOTE_FILTER])
     if not has_own_csl:
         cmd.extend(["--csl", _DEFAULT_CSL])
+    if number_sections:
+        cmd.append("--number-sections")
 
     result = subprocess.run(
         cmd,

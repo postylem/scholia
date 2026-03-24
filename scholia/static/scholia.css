@@ -170,6 +170,15 @@ body {
   color: var(--s-text-dim);
   margin: 0.15rem 0;
 }
+#title-block-header .abstract {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+#title-block-header .abstract-title {
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
 
 /* ── Sidenotes (Tufte-style) ────────────────────────── */
 

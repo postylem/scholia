@@ -10,6 +10,12 @@ $endfor$
 $if(date)$
 <p class="date">$date$</p>
 $endif$
+$if(abstract)$
+<div class="abstract">
+<div class="abstract-title">$if(abstract-title)$$abstract-title$$else$Abstract$endif$</div>
+$abstract$
+</div>
+$endif$
 </header>
 $endif$
 $body$

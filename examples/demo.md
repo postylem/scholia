@@ -3,6 +3,7 @@ title: Scholia Demo
 subtitle: A showcase of rendered markdown with margin annotations
 author: Your Name Here
 bibliography: references.bib
+macros: macros.sty
 ---
 
 ## What is this?
@@ -24,10 +25,10 @@ $$
 Shannon [-@shannon1948] showed that entropy gives a fundamental limit on lossless compression. The cross-entropy between distributions $p$ and $q$ is:
 
 $$
-H(p, q) = -\sum_{x} p(x) \log q(x) = H(p) + D_{\mathrm{KL}}(p \| q)
+H(p, q) = -\sum_{x} p(x) \log q(x) = H(p) + \KL{p}{q}
 $$
 
-where $D_{\mathrm{KL}}$ is the Kullback–Leibler divergence.
+where $\KL{p}{q}$ is the Kullback–Leibler divergence and $\E{p}{f(X)}$ denotes expectation under $p$. These macros are defined in an external `macros.sty` file referenced in the YAML frontmatter.
 
 ## Code
 
