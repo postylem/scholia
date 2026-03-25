@@ -7,6 +7,7 @@
   'use strict';
 
   var ws;
+  var wsAttempt = 0;
   var creatorName = window.__SCHOLIA_CREATOR__ || 'human';
   var comments = window.__SCHOLIA_COMMENTS__ || [];
   var state = window.__SCHOLIA_STATE__ || {};
@@ -269,6 +270,29 @@
     return months[then.getMonth()] + ' ' + then.getDate() + ', ' + then.getFullYear();
   }
 
+  // ── Disconnect banner ──────────────────────────────
+  var disconnectBanner = document.createElement('div');
+  disconnectBanner.className = 'scholia-disconnect-banner';
+  disconnectBanner.textContent = 'Reconnecting\u2026';
+  document.body.appendChild(disconnectBanner);
+  var disconnectShowTimer = null;
+
+  function showDisconnectBanner() {
+    if (disconnectShowTimer) return;  // already pending
+    disconnectShowTimer = setTimeout(function () {
+      disconnectBanner.classList.add('visible');
+      disconnectShowTimer = null;
+    }, 500);
+  }
+
+  function hideDisconnectBanner() {
+    if (disconnectShowTimer) {
+      clearTimeout(disconnectShowTimer);
+      disconnectShowTimer = null;
+    }
+    disconnectBanner.classList.remove('visible');
+  }
+
   // ── WebSocket ──────────────────────────────────────
 
   function connectWS() {
@@ -276,6 +300,8 @@
     ws = new WebSocket(proto + '//' + location.host + '/ws');
 
     ws.onopen = function () {
+      wsAttempt = 0;
+      hideDisconnectBanner();
       wsSend({type: 'watch', file: window.__SCHOLIA_DOC_FULLPATH__});
     };
 
@@ -318,8 +344,15 @@
       }
     };
 
+    ws.onerror = function (e) {
+      console.warn('Scholia WebSocket error:', e);
+    };
+
     ws.onclose = function () {
-      setTimeout(connectWS, 2000);
+      showDisconnectBanner();
+      var delay = Math.min(2000 * Math.pow(2, wsAttempt), 30000);
+      wsAttempt++;
+      setTimeout(connectWS, delay);
     };
   }
 
