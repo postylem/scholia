@@ -79,3 +79,14 @@ def test_skill_init_template_is_agent_agnostic(tmp_path):
     # addressing the agent as Claude ("you are Claude", "as Claude") is not.
     for phrase in ["you are claude", "as claude,", "as a claude"]:
         assert phrase not in content, f"Template should not address a specific agent: '{phrase}'"
+
+
+def test_skill_template_has_render_section():
+    """Skill file includes section on rendering agent responses."""
+    from scholia.cli import _load_instruction_template
+
+    content = _load_instruction_template()
+    assert "Using scholia to render agent responses" in content
+    # Both workflows should be present
+    assert "Review Workflow" in content
+    assert "scholia view" in content

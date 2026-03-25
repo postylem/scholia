@@ -1,6 +1,6 @@
 ---
 name: scholia
-description: Review and respond to scholia annotations on markdown documents. Use when asked to check comments, review scholia, or respond to annotations.
+description: Review and respond to scholia annotations on markdown documents, or render rich agent responses (math, diagrams, code) in the browser. Use when asked to check comments, review scholia, respond to annotations, or when a response would benefit from rendered display.
 ---
 
 # Scholia — AI Review Instructions
@@ -174,6 +174,72 @@ Reply added to urn:uuid:d5998950-b501-4cb8-a323-aae0409b1aa1
 
 $ scholia resolve doc.md d599
 Resolved urn:uuid:d5998950-b501-4cb8-a323-aae0409b1aa1
+```
+
+## Using scholia to render agent responses
+
+When your response would contain display math, mermaid/TikZ diagrams, more than a few code blocks, long proofs or derivations, or complex tables, it may be easier for the user to read in the browser than in the terminal.
+
+### When to suggest
+
+Offer to render when your response includes:
+- Display math (`$$...$$` or multi-line equations)
+- Mermaid, TikZ, or other diagram markup
+- More than ~3 code blocks
+- Long proofs, derivations, or structured technical content
+- Complex tables
+
+Do **not** offer for short answers, single code snippets, plain prose, or conversational replies.
+
+### How to suggest
+
+Say something like:
+
+> "This would be easier to read rendered in the browser — want me to open it with scholia?"
+
+Wait for the user's confirmation before proceeding.
+
+### How to render
+
+1. Write your response to a temp markdown file with a descriptive name (e.g. `/tmp/scholia-cauchy-proof.md`). Include YAML frontmatter with at least `title:`.
+2. Run `scholia view <path>` in the background.
+3. Tell the user the file path and that it's open in the browser.
+
+### Updating the rendered document
+
+If the user asks for changes, edit the same file. The browser live-updates automatically — `scholia view` watches the file for changes and pushes new renders over WebSocket.
+
+### Annotation loop
+
+The user can select text in the browser and add comments in the sidebar. If they ask you to "check the scholia" (or similar), use `scholia list <path>` to read the annotations and respond — either by updating the file or replying to threads. This follows the same review workflow described above.
+
+### Example
+
+```
+# Agent writes the response to a temp file:
+cat /tmp/scholia-fourier-proof.md
+---
+title: Fourier Transform Proof
+---
+
+The Fourier transform of $f$ is defined as:
+
+$$\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\, e^{-2\pi i x \xi}\, dx$$
+
+...
+
+# Agent opens it:
+scholia view /tmp/scholia-fourier-proof.md &
+Scholia serving /tmp/scholia-fourier-proof.md at http://127.0.0.1:8088
+
+# Later, user comments in the browser and asks agent to check:
+scholia list /tmp/scholia-fourier-proof.md
+a1b2
+  scholia-fourier-proof.md:7:1-60
+  ...
+  [alice] Can you expand on why this integral converges?
+
+scholia reply /tmp/scholia-fourier-proof.md a1b2 "Added convergence note." --author-ai-model "Claude Opus 4.6"
 ```
 
 ## Configuration
