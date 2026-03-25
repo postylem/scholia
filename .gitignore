@@ -11,3 +11,4 @@ scholia/_version.py
 # Local design docs / plans (not version-controlled)
 docs/superpowers/
 .superpowers/
+.worktrees/
