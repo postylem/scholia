@@ -348,6 +348,13 @@
         console.log('Scholia: file saved to', msg.path);
       } else if (msg.type === 'error') {
         console.warn('Scholia server error:', msg.message);
+        if (msg.message) {
+          var errEl = document.createElement('div');
+          errEl.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:8px 18px;border-radius:6px;z-index:10000;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+          errEl.textContent = msg.message;
+          document.body.appendChild(errEl);
+          setTimeout(function() { errEl.remove(); }, 5000);
+        }
       }
     };
 

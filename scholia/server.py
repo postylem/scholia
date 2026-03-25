@@ -594,7 +594,7 @@ class ScholiaServer:
             return web.json_response({"error": "Missing 'to' field"}, status=400)
 
         try:
-            result = await self._do_relocate(Path(dest).resolve(), force=force)
+            result = await self._do_relocate(Path(dest).expanduser().resolve(), force=force)
         except FileExistsError:
             return web.json_response(
                 {"error": f"Destination already exists: {dest}"}, status=409)
@@ -685,7 +685,7 @@ class ScholiaServer:
                     await ws.send_json({"type": "error", "message": "Missing path"})
                     return
                 try:
-                    await self._do_relocate(Path(dest).resolve())
+                    await self._do_relocate(Path(dest).expanduser().resolve())
                 except FileExistsError:
                     await ws.send_json({
                         "type": "error",
