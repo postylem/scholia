@@ -40,6 +40,17 @@ def entropy(p):
     return -sum(pi * log(pi) for pi in p if pi > 0)
 ```
 
+## Diagrams
+
+Mermaid diagrams render inline:
+
+```mermaid
+graph LR
+    A[Write] --> B[Annotate]
+    B --> C[Discuss]
+    C --> A
+```
+
 ## Citations
 
 Pandoc handles BibTeX citations automatically. For example: @turing1936 introduced the notion of computability, @knuth1997 wrote the definitive reference on algorithms, and @lamport1978 formalized event ordering in distributed systems.
