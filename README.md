@@ -99,6 +99,21 @@ scholia view idea.md
 
 Select text to start a thread. Edit the markdown in your editor for a live preview. The comment sidebar and document view update in real time.
 
+### Exporting
+
+Export a document to PDF, standalone HTML, or LaTeX:
+
+```bash
+scholia export idea.md                  # PDF (requires a LaTeX engine)
+scholia export idea.md --to html        # standalone HTML
+scholia export idea.md --to latex       # LaTeX source
+scholia export idea.md -o output.pdf    # custom output path
+```
+
+PDF export requires a LaTeX engine (`xelatex`, `tectonic`, etc.). If none is installed, the browser UI falls back to the browser's built-in print-to-PDF. You can also export from the browser via Options > Export PDF.
+
+### Agent integration
+
 If you've set up the agent skill, tell your agent to respond when you're ready:
 
 ```
@@ -144,6 +159,7 @@ scholia edit <doc.md> <id> "text"         Edit the last message in a thread
 scholia comment <doc.md> "anchor" "text"  Add a new comment anchored to text
 scholia resolve <doc.md> <id>             Resolve a thread
 scholia unresolve <doc.md> <id>           Reopen a thread
+scholia export <doc.md> --to pdf|html|latex  Export document
 ```
 
 Use `scholia list --open -v` to see threads and their messages, reply with `scholia reply`, and edit the `.md` file directly when the comment requests a change to the document.

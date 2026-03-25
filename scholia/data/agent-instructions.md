@@ -59,6 +59,22 @@ scholia unresolve <doc.md> <id>
 All writing commands accept `-q`/`--quiet` to suppress confirmation output.
 All ID arguments accept a unique prefix (e.g. `a8c0` matches `urn:uuid:a8c086ab-...`).
 
+### Exporting
+
+```bash
+# Export to PDF (requires a LaTeX engine: xelatex, tectonic, etc.)
+scholia export <doc.md>
+scholia export <doc.md> --to pdf
+
+# Export to standalone HTML or LaTeX source
+scholia export <doc.md> --to html
+scholia export <doc.md> --to latex
+
+# Custom output path or LaTeX engine
+scholia export <doc.md> -o output.pdf
+scholia export <doc.md> --pdf-engine tectonic
+```
+
 ### Setup
 
 ```bash
