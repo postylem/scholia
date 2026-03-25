@@ -3,7 +3,9 @@
 import argparse
 import asyncio
 import json
+import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -274,17 +276,59 @@ def _add_format_arg(parser):
 
 # ── Commands ────────────────────────────────────────────
 
+def _stdin_to_tempfile(content, title=None):
+    """Write content to a temp markdown file. Return the path.
+
+    Args:
+        content: str (decoded text) or bytes (validated as UTF-8).
+        title: optional title string for YAML frontmatter.
+
+    Returns:
+        Path string to the temp file.
+
+    Raises:
+        ValueError: if content is bytes and not valid UTF-8.
+    """
+    if isinstance(content, bytes):
+        try:
+            content = content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError("stdin is not valid UTF-8 text")
+
+    if title:
+        content = f"---\ntitle: {title}\n---\n\n{content}"
+
+    fd, path = tempfile.mkstemp(prefix="scholia-", suffix=".md")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(content)
+    return path
+
+
 def cmd_view(args):
     from scholia.server import ScholiaServer
 
-    if args.doc is None and not sys.stdin.isatty():
+    if args.doc == "-":
+        try:
+            text = sys.stdin.read()
+        except UnicodeDecodeError:
+            print("Error: stdin is not valid UTF-8 text", file=sys.stderr)
+            sys.exit(1)
+        doc = _stdin_to_tempfile(text, title=args.title)
+        print(f"Viewing {doc}", file=sys.stderr)
+    elif args.doc is None and not sys.stdin.isatty():
         print(
             "Error: stdin is not a terminal — did you mean 'scholia view -'?",
             file=sys.stderr,
         )
         sys.exit(1)
+    else:
+        if args.title:
+            print(
+                "Warning: --title is only used with stdin mode (scholia view -)",
+                file=sys.stderr,
+            )
+        doc = args.doc or _pick_or_create_doc()
 
-    doc = args.doc or _pick_or_create_doc()
     server = ScholiaServer(doc, host=args.host, port=args.port)
     try:
         asyncio.run(server.start())
@@ -573,6 +617,10 @@ def main():
     p_view.add_argument(
         "--port", type=int, default=8088,
         help="Server port (default: 8088)",
+    )
+    p_view.add_argument(
+        "--title", default=None,
+        help="Document title (YAML frontmatter, only used with stdin '-')",
     )
 
     # list
