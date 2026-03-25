@@ -514,6 +514,40 @@ def cmd_export(args):
     print(output)
 
 
+def cmd_rm(args):
+    from scholia.files import sidecar_paths, remove_doc
+    from scholia.state import get_server
+
+    doc = args.doc
+    if not Path(doc).exists():
+        print(f"Error: file not found: {doc}", file=sys.stderr)
+        sys.exit(1)
+
+    server_info = get_server(doc)
+    if server_info:
+        print("Warning: a scholia view server is watching this file.",
+              file=sys.stderr)
+
+    files = [Path(doc).resolve()] + sidecar_paths(doc)
+
+    if not args.force:
+        print(f"Will delete {len(files)} file(s):")
+        for f in files:
+            print(f"  {f}")
+        try:
+            answer = input("Delete? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.")
+            sys.exit(1)
+        if answer not in ("y", "yes"):
+            print("Aborted.")
+            return
+
+    remove_doc(doc)
+    if not args.force:
+        print(f"Deleted {len(files)} file(s).")
+
+
 def cmd_mv(args):
     import urllib.request
     import urllib.error
@@ -775,6 +809,15 @@ def main():
     p_mv.add_argument("--force", action="store_true",
                        help="Overwrite destination if it exists")
 
+    # rm
+    p_rm = sub.add_parser(
+        "rm",
+        help="Delete a document and its scholia sidecars",
+    )
+    p_rm.add_argument("doc", help="Markdown document path")
+    p_rm.add_argument("--force", action="store_true",
+                       help="Delete without confirmation prompt")
+
     # skill-init
     p_skill = sub.add_parser(
         "skill-init",
@@ -804,6 +847,7 @@ def main():
         "unresolve": cmd_unresolve,
         "export": cmd_export,
         "mv": cmd_mv,
+        "rm": cmd_rm,
     }
 
     try:
