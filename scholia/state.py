@@ -81,10 +81,15 @@ def set_server(doc_path: str | Path, port: int, pid: int):
 
 
 def clear_server(doc_path: str | Path):
-    """Remove server presence record."""
+    """Remove server presence record. Delete state file if now empty."""
     state = load_state(doc_path)
     state.pop("_server", None)
-    _write_state(doc_path, state)
+    if state:
+        _write_state(doc_path, state)
+    else:
+        sp = state_path(doc_path)
+        if sp.exists():
+            sp.unlink()
 
 
 def get_server(doc_path: str | Path) -> dict | None:

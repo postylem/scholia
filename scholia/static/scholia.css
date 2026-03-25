@@ -1957,8 +1957,44 @@ body.scholia-dark .scholia-disconnect-banner {
   font-size: 1.1em;
   font-weight: 600;
 }
+.scholia-save-as-dir-label {
+  font-family: var(--s-mono);
+  font-size: 0.85em;
+  color: var(--s-text-dim);
+  margin-bottom: 0.25em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scholia-save-as-browser {
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 0.25em;
+}
+.scholia-save-as-entry {
+  padding: 0.3em 0.6em;
+  cursor: pointer;
+  font-family: var(--s-mono);
+  font-size: 0.9em;
+  border-bottom: 1px solid var(--s-border-light, rgba(128,128,128,0.15));
+}
+.scholia-save-as-entry:last-child {
+  border-bottom: none;
+}
+.scholia-save-as-entry:hover {
+  background: var(--s-card-hover);
+}
 .scholia-save-as-input {
   font-family: var(--s-mono);
+  flex: 1;
+  padding: 0.35em 0.5em;
+  font-size: 0.95em;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  background: var(--s-bg);
+  color: var(--s-text);
 }
 .scholia-save-as-btn {
   padding: 0.35em 1em;

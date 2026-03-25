@@ -396,7 +396,15 @@
     var titleEl = document.querySelector('h1');
     var title = (titleEl ? titleEl.textContent : '') || document.title || 'document';
     var slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    var suggested = '~/Documents/' + (slug || 'document') + '.md';
+    var filename = (slug || 'document') + '.md';
+
+    // Start in ~/Documents if it exists, else home dir
+    var homeDir = (window.__SCHOLIA_DOC_FULLPATH__ || '').replace(/\/[^/]+$/, '');
+    // Try to guess home dir from full path (e.g. /Users/username/...)
+    var homeMatch = (window.__SCHOLIA_DOC_FULLPATH__ || '').match(/^(\/(?:Users|home)\/[^/]+)/);
+    var startDir = homeMatch ? homeMatch[1] + '/Documents' : homeDir;
+
+    var currentDir = startDir;
 
     var overlay = document.createElement('div');
     overlay.className = 'scholia-save-as-overlay';
@@ -406,31 +414,43 @@
 
     var heading = document.createElement('h3');
     heading.textContent = 'Save as';
-    heading.style.margin = '0 0 0.75em 0';
+    heading.style.margin = '0 0 0.5em 0';
     dialog.appendChild(heading);
 
-    var label = document.createElement('label');
-    label.textContent = 'Destination path:';
-    label.style.display = 'block';
-    label.style.marginBottom = '0.25em';
-    label.style.fontSize = '0.9em';
-    dialog.appendChild(label);
+    // Current directory display
+    var dirLabel = document.createElement('div');
+    dirLabel.className = 'scholia-save-as-dir-label';
+    dialog.appendChild(dirLabel);
 
-    var input = document.createElement('input');
-    input.type = 'text';
-    input.name = 'save-as-path';
-    input.value = suggested;
-    input.className = 'scholia-save-as-input';
-    input.style.width = '100%';
-    input.style.boxSizing = 'border-box';
-    input.style.padding = '0.4em 0.5em';
-    input.style.fontSize = '0.95em';
-    input.style.border = '1px solid #999';
-    input.style.borderRadius = '3px';
-    dialog.appendChild(input);
+    // Directory browser
+    var browser = document.createElement('div');
+    browser.className = 'scholia-save-as-browser';
+    dialog.appendChild(browser);
 
+    // Filename input row
+    var fnRow = document.createElement('div');
+    fnRow.style.display = 'flex';
+    fnRow.style.gap = '0.5em';
+    fnRow.style.alignItems = 'center';
+    fnRow.style.marginTop = '0.5em';
+
+    var fnLabel = document.createElement('label');
+    fnLabel.textContent = 'Filename:';
+    fnLabel.style.fontSize = '0.9em';
+    fnLabel.style.whiteSpace = 'nowrap';
+    fnRow.appendChild(fnLabel);
+
+    var fnInput = document.createElement('input');
+    fnInput.type = 'text';
+    fnInput.name = 'save-as-path';
+    fnInput.value = filename;
+    fnInput.className = 'scholia-save-as-input';
+    fnRow.appendChild(fnInput);
+    dialog.appendChild(fnRow);
+
+    // Button row
     var btnRow = document.createElement('div');
-    btnRow.style.marginTop = '1em';
+    btnRow.style.marginTop = '0.75em';
     btnRow.style.display = 'flex';
     btnRow.style.justifyContent = 'flex-end';
     btnRow.style.gap = '0.5em';
@@ -443,13 +463,7 @@
     var saveBtn = document.createElement('button');
     saveBtn.textContent = 'Save';
     saveBtn.className = 'scholia-save-as-btn scholia-save-as-btn-primary';
-    saveBtn.addEventListener('click', function () {
-      var dest = input.value.trim();
-      if (!dest) return;
-      // Expand ~ to home dir hint — server will resolve
-      wsSend({ type: 'save_as', path: dest });
-      overlay.remove();
-    });
+    saveBtn.addEventListener('click', doSave);
 
     btnRow.appendChild(cancelBtn);
     btnRow.appendChild(saveBtn);
@@ -457,19 +471,92 @@
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
 
-    // Focus input and select filename portion
-    input.focus();
-    var lastSlash = suggested.lastIndexOf('/');
-    var dotPos = suggested.lastIndexOf('.');
-    if (lastSlash >= 0 && dotPos > lastSlash) {
-      input.setSelectionRange(lastSlash + 1, dotPos);
+    function doSave() {
+      var fn = fnInput.value.trim();
+      if (!fn) return;
+      var dest = currentDir.replace(/\/$/, '') + '/' + fn;
+      wsSend({ type: 'save_as', path: dest });
+      overlay.remove();
     }
 
-    // Close on Escape
+    function loadDir(dirPath) {
+      currentDir = dirPath;
+      dirLabel.textContent = abbreviatePath(dirPath, 55);
+      dirLabel.title = dirPath;
+      browser.innerHTML = '';
+      var loading = document.createElement('div');
+      loading.style.padding = '0.5em';
+      loading.style.color = 'var(--s-text-dim, #888)';
+      loading.textContent = 'Loading\u2026';
+      browser.appendChild(loading);
+
+      fetch('/api/list-dir?path=' + encodeURIComponent(dirPath))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          browser.innerHTML = '';
+          if (data.error) {
+            // Directory doesn't exist — go to parent
+            var parent = dirPath.replace(/\/[^/]+\/?$/, '') || '/';
+            if (parent !== dirPath) {
+              loadDir(parent);
+            } else {
+              var errEl = document.createElement('div');
+              errEl.style.padding = '0.5em';
+              errEl.textContent = data.error;
+              browser.appendChild(errEl);
+            }
+            return;
+          }
+          currentDir = data.path;
+          dirLabel.textContent = abbreviatePath(data.path, 55);
+          dirLabel.title = data.path;
+
+          data.entries.forEach(function (entry) {
+            if (entry.type !== 'dir' && entry.name !== '..') return; // dirs only
+            var row = document.createElement('div');
+            row.className = 'scholia-save-as-entry';
+            row.textContent = entry.name === '..' ? '\u2190 ..' : entry.name + '/';
+            var targetDir = entry.name === '..'
+              ? dirPath.replace(/\/$/, '').replace(/\/[^/]+$/, '') || '/'
+              : dirPath.replace(/\/$/, '') + '/' + entry.name;
+            row.addEventListener('click', function () { loadDir(targetDir); });
+            browser.appendChild(row);
+          });
+
+          if (data.entries.filter(function (e) { return e.type === 'dir' && e.name !== '..'; }).length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'scholia-save-as-entry';
+            empty.style.color = 'var(--s-text-dim, #888)';
+            empty.style.fontStyle = 'italic';
+            empty.textContent = 'No subdirectories';
+            browser.appendChild(empty);
+          }
+        })
+        .catch(function (err) {
+          browser.innerHTML = '';
+          var errEl = document.createElement('div');
+          errEl.style.padding = '0.5em';
+          errEl.textContent = 'Error: ' + err.message;
+          browser.appendChild(errEl);
+        });
+    }
+
+    loadDir(startDir);
+
+    // Focus filename and select the name portion (before .md)
+    fnInput.focus();
+    var dotPos = filename.lastIndexOf('.');
+    if (dotPos > 0) fnInput.setSelectionRange(0, dotPos);
+
+    // Enter to save
+    fnInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') doSave();
+    });
+    // Escape to close
     overlay.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') overlay.remove();
     });
-    // Close on clicking backdrop
+    // Backdrop click to close
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) overlay.remove();
     });
