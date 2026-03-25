@@ -514,6 +514,50 @@ def cmd_export(args):
     print(output)
 
 
+def cmd_mv(args):
+    import urllib.request
+    import urllib.error
+    from scholia.files import move_doc
+    from scholia.state import get_server, clear_server
+
+    src = args.source
+    dest = args.dest
+    force = args.force
+
+    if not Path(src).exists():
+        print(f"Error: source not found: {src}", file=sys.stderr)
+        sys.exit(1)
+
+    # Check if a server is running
+    server_info = get_server(src)
+    if server_info:
+        port = server_info["port"]
+        try:
+            data = json.dumps({"to": dest, "force": force}).encode()
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/relocate",
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                result = json.loads(resp.read())
+                print(f"Moved to {result['path']} (server updated)")
+                return
+        except (urllib.error.URLError, OSError):
+            # Server not reachable — stale _server key
+            clear_server(src)
+
+    # No server or server unreachable — move directly
+    try:
+        move_doc(src, dest, force=force)
+    except FileExistsError:
+        print(f"Error: destination already exists: {dest}", file=sys.stderr)
+        print("Use --force to overwrite.", file=sys.stderr)
+        sys.exit(1)
+    print(f"Moved to {dest}")
+
+
 # ── Skill init ──────────────────────────────────────────
 
 def _load_instruction_template() -> str:
@@ -721,6 +765,16 @@ def main():
         help="LaTeX engine for PDF output (e.g. xelatex, tectonic)",
     )
 
+    # mv
+    p_mv = sub.add_parser(
+        "mv",
+        help="Move a document and its scholia sidecars",
+    )
+    p_mv.add_argument("source", help="Source markdown document path")
+    p_mv.add_argument("dest", help="Destination path")
+    p_mv.add_argument("--force", action="store_true",
+                       help="Overwrite destination if it exists")
+
     # skill-init
     p_skill = sub.add_parser(
         "skill-init",
@@ -749,6 +803,7 @@ def main():
         "resolve": cmd_resolve,
         "unresolve": cmd_unresolve,
         "export": cmd_export,
+        "mv": cmd_mv,
     }
 
     try:

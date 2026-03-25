@@ -533,6 +533,27 @@ def test_render_export_returns_bytes(tmp_doc):
     assert b"<html" in data or b"<!DOCTYPE" in data
 
 
+@pytest.mark.asyncio
+async def test_relocate_endpoint(aiohttp_client, tmp_path):
+    """POST /api/relocate moves document and updates server."""
+    doc = tmp_path / "src.md"
+    doc.write_text("# Hello")
+    jsonl = tmp_path / "src.md.scholia.jsonl"
+    jsonl.write_text('{"id":"test"}\n')
+    dest = tmp_path / "dest.md"
+
+    server = ScholiaServer(str(doc))
+    client = await aiohttp_client(server.app)
+
+    resp = await client.post("/api/relocate", json={"to": str(dest)})
+    assert resp.status == 200
+    data = await resp.json()
+    assert "dest.md" in data["path"]
+    assert dest.exists()
+    assert not doc.exists()
+    assert (tmp_path / "dest.md.scholia.jsonl").exists()
+
+
 def test_server_writes_and_clears_server_state(tmp_path):
     """Server writes _server to state on start, clears on exit."""
     from scholia.state import get_server

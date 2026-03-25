@@ -394,6 +394,7 @@ class ScholiaServer:
         self.app.router.add_get("/ws", self._handle_ws)
         self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
+        self.app.router.add_post("/api/relocate", self._handle_relocate)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
 
@@ -519,6 +520,77 @@ class ScholiaServer:
                 "Content-Disposition": f'attachment; filename="{doc_path.stem}.pdf"',
             },
         )
+
+    async def _do_relocate(self, dest_path: Path, force: bool = False):
+        """Shared relocate logic used by both /api/relocate and WS save_as.
+
+        Moves files, updates watcher, re-keys ws_clients/ws_file, clears
+        ephemeral flag, broadcasts to all clients. Returns the response dict.
+
+        Raises FileExistsError or FileNotFoundError on failure.
+        """
+        from scholia.files import move_doc
+        from scholia.state import set_server
+
+        old_path = self.doc_path
+        move_doc(str(old_path), str(dest_path), force=force)
+
+        # Update watcher
+        self._stop_watching(old_path)
+        self.doc_path = dest_path
+        self.display_path = str(dest_path)
+        self._start_watching(dest_path)
+
+        # Re-key ws_clients from old_path to dest_path
+        clients = self.ws_clients.pop(old_path, set())
+        self.ws_clients.setdefault(dest_path, set()).update(clients)
+        for c in clients:
+            self.ws_file[c] = dest_path
+
+        # Update _server in the new state file
+        set_server(dest_path, port=self.port, pid=os.getpid())
+
+        # Clear ephemeral flag (file was promoted)
+        self._ephemeral = False
+
+        response = {
+            "type": "relocated",
+            "path": str(dest_path),
+            "display_path": self._display_path(dest_path),
+        }
+
+        # Broadcast to all connected clients
+        msg = json.dumps(response)
+        for ws_set in self.ws_clients.values():
+            for ws in ws_set:
+                try:
+                    await ws.send_str(msg)
+                except Exception:
+                    pass
+
+        return response
+
+    async def _handle_relocate(self, request):
+        """POST /api/relocate — move document + sidecars to a new path."""
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+
+        dest = body.get("to")
+        force = body.get("force", False)
+        if not dest:
+            return web.json_response({"error": "Missing 'to' field"}, status=400)
+
+        try:
+            result = await self._do_relocate(Path(dest).resolve(), force=force)
+        except FileExistsError:
+            return web.json_response(
+                {"error": f"Destination already exists: {dest}"}, status=409)
+        except FileNotFoundError as e:
+            return web.json_response({"error": str(e)}, status=404)
+
+        return web.json_response({"path": result["path"]})
 
     async def _handle_ws(self, request):
         ws = web.WebSocketResponse()
@@ -727,6 +799,7 @@ class ScholiaServer:
             actual_port = site._server.sockets[0].getsockname()[1]
         else:
             actual_port = self.port
+        self.port = actual_port  # store resolved port for _do_relocate etc.
         url = f"http://{self.host}:{actual_port}"
         print(f"Scholia serving {self.doc_path.name} at {url}")
         print("Press Ctrl+C to stop")
