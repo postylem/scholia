@@ -37,3 +37,58 @@ def test_stdin_to_tempfile_non_utf8_errors():
 
     with pytest.raises(ValueError, match="not valid UTF-8"):
         _stdin_to_tempfile(b"\x80\x81\x82")
+
+
+def test_stdin_to_tempfile_with_title():
+    """_stdin_to_tempfile prepends YAML frontmatter when title given."""
+    from scholia.cli import _stdin_to_tempfile
+
+    path = _stdin_to_tempfile("Body text\n", title="My Title")
+    try:
+        content = open(path).read()
+        assert content.startswith("---\ntitle: My Title\n---\n\n")
+        assert content.endswith("Body text\n")
+    finally:
+        os.unlink(path)
+
+
+def test_stdin_to_tempfile_empty_content():
+    """Empty stdin creates a file (possibly with just frontmatter)."""
+    from scholia.cli import _stdin_to_tempfile
+
+    path = _stdin_to_tempfile("", title="Empty")
+    try:
+        content = open(path).read()
+        assert "title: Empty" in content
+        assert os.path.exists(path)
+    finally:
+        os.unlink(path)
+
+
+def test_stdin_to_tempfile_empty_no_title():
+    """Empty stdin with no title creates an empty file."""
+    from scholia.cli import _stdin_to_tempfile
+
+    path = _stdin_to_tempfile("")
+    try:
+        assert os.path.exists(path)
+        assert open(path).read() == ""
+    finally:
+        os.unlink(path)
+
+
+def test_title_flag_with_file_shows_warning(tmp_path):
+    """--title with a file path prints a warning to stderr."""
+    doc = tmp_path / "test.md"
+    doc.write_text("# Hello")
+    # Start the server; it won't exit on its own, so use a short timeout.
+    # subprocess.run raises TimeoutExpired — check stderr on the exception.
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "scholia.cli", "view", str(doc), "--title", "Foo"],
+            capture_output=True, text=True,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired as e:
+        assert e.stderr is not None
+        assert "warning" in e.stderr.decode().lower()
