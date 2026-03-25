@@ -2,10 +2,12 @@
 
 import asyncio
 import json
+import os
 import re
 import signal
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from aiohttp import web
@@ -34,6 +36,7 @@ def _check_pandoc():
         )
 
 
+_MERMAID_FILTER = str(Path(__file__).parent / "filters" / "mermaid.lua")
 _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
 _FRAGMENT_TEMPLATE = str(Path(__file__).parent / "pandoc-fragment.html")
@@ -89,6 +92,7 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
             "--metadata=secPrefix:§",
         ])
     cmd += [
+        "--lua-filter", _MERMAID_FILTER,
         "--citeproc",
         "--metadata=link-citations:true",
         "--from=markdown+tex_math_single_backslash",
@@ -158,10 +162,12 @@ def _render_export_sync(
 
     if output_path:
         cmd.extend(["-o", str(output_path)])
-        subprocess.run(
+        result = subprocess.run(
             cmd, input=md_text, capture_output=True, text=True, check=True,
             cwd=str(doc_path.parent),
         )
+        if result.stderr:
+            print(result.stderr, file=sys.stderr, end="")
         return None
     else:
         # Return bytes for server streaming. We encode md_text to bytes and
@@ -171,6 +177,8 @@ def _render_export_sync(
             cmd, input=md_text.encode(), capture_output=True, check=True,
             cwd=str(doc_path.parent),
         )
+        if result.stderr:
+            sys.stderr.buffer.write(result.stderr)
         return result.stdout
 
 
@@ -368,6 +376,7 @@ class ScholiaServer:
         self._debounce_handles: dict[tuple, asyncio.TimerHandle] = {}
         self._observers: dict[Path, Observer] = {}  # parent_dir -> Observer
         self._observer_refcount: dict[Path, int] = {}  # parent_dir -> count
+        self._ephemeral = False
 
     def _load_template(self) -> str:
         template_path = Path(__file__).parent / "template.html"
@@ -387,6 +396,19 @@ class ScholiaServer:
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
+
+    def _register_server_state(self, port: int):
+        """Write _server key to state file."""
+        from scholia.state import set_server
+        set_server(self.doc_path, port=port, pid=os.getpid())
+
+    def _clear_server_state(self):
+        """Remove _server key from state file."""
+        from scholia.state import clear_server
+        try:
+            clear_server(self.doc_path)
+        except Exception:
+            pass  # Best effort — file may already be deleted (ephemeral)
 
     async def _handle_index(self, request):
         file_param = request.query.get("file")
@@ -709,25 +731,30 @@ class ScholiaServer:
         print(f"Scholia serving {self.doc_path.name} at {url}")
         print("Press Ctrl+C to stop")
 
+        self._register_server_state(actual_port)
+
         import webbrowser
         webbrowser.open(url)
 
-        await stop_event.wait()
+        try:
+            await stop_event.wait()
+        finally:
+            # Close all WebSocket connections so runner.cleanup() doesn't block
+            for clients in list(self.ws_clients.values()):
+                for ws in list(clients):
+                    await ws.close()
+            self.ws_clients.clear()
+            self.ws_file.clear()
+            self.ws_sidenotes.clear()
 
-        # Close all WebSocket connections so runner.cleanup() doesn't block
-        for clients in list(self.ws_clients.values()):
-            for ws in list(clients):
-                await ws.close()
-        self.ws_clients.clear()
-        self.ws_file.clear()
-        self.ws_sidenotes.clear()
+            # Stop all observers
+            for observer in self._observers.values():
+                observer.stop()
+            for observer in self._observers.values():
+                observer.join(timeout=1)
+            self._observers.clear()
+            self._observer_refcount.clear()
 
-        # Stop all observers
-        for observer in self._observers.values():
-            observer.stop()
-        for observer in self._observers.values():
-            observer.join(timeout=1)
-        self._observers.clear()
-        self._observer_refcount.clear()
+            self._clear_server_state()
 
         await runner.cleanup()

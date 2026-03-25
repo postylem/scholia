@@ -531,3 +531,19 @@ def test_render_export_returns_bytes(tmp_doc):
     data = _render_export_sync(tmp_doc, "html")
     assert isinstance(data, bytes)
     assert b"<html" in data or b"<!DOCTYPE" in data
+
+
+def test_server_writes_and_clears_server_state(tmp_path):
+    """Server writes _server to state on start, clears on exit."""
+    from scholia.state import get_server
+    doc = tmp_path / "test.md"
+    doc.write_text("# Hello")
+    assert get_server(str(doc)) is None
+    server = ScholiaServer(str(doc))
+    server._register_server_state(8088)
+    info = get_server(str(doc))
+    assert info is not None
+    assert info["port"] == 8088
+    assert "pid" in info
+    server._clear_server_state()
+    assert get_server(str(doc)) is None
