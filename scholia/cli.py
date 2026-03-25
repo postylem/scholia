@@ -428,6 +428,41 @@ def cmd_unresolve(args):
         print(f"Unresolved {unresolved['id']}")
 
 
+def cmd_export(args):
+    from scholia.server import _render_export_sync
+    import subprocess
+
+    doc = Path(args.doc)
+    if not doc.exists():
+        print(f"Error: file not found: {args.doc}", file=sys.stderr)
+        sys.exit(1)
+
+    doc = doc.resolve()
+    fmt = args.to
+
+    if args.output:
+        output = Path(args.output)
+    else:
+        ext_map = {"pdf": ".pdf", "html": ".html", "latex": ".tex"}
+        output = Path.cwd() / (doc.stem + ext_map[fmt])
+
+    try:
+        _render_export_sync(doc, fmt, output, pdf_engine=args.pdf_engine)
+    except subprocess.CalledProcessError as e:
+        stderr_text = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or str(e))
+        if fmt == "pdf" and ("latex" in stderr_text.lower() or "pdf" in stderr_text.lower()):
+            print(
+                "Error: PDF export requires a LaTeX engine (xelatex, tectonic, etc.).\n"
+                "Install one, or use --to html or --to latex instead.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"Error: export failed: {stderr_text}", file=sys.stderr)
+        sys.exit(1)
+
+    print(output)
+
+
 # ── Skill init ──────────────────────────────────────────
 
 def _load_instruction_template() -> str:
@@ -612,6 +647,25 @@ def main():
     p_unresolve.add_argument("id", help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')")
     p_unresolve.add_argument("-q", "--quiet", action="store_true", help="Suppress confirmation output")
 
+    # export
+    p_export = sub.add_parser(
+        "export",
+        help="Export document to PDF, standalone HTML, or LaTeX",
+    )
+    p_export.add_argument("doc", help="Markdown document path")
+    p_export.add_argument(
+        "--to", "-t", default="pdf", choices=["pdf", "html", "latex"],
+        help="Output format (default: pdf)",
+    )
+    p_export.add_argument(
+        "--output", "-o", default=None, metavar="PATH",
+        help="Output file path (default: <input-stem>.<ext> in cwd)",
+    )
+    p_export.add_argument(
+        "--pdf-engine", default=None, metavar="ENGINE",
+        help="LaTeX engine for PDF output (e.g. xelatex, tectonic)",
+    )
+
     # skill-init
     p_skill = sub.add_parser(
         "skill-init",
@@ -639,6 +693,7 @@ def main():
         "skill-init": cmd_skill_init,
         "resolve": cmd_resolve,
         "unresolve": cmd_unresolve,
+        "export": cmd_export,
     }
 
     try:

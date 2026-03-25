@@ -370,3 +370,54 @@ def test_locate_anchor_context_zero_zero(tmp_doc):
     ctx = locate_anchor(tmp_doc, selector, context_before=0, context_after=0)
     assert ctx["found"]
     assert len(ctx["context_lines"]) >= 1  # at least anchor + caret
+
+
+# ── CLI export ─────────────────────────────────────────
+
+
+def test_cli_export_html(tmp_doc, tmp_path):
+    """scholia export --to html produces a standalone HTML file."""
+    out = tmp_path / "out.html"
+    code, stdout, stderr = _run_cli("export", str(tmp_doc), "--to", "html", "-o", str(out))
+    assert code == 0, f"stderr: {stderr}"
+    assert out.exists()
+    content = out.read_text()
+    assert "<html" in content or "<!DOCTYPE" in content
+
+
+def test_cli_export_latex(tmp_doc, tmp_path):
+    """scholia export --to latex produces a .tex file."""
+    out = tmp_path / "out.tex"
+    code, stdout, stderr = _run_cli("export", str(tmp_doc), "--to", "latex", "-o", str(out))
+    assert code == 0, f"stderr: {stderr}"
+    assert out.exists()
+    assert "\\begin{document}" in out.read_text()
+
+
+def test_cli_export_default_output_name(tmp_doc):
+    """Without -o, export writes <stem>.html in cwd."""
+    result = subprocess.run(
+        [sys.executable, "-m", "scholia.cli", "export", str(tmp_doc), "--to", "html"],
+        capture_output=True, text=True, cwd=str(tmp_doc.parent),
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    expected = tmp_doc.parent / "test.html"
+    assert expected.exists()
+
+
+def test_cli_export_missing_file():
+    """Export of nonexistent file returns error."""
+    code, _, stderr = _run_cli("export", "/nonexistent/doc.md", "--to", "html")
+    assert code == 1
+
+
+def test_cli_export_pdf_no_latex(tmp_doc, tmp_path):
+    """PDF export without LaTeX engine shows clear error message."""
+    import shutil
+    # Only test if no LaTeX engine is available
+    if shutil.which("xelatex") or shutil.which("tectonic") or shutil.which("lualatex") or shutil.which("pdflatex"):
+        pytest.skip("LaTeX engine available; can't test missing-engine error")
+    out = tmp_path / "out.pdf"
+    code, _, stderr = _run_cli("export", str(tmp_doc), "--to", "pdf", "-o", str(out))
+    assert code == 1
+    assert "latex" in stderr.lower() or "pdf" in stderr.lower()
