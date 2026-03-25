@@ -75,6 +75,18 @@ scholia export <doc.md> -o output.pdf
 scholia export <doc.md> --pdf-engine tectonic
 ```
 
+### File management
+
+```bash
+# Move a document and its scholia sidecars
+scholia mv <source.md> <dest.md>
+scholia mv <source.md> <dest.md> --force  # overwrite destination
+
+# Delete a document and its scholia sidecars
+scholia rm <doc.md>
+scholia rm <doc.md> --force  # skip confirmation prompt
+```
+
 ### Setup
 
 ```bash
@@ -204,6 +216,7 @@ Wait for the user's confirmation before proceeding.
 1. Write your response to a temp markdown file with a descriptive name (e.g. `/tmp/scholia-cauchy-proof.md`). Include YAML frontmatter with at least `title:`.
 2. Run `scholia view <path>` in the background.
 3. Tell the user the file path and that it's open in the browser.
+4. If the user wants to keep the rendered document, use `scholia mv` to promote it from `/tmp/` to a permanent location: `scholia mv /tmp/scholia-foo.md ~/notes/foo.md`. This moves the document and any annotations together, and transfers the running server to the new path.
 
 ### Updating the rendered document
 
