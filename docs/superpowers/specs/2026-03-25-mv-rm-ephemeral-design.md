@@ -36,34 +36,45 @@ Missing sidecars are silently skipped (not every document has annotations).
 If a `scholia view` server is currently watching `source.md`, the move should
 transfer the server to the new path without requiring a restart.
 
-**Mechanism: server lockfile + relocate API.**
+**Mechanism: server info in state file + relocate API.**
 
-1. When `scholia view` starts, write a lockfile at
-   `<doc>.md.scholia.server.json` containing `{"port": <port>, "pid": <pid>}`.
-   Delete the lockfile on server exit (in a `finally` block).
+Server presence is stored in the existing `.scholia.state.json` sidecar under
+a `_server` key (underscore prefix avoids collision with `urn:uuid:...`
+annotation IDs):
 
-2. When `scholia mv` runs, check if `source.md.scholia.server.json` exists.
-   If it does, POST to `http://127.0.0.1:<port>/api/relocate` with
+```json
+{
+  "urn:uuid:a8c0...": {"lastReadAt": "2026-03-25T..."},
+  "_server": {"port": 8088, "pid": 12345}
+}
+```
+
+1. When `scholia view` starts, write `_server` to the state file with the
+   port and PID. Remove `_server` on server exit (in a `finally` block).
+
+2. When `scholia mv` runs, load the state file for `source.md`. If `_server`
+   is present, POST to `http://127.0.0.1:<port>/api/relocate` with
    `{"to": "<dest.md>"}`.
 
 3. The server's `/api/relocate` handler:
-   - Moves all files (doc + sidecars + lockfile) to the destination.
+   - Moves all files (doc + sidecars) to the destination.
    - Restarts the file watcher on the new path.
    - Updates the internal `doc_path`.
+   - Updates `_server` in the new state file.
    - Broadcasts a `doc_relocate` WebSocket message so the browser updates its
      breadcrumb and any internal path references.
    - Returns `200 OK` with `{"path": "<dest.md>"}`.
 
-4. If no server is running (no lockfile, or server unreachable), `scholia mv`
-   moves the files directly.
+4. If no server is running (no `_server` key, or server unreachable),
+   `scholia mv` moves the files directly.
 
 ### Edge cases
 
 - **Destination exists:** error unless `--force`.
 - **Source doesn't exist:** error.
 - **Cross-filesystem move:** use `shutil.move` (handles copy+delete fallback).
-- **Lockfile stale (server crashed):** if the API call fails (connection
-  refused), remove the stale lockfile and fall back to direct move.
+- **Stale `_server` (server crashed):** if the API call fails (connection
+  refused), remove the stale `_server` key and fall back to direct move.
 
 ## Part 2: `scholia rm`
 
@@ -78,15 +89,15 @@ Deletes the document and its sidecars:
 - `doc.md`
 - `doc.md.scholia.jsonl`
 - `doc.md.scholia.state.json`
-- `doc.md.scholia.server.json` (lockfile, if present)
+- `_server` key in state file (cleared if present)
 
 **Without `--force`:** prints the list of files that will be deleted and
 prompts for confirmation (`Delete 3 files? [y/N]`).
 
 **With `--force`:** deletes without prompting.
 
-Missing sidecars are silently skipped. If a server is running (lockfile
-exists), warn: `"Warning: a scholia view server is watching this file."`
+Missing sidecars are silently skipped. If `_server` is present in the state
+file, warn: `"Warning: a scholia view server is watching this file."`
 
 ## Part 3: Ephemeral mode for stdin
 
@@ -113,7 +124,7 @@ files on exit).
   with a warning otherwise — same pattern as `--title`).
 - When serving a stdin-created temp file without `--keep`, register a cleanup
   function in the server's shutdown path that deletes the temp `.md` and any
-  `.scholia.jsonl` / `.scholia.state.json` / `.scholia.server.json` that exist.
+  `.scholia.jsonl` / `.scholia.state.json` that exist.
 - If the user runs `scholia mv` during the session (promoting the temp file
   to a real location), the server's relocate handler clears the ephemeral flag
   so the moved file is NOT deleted on exit.
@@ -159,8 +170,8 @@ temp directory).
 - **Ephemeral:** Test that stdin-created temp files are deleted on server exit.
   Test that `--keep` preserves them. Test that `scholia mv` during a session
   clears the ephemeral flag.
-- **Server lockfile:** Test lockfile creation on server start, deletion on
-  exit, stale lockfile detection.
+- **Server state key:** Test `_server` written to state on server start,
+  removed on exit, stale `_server` detection.
 - **Browser save-as:** Test the WebSocket `save_as` message triggers relocate.
   Test that the option only appears for temp files.
 
