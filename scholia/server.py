@@ -131,6 +131,60 @@ async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
+def _render_export_sync(
+    doc_path: Path, fmt: str, output_path: Path | None = None,
+    pdf_engine: str | None = None,
+) -> bytes | None:
+    """Export document to pdf/html/latex. Returns bytes if output_path is None."""
+    cmd, md_text = _build_pandoc_base_cmd(doc_path)
+    cmd.append("--standalone")
+    cmd.append("--resource-path=" + str(doc_path.parent))
+
+    if fmt == "pdf":
+        cmd.append("--to=pdf")
+        if pdf_engine:
+            cmd.append("--pdf-engine=" + pdf_engine)
+    elif fmt == "html":
+        cmd += [
+            "--to=html5",
+            "--katex",
+            "--section-divs",
+            "--syntax-highlighting=pygments",
+        ]
+    elif fmt == "latex":
+        cmd.append("--to=latex")
+    else:
+        raise ValueError(f"Unsupported export format: {fmt}")
+
+    if output_path:
+        cmd.extend(["-o", str(output_path)])
+        subprocess.run(
+            cmd, input=md_text, capture_output=True, text=True, check=True,
+            cwd=str(doc_path.parent),
+        )
+        return None
+    else:
+        # Return bytes for server streaming. We encode md_text to bytes and
+        # omit text=True so stdout is captured as raw bytes (needed for PDF
+        # binary output). Pandoc writes to stdout when no -o is given.
+        result = subprocess.run(
+            cmd, input=md_text.encode(), capture_output=True, check=True,
+            cwd=str(doc_path.parent),
+        )
+        return result.stdout
+
+
+async def render_export(
+    doc_path: Path, fmt: str, output_path: Path | None = None,
+    pdf_engine: str | None = None,
+) -> bytes | None:
+    """Export document without blocking the event loop."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, _render_export_sync, doc_path, fmt, output_path, pdf_engine
+    )
+
+
 def _extract_bibliography(doc_path: Path) -> tuple[str | None, str | None]:
     """Extract bibliography and csl paths from document YAML frontmatter."""
     try:
@@ -330,6 +384,7 @@ class ScholiaServer:
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ws", self._handle_ws)
         self.app.router.add_get("/api/list-dir", self._handle_list_dir)
+        self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
 
@@ -409,6 +464,39 @@ class ScholiaServer:
         entries.extend(dirs)
         entries.extend(files)
         return web.json_response({"path": str(p).replace("\\", "/"), "entries": entries})
+
+    async def _handle_export_pdf(self, request):
+        """Export document to PDF and return the file."""
+        file_param = request.query.get("file")
+        if not file_param:
+            return web.json_response({"error": "Missing file parameter"}, status=400)
+
+        file_path = Path(file_param)
+        if not file_path.is_absolute():
+            file_path = self.launch_dir / file_path
+        doc_path = file_path.resolve()
+
+        if not doc_path.exists():
+            return web.json_response({"error": f"File not found: {doc_path}"}, status=404)
+
+        try:
+            pdf_bytes = await render_export(doc_path, "pdf")
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")
+            if "pdf" in stderr.lower() or "latex" in stderr.lower() or "xelatex" in stderr.lower() or "tectonic" in stderr.lower():
+                return web.json_response({
+                    "error": "PDF export requires a LaTeX engine (xelatex, tectonic, etc.).",
+                    "fallback": "print",
+                }, status=422)
+            return web.json_response({"error": f"Export failed: {stderr}"}, status=500)
+
+        return web.Response(
+            body=pdf_bytes,
+            content_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{doc_path.stem}.pdf"',
+            },
+        )
 
     async def _handle_ws(self, request):
         ws = web.WebSocketResponse()

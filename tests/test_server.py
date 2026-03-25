@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from scholia.comments import append_comment, load_comments
-from scholia.server import ScholiaServer, _build_pandoc_base_cmd, _render_pandoc_sync
+from scholia.server import ScholiaServer, _build_pandoc_base_cmd, _render_export_sync, _render_pandoc_sync
 from scholia.state import load_state
 
 
@@ -479,3 +479,55 @@ async def test_full_navigation_flow(client, tmp_doc):
     })
     await ws.close()
     assert len(load_comments(other)) == 1
+
+
+# ── Export endpoint tests ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_endpoint_html_fallback(client, tmp_doc):
+    """When no LaTeX engine, export-pdf returns fallback error."""
+    resp = await client.get("/api/export-pdf", params={"file": str(tmp_doc)})
+    # If LaTeX is available, we get a PDF; if not, we get a fallback JSON error.
+    if resp.status == 200:
+        assert resp.content_type == "application/pdf"
+        data = await resp.read()
+        assert len(data) > 0
+    else:
+        assert resp.status == 422
+        data = await resp.json()
+        assert "fallback" in data
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_endpoint_missing_file(client):
+    """Export of nonexistent file returns 404."""
+    resp = await client.get("/api/export-pdf", params={"file": "/nonexistent/doc.md"})
+    assert resp.status == 404
+
+
+# ── _render_export_sync tests ─────────────────────────
+
+
+def test_render_export_html(tmp_doc, tmp_path):
+    """Export to standalone HTML produces valid HTML file."""
+    out = tmp_path / "out.html"
+    _render_export_sync(tmp_doc, "html", out)
+    content = out.read_text()
+    assert "<!DOCTYPE" in content or "<html" in content
+    assert "Test Document" in content
+
+
+def test_render_export_latex(tmp_doc, tmp_path):
+    """Export to LaTeX produces valid .tex file."""
+    out = tmp_path / "out.tex"
+    _render_export_sync(tmp_doc, "latex", out)
+    content = out.read_text()
+    assert "\\begin{document}" in content
+
+
+def test_render_export_returns_bytes(tmp_doc):
+    """When output_path is None, returns bytes."""
+    data = _render_export_sync(tmp_doc, "html")
+    assert isinstance(data, bytes)
+    assert b"<html" in data or b"<!DOCTYPE" in data
