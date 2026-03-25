@@ -71,3 +71,23 @@ def is_unread(annotation: dict, ann_state: dict | None) -> bool:
         if msg_time > last_read:
             return True
     return False
+
+
+def set_server(doc_path: str | Path, port: int, pid: int):
+    """Record that a scholia view server is running for this document."""
+    state = load_state(doc_path)
+    state["_server"] = {"port": port, "pid": pid}
+    _write_state(doc_path, state)
+
+
+def clear_server(doc_path: str | Path):
+    """Remove server presence record."""
+    state = load_state(doc_path)
+    state.pop("_server", None)
+    _write_state(doc_path, state)
+
+
+def get_server(doc_path: str | Path) -> dict | None:
+    """Return server info dict or None if no server is running."""
+    state = load_state(doc_path)
+    return state.get("_server")
