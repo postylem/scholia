@@ -277,6 +277,13 @@ def _add_format_arg(parser):
 def cmd_view(args):
     from scholia.server import ScholiaServer
 
+    if args.doc is None and not sys.stdin.isatty():
+        print(
+            "Error: stdin is not a terminal — did you mean 'scholia view -'?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     doc = args.doc or _pick_or_create_doc()
     server = ScholiaServer(doc, host=args.host, port=args.port)
     try:
