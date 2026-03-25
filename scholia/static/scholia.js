@@ -329,6 +329,16 @@
     }
   }
 
+  function showExportWarning(text) {
+    var banner = document.createElement('div');
+    banner.className = 'scholia-export-warning';
+    banner.textContent = text;
+    banner.style.cursor = 'pointer';
+    banner.addEventListener('click', function () { banner.remove(); });
+    document.body.appendChild(banner);
+    setTimeout(function () { banner.remove(); }, 8000);
+  }
+
   // ── Debounced render pipeline ───────────────────────
 
   var renderRaf = 0;
@@ -585,6 +595,54 @@
       zoomTd2.appendChild(zoomGroup);
       zoomRow.appendChild(zoomTd2);
       tbl.appendChild(zoomRow);
+
+      // Export PDF row (separator + button, visually distinct from toggles)
+      var exportRow = document.createElement('tr');
+      exportRow.className = 'scholia-export-row';
+      var exportTd = document.createElement('td');
+      exportTd.setAttribute('colspan', '2');
+      var exportBtn = document.createElement('button');
+      exportBtn.className = 'scholia-export-btn';
+      exportBtn.textContent = 'Export PDF';
+      exportBtn.addEventListener('click', function () {
+        exportBtn.textContent = 'Exporting\u2026';
+        exportBtn.disabled = true;
+        var fileParam = encodeURIComponent(window.__SCHOLIA_DOC_FULLPATH__ || '');
+        fetch('/api/export-pdf?file=' + fileParam)
+          .then(function (resp) {
+            if (resp.ok) {
+              return resp.blob().then(function (blob) {
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                var name = (window.__SCHOLIA_DOC_PATH__ || 'document').split('/').pop();
+                a.download = name.replace(/\.[^.]+$/, '') + '.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                menu.remove();
+              });
+            } else {
+              return resp.json().then(function (data) {
+                menu.remove();
+                if (data.fallback === 'print') {
+                  showExportWarning('PDF export requires a LaTeX engine. Using browser print instead.');
+                  setTimeout(function () { window.print(); }, 300);
+                } else {
+                  showExportWarning('Export failed: ' + (data.error || 'unknown error'));
+                }
+              });
+            }
+          })
+          .catch(function (err) {
+            menu.remove();
+            showExportWarning('Export failed: ' + err.message);
+          });
+      });
+      exportTd.appendChild(exportBtn);
+      exportRow.appendChild(exportTd);
+      tbl.appendChild(exportRow);
 
       menu.appendChild(tbl);
 

@@ -1874,3 +1874,38 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
   margin-bottom: 0.5rem;
   min-height: 2.5rem;
 }
+
+/* Export PDF in Options menu */
+.scholia-export-row td {
+  padding-top: 6px;
+  border-top: 1px solid var(--s-border);
+}
+.scholia-export-btn {
+  width: 100%;
+  padding: 4px 8px;
+  cursor: pointer;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  background: var(--s-surface);
+  color: var(--s-text);
+}
+.scholia-export-btn:hover {
+  background: var(--s-card-hover);
+}
+
+/* Export warning banner */
+.scholia-export-warning {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #d97706;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  z-index: 10000;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
