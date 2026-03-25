@@ -8,8 +8,69 @@ import pytest
 import pytest_asyncio
 
 from scholia.comments import append_comment, load_comments
-from scholia.server import ScholiaServer
+from scholia.server import ScholiaServer, _build_pandoc_base_cmd, _render_pandoc_sync
 from scholia.state import load_state
+
+
+# ── Pandoc rendering tests ────────────────────────────
+
+
+def test_render_pandoc_sync_basic(tmp_doc):
+    """Pandoc renders markdown to HTML fragment with expected structure."""
+    html = _render_pandoc_sync(tmp_doc)
+    assert "<p>Some text to anchor comments to.</p>" in html
+    assert "Test Document" in html  # title from frontmatter
+
+
+def test_render_pandoc_sync_with_math(tmp_path):
+    """Math expressions produce KaTeX-compatible markup."""
+    doc = tmp_path / "math.md"
+    doc.write_text("---\ntitle: Math\n---\n\nInline $x^2$ and display:\n\n$$E = mc^2$$\n")
+    html = _render_pandoc_sync(doc)
+    assert "x^2" in html
+    assert "E = mc^2" in html
+
+
+def test_render_pandoc_sync_number_sections(tmp_path):
+    """number-sections frontmatter adds section numbers."""
+    doc = tmp_path / "numbered.md"
+    doc.write_text("---\ntitle: Numbered\nnumber-sections: true\n---\n\n# First\n\n## Sub\n")
+    html = _render_pandoc_sync(doc)
+    assert "header-section-number" in html or 'data-number="1"' in html
+
+
+# ── _build_pandoc_base_cmd tests ──────────────────────
+
+
+def test_build_pandoc_base_cmd_basic(tmp_doc):
+    """Base command includes citeproc, from-format, and csl."""
+    cmd, md_text = _build_pandoc_base_cmd(tmp_doc)
+    assert "pandoc" in cmd
+    assert "--citeproc" in cmd
+    assert "--from=markdown+tex_math_single_backslash" in cmd
+    assert "--metadata=link-citations:true" in cmd
+    # Should NOT include HTML-specific flags
+    assert "--katex" not in cmd
+    assert "--section-divs" not in cmd
+    assert "--to=html5" not in cmd
+
+
+def test_build_pandoc_base_cmd_number_sections(tmp_path):
+    """number-sections frontmatter adds --number-sections."""
+    doc = tmp_path / "numbered.md"
+    doc.write_text("---\ntitle: T\nnumber-sections: true\n---\n\n# H1\n")
+    cmd, _ = _build_pandoc_base_cmd(doc)
+    assert "--number-sections" in cmd
+
+
+def test_build_pandoc_base_cmd_macros(tmp_path):
+    """macros: frontmatter injects macro content into markdown text."""
+    macros = tmp_path / "macros.tex"
+    macros.write_text(r"\newcommand{\foo}{bar}")
+    doc = tmp_path / "doc.md"
+    doc.write_text("---\ntitle: T\nmacros: macros.tex\n---\n\nHello\n")
+    cmd, md_text = _build_pandoc_base_cmd(doc)
+    assert r"\newcommand{\foo}{bar}" in md_text
 
 
 @pytest.fixture

@@ -50,8 +50,20 @@ def _has_footnotes(md_text: str) -> bool:
     return bool(re.search(r"\[\^|\^\[", md_text))
 
 
-def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
-    """Render markdown to HTML fragment using Pandoc (blocking)."""
+def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
+    """Build format-agnostic Pandoc args and return (cmd, processed_md_text).
+
+    Handles: crossref (if available), citeproc, bibliography/csl resolution,
+    macros injection, number-sections, link-citations, input format.
+
+    Does NOT include format-specific flags:
+    - --katex (HTML-only; LaTeX/PDF handle math natively)
+    - --section-divs (HTML-only)
+    - --syntax-highlighting (caller decides)
+    - --template / --standalone (format-specific)
+    - --lua-filter sidenote.lua (HTML live-preview only)
+    - --to (caller decides output format)
+    """
     md_text = doc_path.read_text(encoding="utf-8")
     has_own_csl = re.search(r"^csl:", md_text, re.MULTILINE) is not None
     number_sections = re.search(r"^number-sections:\s*true", md_text, re.MULTILINE) is not None
@@ -62,7 +74,6 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         macros_path = doc_path.parent / macros_match.group(1).strip()
         if macros_path.is_file():
             macros_content = macros_path.read_text(encoding="utf-8")
-            # Insert after YAML frontmatter so Pandoc parses macros at block level
             fm_end = re.search(
                 r"\A---\s*\n.*?^(---|\.\.\.)\s*$", md_text, re.MULTILINE | re.DOTALL
             )
@@ -70,10 +81,7 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
                 pos = fm_end.end()
                 md_text = md_text[:pos] + "\n" + macros_content + "\n" + md_text[pos:]
 
-    cmd = [
-        "pandoc",
-        "--katex",
-    ]
+    cmd = ["pandoc"]
     if _HAS_CROSSREF:
         cmd.extend([
             "--filter", "pandoc-crossref",
@@ -82,19 +90,29 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         ])
     cmd += [
         "--citeproc",
-        "--section-divs",
-        "--syntax-highlighting=pygments",
         "--metadata=link-citations:true",
         "--from=markdown+tex_math_single_backslash",
+    ]
+    if not has_own_csl:
+        cmd.extend(["--csl", _DEFAULT_CSL])
+    if number_sections:
+        cmd.append("--number-sections")
+
+    return cmd, md_text
+
+
+def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
+    """Render markdown to HTML fragment using Pandoc (blocking)."""
+    cmd, md_text = _build_pandoc_base_cmd(doc_path)
+    cmd += [
+        "--katex",
+        "--section-divs",
+        "--syntax-highlighting=pygments",
         "--to=html5",
         "--template=" + _FRAGMENT_TEMPLATE,
     ]
     if sidenotes:
         cmd.extend(["--lua-filter", _SIDENOTE_FILTER])
-    if not has_own_csl:
-        cmd.extend(["--csl", _DEFAULT_CSL])
-    if number_sections:
-        cmd.append("--number-sections")
 
     result = subprocess.run(
         cmd,
@@ -102,7 +120,7 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         capture_output=True,
         text=True,
         check=True,
-        cwd=str(doc_path.parent),  # resolve relative bibliography paths
+        cwd=str(doc_path.parent),
     )
     return result.stdout
 
