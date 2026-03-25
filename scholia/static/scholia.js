@@ -274,7 +274,7 @@
   var disconnectBanner = document.createElement('div');
   disconnectBanner.className = 'scholia-disconnect-banner';
   disconnectBanner.textContent = 'Reconnecting\u2026';
-  document.body.appendChild(disconnectBanner);
+  toolbarEl.insertAdjacentElement('afterend', disconnectBanner);
   var disconnectShowTimer = null;
 
   function showDisconnectBanner() {

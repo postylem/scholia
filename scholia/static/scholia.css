@@ -1912,11 +1912,8 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
 
 /* Disconnect banner */
 .scholia-disconnect-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 28px;
+  height: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1924,15 +1921,11 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
   color: white;
   font-size: 12px;
   font-family: var(--s-sans);
-  z-index: 99;
   pointer-events: none;
-  opacity: 0;
-  transform: translateY(-100%);
-  transition: opacity 0.3s, transform 0.3s;
+  transition: height 0.3s;
 }
 .scholia-disconnect-banner.visible {
-  opacity: 1;
-  transform: translateY(0);
+  height: 28px;
 }
 body.scholia-dark .scholia-disconnect-banner {
   background: rgba(180, 83, 9, 0.9);
