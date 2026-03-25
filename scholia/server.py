@@ -357,7 +357,8 @@ class _FileChangeHandler(FileSystemEventHandler):
 
 
 class ScholiaServer:
-    def __init__(self, doc_path: str, host: str = "127.0.0.1", port: int = 8088):
+    def __init__(self, doc_path: str, host: str = "127.0.0.1", port: int = 8088,
+                 ephemeral: bool = False):
         _check_pandoc()
         self.display_path = doc_path  # as given on command line
         self.doc_path = Path(doc_path).resolve()
@@ -376,7 +377,7 @@ class ScholiaServer:
         self._debounce_handles: dict[tuple, asyncio.TimerHandle] = {}
         self._observers: dict[Path, Observer] = {}  # parent_dir -> Observer
         self._observer_refcount: dict[Path, int] = {}  # parent_dir -> count
-        self._ephemeral = False
+        self._ephemeral = ephemeral
 
     def _load_template(self) -> str:
         template_path = Path(__file__).parent / "template.html"
@@ -410,6 +411,16 @@ class ScholiaServer:
             clear_server(self.doc_path)
         except Exception:
             pass  # Best effort — file may already be deleted (ephemeral)
+
+    def _ephemeral_cleanup(self):
+        """Delete document and sidecars if in ephemeral mode."""
+        if not self._ephemeral:
+            return
+        from scholia.files import remove_doc
+        try:
+            remove_doc(self.doc_path)
+        except (FileNotFoundError, OSError):
+            pass  # Already gone or permission issue
 
     async def _handle_index(self, request):
         file_param = request.query.get("file")
@@ -829,5 +840,6 @@ class ScholiaServer:
             self._observer_refcount.clear()
 
             self._clear_server_state()
+            self._ephemeral_cleanup()
 
         await runner.cleanup()

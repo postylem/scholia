@@ -315,6 +315,7 @@ def cmd_view(args):
             sys.exit(1)
         doc = _stdin_to_tempfile(text, title=args.title)
         print(f"Viewing {doc}", file=sys.stderr)
+        ephemeral = not args.keep
     elif args.doc is None and not sys.stdin.isatty():
         print(
             "Error: stdin is not a terminal — did you mean 'scholia view -'?",
@@ -327,9 +328,15 @@ def cmd_view(args):
                 "Warning: --title is only used with stdin mode (scholia view -)",
                 file=sys.stderr,
             )
+        if args.keep:
+            print(
+                "Warning: --keep is only used with stdin mode (scholia view -)",
+                file=sys.stderr,
+            )
         doc = args.doc or _pick_or_create_doc()
+        ephemeral = False
 
-    server = ScholiaServer(doc, host=args.host, port=args.port)
+    server = ScholiaServer(doc, host=args.host, port=args.port, ephemeral=ephemeral)
     try:
         asyncio.run(server.start())
     except (KeyboardInterrupt, SystemExit):
@@ -699,6 +706,10 @@ def main():
     p_view.add_argument(
         "--title", default=None,
         help="Document title (YAML frontmatter, only used with stdin '-')",
+    )
+    p_view.add_argument(
+        "--keep", action="store_true",
+        help="Keep stdin temp file after server exits (default: auto-cleanup)",
     )
 
     # list
