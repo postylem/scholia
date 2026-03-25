@@ -316,6 +316,7 @@
         docEl.innerHTML = msg.html;
         buildToc();
         rerenderMath();
+        renderMermaid();
         decorateCodeBlocks();
         setupCitationTooltips();
         if (!sidebarHidden) { reanchorAll(); positionCards(); }
@@ -339,6 +340,12 @@
           cb(msg.html);
           pandocCallbacks.delete(msg.request_id);
         }
+      } else if (msg.type === 'relocated') {
+        // File was saved/moved — update paths and UI
+        window.__SCHOLIA_DOC_FULLPATH__ = msg.path;
+        window.__SCHOLIA_DOC_PATH__ = msg.display_path || msg.path;
+        renderToolbar();
+        console.log('Scholia: file saved to', msg.path);
       } else if (msg.type === 'error') {
         console.warn('Scholia server error:', msg.message);
       }
@@ -370,6 +377,95 @@
     banner.addEventListener('click', function () { banner.remove(); });
     document.body.appendChild(banner);
     setTimeout(function () { banner.remove(); }, 8000);
+  }
+
+  function isTempFile() {
+    var p = window.__SCHOLIA_DOC_FULLPATH__ || '';
+    return p.includes('/scholia-') && (p.startsWith('/tmp/') || p.includes('/var/folders/') || p.includes('/T/'));
+  }
+
+  function showSaveAsModal() {
+    // Compute suggested filename from document title
+    var titleEl = document.querySelector('h1');
+    var title = (titleEl ? titleEl.textContent : '') || document.title || 'document';
+    var slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    var suggested = '~/Documents/' + (slug || 'document') + '.md';
+
+    var overlay = document.createElement('div');
+    overlay.className = 'scholia-save-as-overlay';
+
+    var dialog = document.createElement('div');
+    dialog.className = 'scholia-save-as-dialog';
+
+    var heading = document.createElement('h3');
+    heading.textContent = 'Save as';
+    heading.style.margin = '0 0 0.75em 0';
+    dialog.appendChild(heading);
+
+    var label = document.createElement('label');
+    label.textContent = 'Destination path:';
+    label.style.display = 'block';
+    label.style.marginBottom = '0.25em';
+    label.style.fontSize = '0.9em';
+    dialog.appendChild(label);
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'save-as-path';
+    input.value = suggested;
+    input.className = 'scholia-save-as-input';
+    input.style.width = '100%';
+    input.style.boxSizing = 'border-box';
+    input.style.padding = '0.4em 0.5em';
+    input.style.fontSize = '0.95em';
+    input.style.border = '1px solid #999';
+    input.style.borderRadius = '3px';
+    dialog.appendChild(input);
+
+    var btnRow = document.createElement('div');
+    btnRow.style.marginTop = '1em';
+    btnRow.style.display = 'flex';
+    btnRow.style.justifyContent = 'flex-end';
+    btnRow.style.gap = '0.5em';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'scholia-save-as-btn';
+    cancelBtn.addEventListener('click', function () { overlay.remove(); });
+
+    var saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save';
+    saveBtn.className = 'scholia-save-as-btn scholia-save-as-btn-primary';
+    saveBtn.addEventListener('click', function () {
+      var dest = input.value.trim();
+      if (!dest) return;
+      // Expand ~ to home dir hint — server will resolve
+      wsSend({ type: 'save_as', path: dest });
+      overlay.remove();
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+    dialog.appendChild(btnRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    // Focus input and select filename portion
+    input.focus();
+    var lastSlash = suggested.lastIndexOf('/');
+    var dotPos = suggested.lastIndexOf('.');
+    if (lastSlash >= 0 && dotPos > lastSlash) {
+      input.setSelectionRange(lastSlash + 1, dotPos);
+    }
+
+    // Close on Escape
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') overlay.remove();
+    });
+    // Close on clicking backdrop
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.remove();
+    });
   }
 
   // ── Debounced render pipeline ───────────────────────
@@ -629,6 +725,24 @@
       zoomRow.appendChild(zoomTd2);
       tbl.appendChild(zoomRow);
 
+      // Save as row (only for temp files)
+      if (isTempFile()) {
+        var saveAsRow = document.createElement('tr');
+        saveAsRow.className = 'scholia-export-row scholia-save-as-row';
+        var saveAsTd = document.createElement('td');
+        saveAsTd.setAttribute('colspan', '2');
+        var saveAsBtn = document.createElement('button');
+        saveAsBtn.className = 'scholia-export-btn';
+        saveAsBtn.textContent = 'Save as\u2026';
+        saveAsBtn.addEventListener('click', function () {
+          menu.remove();
+          showSaveAsModal();
+        });
+        saveAsTd.appendChild(saveAsBtn);
+        saveAsRow.appendChild(saveAsTd);
+        tbl.appendChild(saveAsRow);
+      }
+
       // Export PDF row (separator + button, visually distinct from toggles)
       var exportRow = document.createElement('tr');
       exportRow.className = 'scholia-export-row';
@@ -774,6 +888,13 @@
 
   function rerenderMath() {
     renderMathIn(docEl);
+  }
+
+  function renderMermaid() {
+    if (!window.mermaid) return;
+    var pres = docEl.querySelectorAll('pre.mermaid');
+    if (pres.length === 0) return;
+    window.mermaid.run({ nodes: pres });
   }
 
   function postProcessPandocHtml(container) {
@@ -2922,10 +3043,12 @@
   }
   renderSidebar();
 
-  // KaTeX is loaded with defer, so wait for window load before rendering math
+  // KaTeX and mermaid are loaded with defer, so wait for window load
   window.addEventListener('load', function () {
+    if (window.mermaid) window.mermaid.initialize({ startOnLoad: false });
     buildToc();
     rerenderMath();
+    renderMermaid();
     rerenderCommentBodies();
     decorateCodeBlocks();
     setupCitationTooltips();

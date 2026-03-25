@@ -679,6 +679,20 @@ class ScholiaServer:
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
                 )
+            elif msg_type == "save_as":
+                dest = msg.get("path", "")
+                if not dest:
+                    await ws.send_json({"type": "error", "message": "Missing path"})
+                    return
+                try:
+                    await self._do_relocate(Path(dest).resolve())
+                except FileExistsError:
+                    await ws.send_json({
+                        "type": "error",
+                        "message": f"Destination already exists: {dest}",
+                    })
+                except Exception as e:
+                    await ws.send_json({"type": "error", "message": str(e)})
             elif msg_type == "render_markdown":
                 bib, csl = _extract_bibliography(doc)
                 html = await render_markdown_fragment(

@@ -1930,3 +1930,53 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
 body.scholia-dark .scholia-disconnect-banner {
   background: rgba(180, 83, 9, 0.9);
 }
+
+/* Save As modal */
+.scholia-save-as-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scholia-save-as-dialog {
+  background: var(--s-bg);
+  color: var(--s-text);
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  padding: 1.5em;
+  min-width: 360px;
+  max-width: 500px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  font-family: var(--s-sans);
+  font-size: 14px;
+}
+.scholia-save-as-dialog h3 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+.scholia-save-as-input {
+  font-family: var(--s-mono);
+}
+.scholia-save-as-btn {
+  padding: 0.35em 1em;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  background: var(--s-surface);
+  color: var(--s-text);
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.scholia-save-as-btn:hover {
+  background: var(--s-card-hover);
+}
+.scholia-save-as-btn-primary {
+  background: var(--s-text);
+  color: var(--s-bg);
+  border-color: var(--s-text);
+}
+.scholia-save-as-btn-primary:hover {
+  opacity: 0.85;
+}

@@ -554,6 +554,29 @@ async def test_relocate_endpoint(aiohttp_client, tmp_path):
     assert (tmp_path / "dest.md.scholia.jsonl").exists()
 
 
+@pytest.mark.asyncio
+async def test_ws_save_as(aiohttp_client, tmp_path):
+    """WebSocket save_as message triggers relocate."""
+    doc = tmp_path / "src.md"
+    doc.write_text("# Hello")
+    dest = tmp_path / "saved.md"
+
+    server = ScholiaServer(str(doc))
+    client = await aiohttp_client(server.app)
+
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(doc)})
+
+    await ws.send_json({"type": "save_as", "path": str(dest)})
+    msg = await ws.receive_json()
+    assert msg["type"] == "relocated"
+    assert "saved.md" in msg["path"]
+    assert dest.exists()
+    assert not doc.exists()
+
+    await ws.close()
+
+
 def test_server_writes_and_clears_server_state(tmp_path):
     """Server writes _server to state on start, clears on exit."""
     from scholia.state import get_server
