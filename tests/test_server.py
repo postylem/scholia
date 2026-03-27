@@ -93,7 +93,7 @@ async def test_index_returns_html(client):
     resp = await client.get("/")
     assert resp.status == 200
     text = await resp.text()
-    assert "scholia-container" in text
+    assert "scholia-sidebar" in text
     assert "__SCHOLIA_COMMENTS__" in text
     assert "__SCHOLIA_STATE__" in text
 
@@ -374,7 +374,7 @@ async def test_index_file_not_found(client):
     resp = await client.get("/", params={"file": "/nonexistent/doc.md"})
     assert resp.status == 200
     text = await resp.text()
-    assert "scholia-container" in text  # still a valid page
+    assert "scholia-sidebar" in text  # still a valid page
     assert "not found" in text.lower() or "error" in text.lower()
 
 
@@ -408,7 +408,7 @@ async def test_index_render_error(client, tmp_doc):
     resp = await client.get("/", params={"file": str(bad)})
     assert resp.status == 200
     text = await resp.text()
-    assert "scholia-container" in text  # still a valid page
+    assert "scholia-sidebar" in text  # still a valid page
     assert "error" in text.lower()
 
 
