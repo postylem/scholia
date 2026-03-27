@@ -87,7 +87,7 @@ def test_title_flag_with_file_shows_warning(tmp_path):
     # subprocess.run raises TimeoutExpired — check stderr on the exception.
     try:
         subprocess.run(
-            [sys.executable, "-m", "scholia.cli", "view", str(doc), "--title", "Foo"],
+            [sys.executable, "-m", "scholia.cli", "view", str(doc), "--title", "Foo", "--no-open"],
             capture_output=True,
             text=True,
             timeout=3,
