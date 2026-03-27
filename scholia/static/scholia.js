@@ -2134,6 +2134,13 @@
       }
 
       var range = TextQuoteAnchor.toRange(docEl, selector);
+      // Fallback: try source selector in recoverable text space
+      if (!range) {
+        var srcSel = ann.target && ann.target['scholia:sourceSelector'];
+        if (srcSel && srcSel.exact) {
+          range = TextQuoteAnchor.toRangeRecoverable(docEl, srcSel);
+        }
+      }
       if (!range) {
         orphanIds.add(ann.id);
         continue;

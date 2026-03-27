@@ -322,10 +322,98 @@
     return _selectorWithAdaptiveContext(text, start, end);
   }
 
+  /**
+   * Convert recoverable-text character offsets back to a DOM Range.
+   * Inverse of domToRT — maps positions in the recoverable text space
+   * back to positions in the actual DOM tree.
+   */
+  function rtToRange(entries, rtStart, rtEnd) {
+    var startNode = null, startOffset = 0;
+    var endNode = null, endOffset = 0;
+
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+
+      if (!startNode && e.rtEnd > rtStart) {
+        if (e.type === 'text') {
+          startNode = e.node;
+          startOffset = rtStart - e.rtStart;
+        } else {
+          // Math/ref/cite element: position before it
+          startNode = e.node.parentNode;
+          startOffset = Array.prototype.indexOf.call(startNode.childNodes, e.node);
+        }
+      }
+
+      if (e.rtEnd >= rtEnd) {
+        if (e.type === 'text' && rtEnd > e.rtStart) {
+          endNode = e.node;
+          endOffset = rtEnd - e.rtStart;
+        } else if (e.type !== 'text') {
+          // Math/ref/cite element: position after it
+          endNode = e.node.parentNode;
+          endOffset = Array.prototype.indexOf.call(endNode.childNodes, e.node) + 1;
+        } else {
+          // rtEnd falls at or before this text node's start
+          endNode = e.node;
+          endOffset = 0;
+        }
+        break;
+      }
+    }
+
+    if (!startNode || !endNode) return null;
+
+    var range = document.createRange();
+    range.setStart(startNode, startOffset);
+    range.setEnd(endNode, endOffset);
+    return range;
+  }
+
+  /**
+   * Find a DOM Range from a source-space TextQuoteSelector.
+   * Searches in recoverable text (LaTeX for math, @ref for crossrefs)
+   * and maps the match back to DOM positions.
+   */
+  function toRangeRecoverable(root, selector) {
+    var map = buildRecoverableMap(root);
+    var text = map.text;
+    var exact = selector.exact;
+    var prefix = selector.prefix || '';
+    var suffix = selector.suffix || '';
+
+    if (!exact) return null;
+
+    var candidates = [];
+    var searchStart = 0;
+    while (true) {
+      var idx = text.indexOf(exact, searchStart);
+      if (idx === -1) break;
+      candidates.push(idx);
+      searchStart = idx + 1;
+    }
+
+    if (candidates.length === 0) return null;
+
+    var bestIdx = candidates[0];
+    var bestScore = -1;
+
+    for (var c = 0; c < candidates.length; c++) {
+      var score = _scoreCandidate(text, candidates[c], exact, prefix, suffix);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = candidates[c];
+      }
+    }
+
+    return rtToRange(map.entries, bestIdx, bestIdx + exact.length);
+  }
+
   global.TextQuoteAnchor = {
     fromRange: fromRange,
     fromRangeRecoverable: fromRangeRecoverable,
     snapToMathBoundaries: snapToMathBoundaries,
-    toRange: toRange
+    toRange: toRange,
+    toRangeRecoverable: toRangeRecoverable
   };
 })(window);
