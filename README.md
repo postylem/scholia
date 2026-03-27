@@ -156,7 +156,7 @@ scholia list <doc.md> --open -v           List open threads with message bodies
 scholia show <doc.md> <id>               Show a single thread with all messages
 scholia reply <doc.md> <id> "text"        Reply to a thread
 scholia edit <doc.md> <id> "text"         Edit the last message in a thread
-scholia comment <doc.md> "anchor" "text"  Add a new comment anchored to text
+scholia comment <doc.md> "anchor" "text"  Anchor to text or line:col-line:col
 scholia resolve <doc.md> <id>             Resolve a thread
 scholia unresolve <doc.md> <id>           Reopen a thread
 scholia export <doc.md> --to pdf|html|latex  Export document

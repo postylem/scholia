@@ -529,19 +529,56 @@ def cmd_edit(args):
         print(f"Edited last message in {ann['id']}")
 
 
+def _parse_line_col_range(spec: str, text: str) -> tuple[int, int] | None:
+    """Parse 'line:col-line:col' or 'line:col-col' into (start, end) char offsets.
+
+    Lines and columns are 1-based. Returns None if spec doesn't match the
+    line:col pattern.
+    """
+    import re
+
+    m = re.match(r"^(\d+):(\d+)-(?:(\d+):)?(\d+)$", spec)
+    if not m:
+        return None
+    start_line = int(m.group(1))
+    start_col = int(m.group(2))
+    end_line = int(m.group(3)) if m.group(3) else start_line
+    end_col = int(m.group(4))
+
+    lines = text.split("\n")
+    if start_line < 1 or start_line > len(lines):
+        return None
+    if end_line < 1 or end_line > len(lines):
+        return None
+
+    # Convert to character offsets (0-based)
+    start_offset = sum(len(lines[i]) + 1 for i in range(start_line - 1)) + (start_col - 1)
+    end_offset = sum(len(lines[i]) + 1 for i in range(end_line - 1)) + (end_col - 1)
+
+    if start_offset < 0 or end_offset > len(text) or start_offset >= end_offset:
+        return None
+    return start_offset, end_offset
+
+
 def cmd_comment(args):
     from scholia.comments import _pandoc_plain
     from scholia.context import generate_selector_context, render_doc_plain
 
     creator, nickname, is_software = _resolve_author(args)
-    raw_exact = args.anchor
     doc_text = Path(args.doc).read_text(encoding="utf-8")
 
-    # Source selector: find in raw markdown, generate adaptive context
-    pos = doc_text.find(raw_exact)
-    if pos == -1:
-        print("Error: anchor text not found in document", file=sys.stderr)
-        sys.exit(1)
+    # Parse anchor: either line:col-line:col range or exact text
+    range_result = _parse_line_col_range(args.anchor, doc_text)
+    if range_result:
+        pos, end = range_result
+        raw_exact = doc_text[pos:end]
+    else:
+        raw_exact = args.anchor
+        pos = doc_text.find(raw_exact)
+        if pos == -1:
+            print("Error: anchor text not found in document", file=sys.stderr)
+            sys.exit(1)
+
     source_prefix, source_suffix = generate_selector_context(doc_text, raw_exact, pos)
     source_selector = {
         "exact": raw_exact,
@@ -895,7 +932,7 @@ def main():
     p_comment.add_argument("doc", help="Markdown document path")
     p_comment.add_argument(
         "anchor",
-        help="Exact text from the document to anchor the comment to",
+        help="Exact text, or line:col-line:col range (1-based) to anchor to",
     )
     p_comment.add_argument("text", help="Comment text")
     p_comment.add_argument(

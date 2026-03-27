@@ -45,8 +45,10 @@ scholia show <doc.md> <id>
 # Reply to a thread
 scholia reply <doc.md> <id> "Your reply" --author-ai-model "<model>"
 
-# Add a new comment anchored to exact text from the document
+# Add a new comment anchored to exact text or a line:col range
 scholia comment <doc.md> "exact text to anchor to" "Your comment" --author-ai-model "<model>"
+scholia comment <doc.md> "10:5-10:20" "Your comment" --author-ai-model "<model>"
+scholia comment <doc.md> "10:5-20" "Your comment" --author-ai-model "<model>"  # same line shorthand
 
 # Edit the last message in a thread
 scholia edit <doc.md> <id> "Replacement text"
