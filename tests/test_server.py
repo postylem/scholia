@@ -1,6 +1,5 @@
 """Integration tests for the scholia server."""
 
-import json
 import re
 from pathlib import Path
 
@@ -8,9 +7,13 @@ import pytest
 import pytest_asyncio
 
 from scholia.comments import append_comment, load_comments
-from scholia.server import ScholiaServer, _build_pandoc_base_cmd, _render_export_sync, _render_pandoc_sync
+from scholia.server import (
+    ScholiaServer,
+    _build_pandoc_base_cmd,
+    _render_export_sync,
+    _render_pandoc_sync,
+)
 from scholia.state import load_state
-
 
 # ── Pandoc rendering tests ────────────────────────────
 
@@ -113,13 +116,15 @@ async def test_static_files(client):
 async def test_ws_new_comment(client, tmp_doc):
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
-    await ws.send_json({
-        "type": "new_comment",
-        "exact": "Some text",
-        "prefix": "",
-        "suffix": "",
-        "body": "test comment",
-    })
+    await ws.send_json(
+        {
+            "type": "new_comment",
+            "exact": "Some text",
+            "prefix": "",
+            "suffix": "",
+            "body": "test comment",
+        }
+    )
     await ws.close()
     comments = load_comments(tmp_doc)
     assert len(comments) == 1
@@ -131,12 +136,14 @@ async def test_ws_reply(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
-    await ws.send_json({
-        "type": "reply",
-        "annotation_id": ann["id"],
-        "body": "reply text",
-        "creator": "human",
-    })
+    await ws.send_json(
+        {
+            "type": "reply",
+            "annotation_id": ann["id"],
+            "body": "reply text",
+            "creator": "human",
+        }
+    )
     await ws.close()
     comments = load_comments(tmp_doc)
     assert len(comments[0]["body"]) == 2
@@ -147,10 +154,12 @@ async def test_ws_resolve(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
-    await ws.send_json({
-        "type": "resolve",
-        "annotation_id": ann["id"],
-    })
+    await ws.send_json(
+        {
+            "type": "resolve",
+            "annotation_id": ann["id"],
+        }
+    )
     await ws.close()
     comments = load_comments(tmp_doc)
     assert comments[0]["scholia:status"] == "resolved"
@@ -165,11 +174,13 @@ async def test_ws_edit_body(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="original")
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
-    await ws.send_json({
-        "type": "edit_body",
-        "annotation_id": ann["id"],
-        "body": "edited text",
-    })
+    await ws.send_json(
+        {
+            "type": "edit_body",
+            "annotation_id": ann["id"],
+            "body": "edited text",
+        }
+    )
     await ws.close()
     comments = load_comments(tmp_doc)
     assert comments[0]["body"][-1]["value"] == "edited text"
@@ -180,10 +191,12 @@ async def test_ws_mark_read(client, tmp_doc):
     ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
-    await ws.send_json({
-        "type": "mark_read",
-        "annotation_id": ann["id"],
-    })
+    await ws.send_json(
+        {
+            "type": "mark_read",
+            "annotation_id": ann["id"],
+        }
+    )
     await ws.close()
     state = load_state(tmp_doc)
     assert ann["id"] in state
@@ -194,11 +207,13 @@ async def test_ws_mark_read(client, tmp_doc):
 async def test_ws_render_markdown(client, tmp_doc):
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
-    await ws.send_json({
-        "type": "render_markdown",
-        "text": "**bold** and *italic*",
-        "request_id": "req-1",
-    })
+    await ws.send_json(
+        {
+            "type": "render_markdown",
+            "text": "**bold** and *italic*",
+            "request_id": "req-1",
+        }
+    )
     msg = await ws.receive_json()
     assert msg["type"] == "rendered_markdown"
     assert msg["request_id"] == "req-1"
@@ -253,9 +268,8 @@ def test_form_elements_have_name_or_id():
             if not has_name and not has_id:
                 violations.append(f"line {i + 1}: {line.strip()}")
 
-    assert violations == [], (
-        "Form elements created without name or id attribute:\n"
-        + "\n".join(violations)
+    assert violations == [], "Form elements created without name or id attribute:\n" + "\n".join(
+        violations
     )
 
 
@@ -406,13 +420,15 @@ async def test_ws_watch_registers_file(client, tmp_doc):
     """WS client sending 'watch' is registered for that file."""
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
-    await ws.send_json({
-        "type": "new_comment",
-        "exact": "Some text",
-        "prefix": "",
-        "suffix": "",
-        "body": "after watch",
-    })
+    await ws.send_json(
+        {
+            "type": "new_comment",
+            "exact": "Some text",
+            "prefix": "",
+            "suffix": "",
+            "body": "after watch",
+        }
+    )
     await ws.close()
     comments = load_comments(tmp_doc)
     assert len(comments) == 1
@@ -426,15 +442,18 @@ async def test_ws_operations_use_watched_file(client, tmp_doc):
     other.write_text("---\ntitle: Other\n---\n\nOther text.\n")
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(other.resolve())})
-    await ws.send_json({
-        "type": "new_comment",
-        "exact": "Other text",
-        "prefix": "",
-        "suffix": "",
-        "body": "comment on other",
-    })
+    await ws.send_json(
+        {
+            "type": "new_comment",
+            "exact": "Other text",
+            "prefix": "",
+            "suffix": "",
+            "body": "comment on other",
+        }
+    )
     await ws.close()
     from scholia.comments import load_comments
+
     assert len(load_comments(other)) == 1
     assert len(load_comments(tmp_doc)) == 0
 
@@ -470,13 +489,15 @@ async def test_full_navigation_flow(client, tmp_doc):
     # WS works on the new file
     ws = await client.ws_connect("/ws")
     await ws.send_json({"type": "watch", "file": str(other.resolve())})
-    await ws.send_json({
-        "type": "new_comment",
-        "exact": "Other content",
-        "prefix": "",
-        "suffix": "",
-        "body": "comment on other",
-    })
+    await ws.send_json(
+        {
+            "type": "new_comment",
+            "exact": "Other content",
+            "prefix": "",
+            "suffix": "",
+            "body": "comment on other",
+        }
+    )
     await ws.close()
     assert len(load_comments(other)) == 1
 
@@ -580,6 +601,7 @@ async def test_ws_save_as(aiohttp_client, tmp_path):
 def test_server_writes_and_clears_server_state(tmp_path):
     """Server writes _server to state on start, clears on exit."""
     from scholia.state import get_server
+
     doc = tmp_path / "test.md"
     doc.write_text("# Hello")
     assert get_server(str(doc)) is None

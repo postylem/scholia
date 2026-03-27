@@ -29,14 +29,14 @@ def _score_candidate(text: str, idx: int, exact: str, prefix: str, suffix: str) 
     """
     score = 0
     if prefix:
-        before = text[max(0, idx - len(prefix)):idx]
+        before = text[max(0, idx - len(prefix)) : idx]
         for i in range(min(len(before), len(prefix))):
             if before[len(before) - 1 - i] == prefix[len(prefix) - 1 - i]:
                 score += 1
             else:
                 break
     if suffix:
-        after = text[idx + len(exact):idx + len(exact) + len(suffix)]
+        after = text[idx + len(exact) : idx + len(exact) + len(suffix)]
         for i in range(min(len(after), len(suffix))):
             if after[i] == suffix[i]:
                 score += 1
@@ -45,8 +45,9 @@ def _score_candidate(text: str, idx: int, exact: str, prefix: str, suffix: str) 
     return score
 
 
-def _best_by_scoring(text: str, candidates: list[int], exact: str,
-                     prefix: str, suffix: str) -> tuple[int, bool]:
+def _best_by_scoring(
+    text: str, candidates: list[int], exact: str, prefix: str, suffix: str
+) -> tuple[int, bool]:
     """Pick the best candidate using prefix/suffix scoring.
 
     Returns ``(char_offset, is_decisive)`` where *is_decisive* is True when
@@ -76,7 +77,9 @@ def render_doc_plain(doc_path: str | Path) -> str | None:
     try:
         result = subprocess.run(
             ["pandoc", "-t", "plain", "--wrap=none", str(doc_path)],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode == 0:
             return result.stdout
@@ -85,8 +88,9 @@ def render_doc_plain(doc_path: str | Path) -> str | None:
     return None
 
 
-def _find_anchor_pos(full_text: str, selector: dict,
-                     rendered_text: str | None = None) -> int | None:
+def _find_anchor_pos(
+    full_text: str, selector: dict, rendered_text: str | None = None
+) -> int | None:
     """Find the character offset where the exact anchor text starts.
 
     Uses prefix/suffix scoring (like the browser's ``toRange()``) to
@@ -113,8 +117,7 @@ def _find_anchor_pos(full_text: str, selector: dict,
     if not prefix and not suffix:
         return raw_candidates[0]
 
-    raw_best, raw_decisive = _best_by_scoring(
-        full_text, raw_candidates, exact, prefix, suffix)
+    raw_best, raw_decisive = _best_by_scoring(full_text, raw_candidates, exact, prefix, suffix)
 
     if raw_decisive:
         return raw_best
@@ -124,7 +127,8 @@ def _find_anchor_pos(full_text: str, selector: dict,
         rendered_candidates = _find_all_occurrences(rendered_text, exact)
         if rendered_candidates:
             rendered_best, rendered_decisive = _best_by_scoring(
-                rendered_text, rendered_candidates, exact, prefix, suffix)
+                rendered_text, rendered_candidates, exact, prefix, suffix
+            )
             if rendered_decisive:
                 # Map rendered occurrence index back to raw text.
                 occurrence = rendered_candidates.index(rendered_best)
@@ -176,7 +180,10 @@ _RESET = "\033[0m"
 
 
 def _fmt_gutter_line(
-    gutter: str, text: str, highlight: tuple[int, int] | None, color: bool,
+    gutter: str,
+    text: str,
+    highlight: tuple[int, int] | None,
+    color: bool,
 ) -> list[str]:
     """Format a single gutter line, optionally highlighting a span.
 
@@ -191,11 +198,15 @@ def _fmt_gutter_line(
         selected = text[col_s:col_e]
         after = text[col_e:]
         if color:
-            lines.append(f"  {_DIM}{gutter} |  {before}{_RESET}"
-                         f"{_BOLD}{_YELLOW}{selected}{_RESET}"
-                         f"{_DIM}{after}{_RESET}")
-            lines.append(f"  {_DIM}{' ' * len(gutter)} |  {_RESET}"
-                         f"{' ' * col_s}{_YELLOW}{'^' * max(1, col_e - col_s)}{_RESET}")
+            lines.append(
+                f"  {_DIM}{gutter} |  {before}{_RESET}"
+                f"{_BOLD}{_YELLOW}{selected}{_RESET}"
+                f"{_DIM}{after}{_RESET}"
+            )
+            lines.append(
+                f"  {_DIM}{' ' * len(gutter)} |  {_RESET}"
+                f"{' ' * col_s}{_YELLOW}{'^' * max(1, col_e - col_s)}{_RESET}"
+            )
         else:
             lines.append(f"  {gutter} |  {text}")
             lines.append(f"  {' ' * len(gutter)} |  {' ' * col_s}{'^' * max(1, col_e - col_s)}")
@@ -228,9 +239,14 @@ def format_orphan_context(selector: dict) -> list[str]:
     return _fmt_gutter_line(gutter, full_line, (col_s, col_e), color)
 
 
-def locate_anchor(doc_path: str | Path, selector: dict, *,
-                  context_before: int = 2, context_after: int = 2,
-                  rendered_text: str | None = ...) -> dict:
+def locate_anchor(
+    doc_path: str | Path,
+    selector: dict,
+    *,
+    context_before: int = 2,
+    context_after: int = 2,
+    rendered_text: str | None = ...,
+) -> dict:
     """Find an annotation's anchor in the document and return context.
 
     *rendered_text* is an optional Pandoc plain-text rendering of the
@@ -321,16 +337,16 @@ def locate_anchor(doc_path: str | Path, selector: dict, *,
         formatted.insert(0, skip_line)
 
     # End column: find where exact text ends
-    end_line = text[:char_pos + len(exact)].count("\n")
+    end_line = text[: char_pos + len(exact)].count("\n")
     end_line_start = text.rfind("\n", 0, char_pos + len(exact)) + 1
     end_col = char_pos + len(exact) - end_line_start
 
     return {
         "found": True,
         "line": anchor_line + 1,
-        "col": anchor_col + 1,         # 1-based
-        "end_line": end_line + 1,       # 1-based
-        "end_col": end_col + 1,         # 1-based, exclusive
+        "col": anchor_col + 1,  # 1-based
+        "end_line": end_line + 1,  # 1-based
+        "end_col": end_col + 1,  # 1-based, exclusive
         "heading": heading,
         "heading_line": (heading_line + 1) if heading_line is not None else None,
         "context_lines": formatted,

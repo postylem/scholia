@@ -21,7 +21,7 @@ def sidecar_paths(doc_path: str | Path) -> list[Path]:
 
 def _dest_sidecar(src_sidecar: Path, src_doc: Path, dest_doc: Path) -> Path:
     """Compute destination path for a sidecar given src and dest doc paths."""
-    suffix = str(src_sidecar.name)[len(src_doc.name):]
+    suffix = str(src_sidecar.name)[len(src_doc.name) :]
     return dest_doc.parent / f"{dest_doc.name}{suffix}"
 
 

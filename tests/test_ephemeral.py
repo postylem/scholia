@@ -1,6 +1,5 @@
 """Tests for ephemeral stdin mode."""
-import os
-from pathlib import Path
+
 from scholia.server import ScholiaServer
 
 
@@ -56,6 +55,7 @@ def test_relocate_clears_ephemeral(tmp_path):
     assert server._ephemeral is True
 
     from scholia.files import move_doc
+
     move_doc(str(doc), str(dest))
     server.doc_path = dest.resolve()
     server._ephemeral = False  # This is what _do_relocate sets

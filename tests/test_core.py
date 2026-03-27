@@ -18,9 +18,8 @@ from scholia.comments import (
     short_id_map,
     unresolve,
 )
-from scholia.context import locate_anchor, render_doc_plain
+from scholia.context import locate_anchor
 from scholia.state import is_unread, load_state, mark_read, mark_unread, state_path
-
 
 # ── Comments store ─────────────────────────────────────
 
@@ -70,7 +69,7 @@ def test_edit_body(tmp_doc):
     """edit_body replaces last body entry's value."""
     ann = append_comment(tmp_doc, exact="text", body_text="original")
     append_reply(tmp_doc, ann["id"], "reply text")
-    edited = edit_body(tmp_doc, ann["id"], "edited reply")
+    edit_body(tmp_doc, ann["id"], "edited reply")
     loaded = load_comments(tmp_doc)
     assert len(loaded) == 1
     assert loaded[0]["body"][-1]["value"] == "edited reply"
@@ -123,10 +122,11 @@ def test_short_id_map_single(tmp_doc):
 
 def test_short_id_map_collision(tmp_doc):
     """Colliding prefixes auto-extend beyond 4 chars."""
-    a1 = append_comment(tmp_doc, exact="text1", body_text="one")
-    a2 = append_comment(tmp_doc, exact="text2", body_text="two")
+    append_comment(tmp_doc, exact="text1", body_text="one")
+    append_comment(tmp_doc, exact="text2", body_text="two")
     from scholia.comments import annotation_path
     import json
+
     path = annotation_path(tmp_doc)
     lines = path.read_text().splitlines()
     obj1 = json.loads(lines[-2])
@@ -196,7 +196,8 @@ def test_is_unread_logic():
 def _run_cli(*args):
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", *args],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     return result.returncode, result.stdout, result.stderr
 
@@ -479,7 +480,9 @@ def test_cli_export_default_output_name(tmp_doc):
     """Without -o, export writes <stem>.html in cwd."""
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "export", str(tmp_doc), "--to", "html"],
-        capture_output=True, text=True, cwd=str(tmp_doc.parent),
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_doc.parent),
     )
     assert result.returncode == 0, f"stderr: {result.stderr}"
     expected = tmp_doc.parent / "test.html"
@@ -495,8 +498,14 @@ def test_cli_export_missing_file():
 def test_cli_export_pdf_no_latex(tmp_doc, tmp_path):
     """PDF export without LaTeX engine shows clear error message."""
     import shutil
+
     # Only test if no LaTeX engine is available
-    if shutil.which("xelatex") or shutil.which("tectonic") or shutil.which("lualatex") or shutil.which("pdflatex"):
+    if (
+        shutil.which("xelatex")
+        or shutil.which("tectonic")
+        or shutil.which("lualatex")
+        or shutil.which("pdflatex")
+    ):
         pytest.skip("LaTeX engine available; can't test missing-engine error")
     out = tmp_path / "out.pdf"
     code, _, stderr = _run_cli("export", str(tmp_doc), "--to", "pdf", "-o", str(out))

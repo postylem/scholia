@@ -1,5 +1,5 @@
 """Tests for _server state key management."""
-import os
+
 from scholia.state import set_server, clear_server, get_server, load_state
 
 
@@ -44,6 +44,7 @@ def test_set_server_preserves_annotation_state(tmp_path):
     doc = tmp_path / "doc.md"
     doc.write_text("# Hello")
     from scholia.state import mark_read
+
     mark_read(str(doc), "urn:uuid:test-id")
     set_server(str(doc), port=8088, pid=1)
     state = load_state(str(doc))

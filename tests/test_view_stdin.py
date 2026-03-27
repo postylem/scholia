@@ -1,4 +1,5 @@
 """Tests for scholia view stdin support."""
+
 import subprocess
 import sys
 import os
@@ -9,7 +10,8 @@ def test_piped_stdin_without_dash_shows_error():
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "view"],
         input="# Hello",
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode != 0
     assert "did you mean" in result.stderr.lower()
@@ -86,7 +88,8 @@ def test_title_flag_with_file_shows_warning(tmp_path):
     try:
         subprocess.run(
             [sys.executable, "-m", "scholia.cli", "view", str(doc), "--title", "Foo"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             timeout=3,
         )
     except subprocess.TimeoutExpired as e:

@@ -1,4 +1,5 @@
 """Tests for scholia skill-init command."""
+
 import subprocess
 import sys
 
@@ -8,7 +9,8 @@ def test_skill_init_default_path(tmp_path):
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "skill-init"],
         cwd=str(tmp_path),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         env={**__import__("os").environ, "HOME": str(tmp_path)},
     )
     assert result.returncode == 0
@@ -26,7 +28,8 @@ def test_skill_init_custom_path(tmp_path):
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "skill-init", ".cursor/rules/scholia.md"],
         cwd=str(tmp_path),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0
     target = tmp_path / ".cursor" / "rules" / "scholia.md"
@@ -41,7 +44,8 @@ def test_skill_init_skip_existing(tmp_path):
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "skill-init"],
         cwd=str(tmp_path),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         env={**__import__("os").environ, "HOME": str(tmp_path)},
     )
     assert result.returncode == 0
@@ -57,7 +61,8 @@ def test_skill_init_force_overwrite(tmp_path):
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "skill-init", "--force"],
         cwd=str(tmp_path),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         env={**__import__("os").environ, "HOME": str(tmp_path)},
     )
     assert result.returncode == 0
@@ -69,7 +74,8 @@ def test_skill_init_template_is_agent_agnostic(tmp_path):
     result = subprocess.run(
         [sys.executable, "-m", "scholia.cli", "skill-init"],
         cwd=str(tmp_path),
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         env={**__import__("os").environ, "HOME": str(tmp_path)},
     )
     assert result.returncode == 0

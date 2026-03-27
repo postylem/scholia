@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-
 def get_human_username() -> str:
     """Return the human user's display name for annotations.
 
@@ -40,14 +39,16 @@ def resolve_id(doc_path: str | Path, prefix: str) -> str:
     matches = [c["id"] for c in comments if c["id"].startswith(prefix)]
     # Also try matching without the urn:uuid: prefix
     if not matches:
-        matches = [c["id"] for c in comments
-                   if c["id"].removeprefix("urn:uuid:").startswith(prefix)]
+        matches = [
+            c["id"] for c in comments if c["id"].removeprefix("urn:uuid:").startswith(prefix)
+        ]
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
         raise ValueError(
             f"Ambiguous ID prefix '{prefix}' matches {len(matches)} annotations: "
-            + ", ".join(matches[:3]) + ("..." if len(matches) > 3 else "")
+            + ", ".join(matches[:3])
+            + ("..." if len(matches) > 3 else "")
         )
     raise ValueError(f"Annotation {prefix} not found")
 
@@ -90,7 +91,10 @@ def load_comments(doc_path: str | Path) -> list[dict]:
             ann = json.loads(line)
             annotations[ann["id"]] = ann
         except (json.JSONDecodeError, KeyError) as e:
-            print(f"warning: skipping corrupt line {i} in {path.name}: {e}", file=sys.stderr)
+            print(
+                f"warning: skipping corrupt line {i} in {path.name}: {e}",
+                file=sys.stderr,
+            )
     return list(annotations.values())
 
 
@@ -119,7 +123,10 @@ def _pandoc_plain(text: str) -> str:
     try:
         result = subprocess.run(
             ["pandoc", "-f", "markdown", "-t", "plain", "--wrap=none"],
-            input=text, capture_output=True, text=True, timeout=5,
+            input=text,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             return result.stdout.rstrip("\n")

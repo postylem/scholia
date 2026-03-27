@@ -1,6 +1,5 @@
 """Tests for sidecar-aware file operations."""
-import os
-from pathlib import Path
+
 from scholia.files import sidecar_paths, move_doc, remove_doc
 
 
@@ -29,7 +28,7 @@ def test_move_doc_with_sidecars(tmp_path):
     jsonl = tmp_path / "src.md.scholia.jsonl"
     jsonl.write_text('{"id":"test"}')
     state = tmp_path / "src.md.scholia.state.json"
-    state.write_text('{}')
+    state.write_text("{}")
 
     dest = tmp_path / "sub" / "dest.md"
     dest.parent.mkdir()
@@ -60,6 +59,7 @@ def test_move_doc_dest_exists_raises(tmp_path):
     dest = tmp_path / "dest.md"
     dest.write_text("b")
     import pytest
+
     with pytest.raises(FileExistsError):
         move_doc(str(src), str(dest))
 
@@ -75,6 +75,7 @@ def test_move_doc_dest_exists_force(tmp_path):
 
 def test_move_doc_source_missing_raises(tmp_path):
     import pytest
+
     with pytest.raises(FileNotFoundError):
         move_doc(str(tmp_path / "nope.md"), str(tmp_path / "dest.md"))
 
@@ -103,5 +104,6 @@ def test_remove_doc_no_sidecars(tmp_path):
 
 def test_remove_doc_missing_raises(tmp_path):
     import pytest
+
     with pytest.raises(FileNotFoundError):
         remove_doc(str(tmp_path / "nope.md"))
