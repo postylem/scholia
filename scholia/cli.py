@@ -538,6 +538,7 @@ def cmd_comment(args):
         creator=creator,
         nickname=nickname,
         is_software=is_software,
+        via="cli",
     )
     if not args.quiet:
         print(f"Comment created: {ann['id']}")

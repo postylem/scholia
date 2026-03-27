@@ -145,6 +145,7 @@ def append_comment(
     nickname: str | None = None,
     is_software: bool = False,
     source_selector: dict | None = None,
+    via: str | None = None,
 ) -> dict:
     """Create a new annotation with a TextQuoteSelector."""
     if creator is None:
@@ -186,6 +187,7 @@ def append_comment(
             }
         ],
         "scholia:status": "open",
+        **({"scholia:via": via} if via else {}),
     }
     path = annotation_path(doc_path)
     with open(path, "a", encoding="utf-8") as f:

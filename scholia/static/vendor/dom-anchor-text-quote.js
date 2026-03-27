@@ -9,8 +9,94 @@
   'use strict';
 
   /**
+   * Score a candidate occurrence by consecutive prefix/suffix character overlap.
+   * Counts backward through prefix and forward through suffix, stopping at
+   * first mismatch. Used by both fromRange (ambiguity check) and toRange.
+   */
+  function _scoreCandidate(text, idx, exact, prefix, suffix) {
+    var score = 0;
+    if (prefix) {
+      var before = text.slice(Math.max(0, idx - prefix.length), idx);
+      for (var i = 0; i < Math.min(before.length, prefix.length); i++) {
+        if (before[before.length - 1 - i] === prefix[prefix.length - 1 - i]) {
+          score++;
+        } else {
+          break;
+        }
+      }
+    }
+    if (suffix) {
+      var after = text.slice(idx + exact.length, idx + exact.length + suffix.length);
+      for (var i = 0; i < Math.min(after.length, suffix.length); i++) {
+        if (after[i] === suffix[i]) {
+          score++;
+        } else {
+          break;
+        }
+      }
+    }
+    return score;
+  }
+
+  /**
+   * Check whether prefix/suffix context uniquely identifies the occurrence
+   * at correctIdx among all occurrences of exact in text.
+   */
+  function _isDisambiguated(text, exact, correctIdx, prefix, suffix) {
+    var searchStart = 0;
+    var bestScore = -1, bestIdx = -1, secondBest = -1;
+    while (true) {
+      var idx = text.indexOf(exact, searchStart);
+      if (idx === -1) break;
+      var score = _scoreCandidate(text, idx, exact, prefix, suffix);
+      if (score > bestScore) {
+        secondBest = bestScore;
+        bestScore = score;
+        bestIdx = idx;
+      } else if (score > secondBest) {
+        secondBest = score;
+      }
+      searchStart = idx + 1;
+    }
+    return bestIdx === correctIdx && bestScore > secondBest;
+  }
+
+  /**
+   * Build a TextQuoteSelector with adaptive context.
+   * Starts with a small window and widens until the prefix/suffix
+   * unambiguously identify this occurrence (or hits a ceiling).
+   */
+  function _selectorWithAdaptiveContext(text, start, end) {
+    var selected = text.slice(start, end);
+    var MIN_CONTEXT = 32;
+    var MAX_CONTEXT = 1024;
+    var context = MIN_CONTEXT;
+
+    // Quick check: is exact text unique?
+    var firstIdx = text.indexOf(selected);
+    var isUnique = (firstIdx === -1 || text.indexOf(selected, firstIdx + 1) === -1);
+
+    if (!isUnique) {
+      while (context < MAX_CONTEXT) {
+        var p = text.slice(Math.max(0, start - context), start);
+        var s = text.slice(end, Math.min(text.length, end + context));
+        if (_isDisambiguated(text, selected, start, p, s)) break;
+        context *= 2;
+      }
+    }
+
+    return {
+      type: 'TextQuoteSelector',
+      exact: selected,
+      prefix: text.slice(Math.max(0, start - context), start),
+      suffix: text.slice(end, Math.min(text.length, end + context)),
+    };
+  }
+
+  /**
    * Create a TextQuoteSelector from a DOM Range.
    * Captures the selected text plus prefix/suffix context for re-anchoring.
+   * Context window widens automatically when exact text is ambiguous.
    */
   function fromRange(root, range) {
     var text = root.textContent || '';
@@ -22,16 +108,7 @@
     preRange.setEnd(range.startContainer, range.startOffset);
     var start = preRange.toString().length;
 
-    var CONTEXT = 32;
-    var prefixStart = Math.max(0, start - CONTEXT);
-    var suffixEnd = Math.min(text.length, start + selected.length + CONTEXT);
-
-    return {
-      type: 'TextQuoteSelector',
-      exact: selected,
-      prefix: text.slice(prefixStart, start),
-      suffix: text.slice(start + selected.length, suffixEnd),
-    };
+    return _selectorWithAdaptiveContext(text, start, start + selected.length);
   }
 
   /**
@@ -58,39 +135,14 @@
 
     if (candidates.length === 0) return null;
 
-    // Score candidates by prefix/suffix context match
     var bestIdx = candidates[0];
     var bestScore = -1;
 
     for (var c = 0; c < candidates.length; c++) {
-      var idx = candidates[c];
-      var score = 0;
-
-      if (prefix) {
-        var before = text.slice(Math.max(0, idx - prefix.length), idx);
-        for (var i = 0; i < Math.min(before.length, prefix.length); i++) {
-          if (before[before.length - 1 - i] === prefix[prefix.length - 1 - i]) {
-            score++;
-          } else {
-            break;
-          }
-        }
-      }
-
-      if (suffix) {
-        var after = text.slice(idx + exact.length, idx + exact.length + suffix.length);
-        for (var i = 0; i < Math.min(after.length, suffix.length); i++) {
-          if (after[i] === suffix[i]) {
-            score++;
-          } else {
-            break;
-          }
-        }
-      }
-
+      var score = _scoreCandidate(text, candidates[c], exact, prefix, suffix);
       if (score > bestScore) {
         bestScore = score;
-        bestIdx = idx;
+        bestIdx = candidates[c];
       }
     }
 
@@ -267,13 +319,7 @@
     if (start > end) { var tmp = start; start = end; end = tmp; }
     if (start === end) return null;
 
-    var CONTEXT = 256;
-    return {
-      type: 'TextQuoteSelector',
-      exact: text.slice(start, end),
-      prefix: text.slice(Math.max(0, start - CONTEXT), start),
-      suffix: text.slice(end, Math.min(text.length, end + CONTEXT)),
-    };
+    return _selectorWithAdaptiveContext(text, start, end);
   }
 
   global.TextQuoteAnchor = {

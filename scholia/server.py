@@ -728,6 +728,7 @@ class ScholiaServer:
                     body_text=msg["body"],
                     creator=msg.get("creator", get_human_username()),
                     source_selector=source_selector,
+                    via="browser",
                 )
             elif msg_type == "reply":
                 append_reply(
