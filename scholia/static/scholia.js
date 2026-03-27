@@ -270,17 +270,17 @@
     return months[then.getMonth()] + ' ' + then.getDate() + ', ' + then.getFullYear();
   }
 
-  // ── Disconnect banner ──────────────────────────────
-  var disconnectBanner = document.createElement('div');
+  // ── Disconnect banner (inserted into toolbar by renderToolbar) ──
+  var disconnectBanner = document.createElement('span');
   disconnectBanner.className = 'scholia-disconnect-banner';
-  disconnectBanner.textContent = 'Reconnecting\u2026';
-  toolbarEl.insertAdjacentElement('afterend', disconnectBanner);
+  disconnectBanner.textContent = 'Disconnected';
   var disconnectShowTimer = null;
 
   function showDisconnectBanner() {
     if (disconnectShowTimer) return;  // already pending
     disconnectShowTimer = setTimeout(function () {
       disconnectBanner.classList.add('visible');
+      toolbarEl.classList.add('scholia-disconnected');
       disconnectShowTimer = null;
     }, 500);
   }
@@ -291,6 +291,7 @@
       disconnectShowTimer = null;
     }
     disconnectBanner.classList.remove('visible');
+    toolbarEl.classList.remove('scholia-disconnected');
   }
 
   // ── WebSocket ──────────────────────────────────────
@@ -641,6 +642,7 @@
     }
     brandPath.appendChild(crumbWrap);
     toolbarEl.appendChild(brandPath);
+    toolbarEl.appendChild(disconnectBanner);
 
     // Contents (TOC) dropdown — before Options
     tocWrapEl = document.createElement('span');
@@ -654,6 +656,7 @@
       toggleToc();
     });
     tocWrapEl.appendChild(tocBtn);
+    if (!tocEl) tocWrapEl.style.display = 'none';
     toolbarEl.appendChild(tocWrapEl);
     if (tocEl) {
       tocWrapEl.appendChild(tocEl);
@@ -885,6 +888,24 @@
       exportRow.appendChild(exportTd);
       tbl.appendChild(exportRow);
 
+      // Stop server row
+      var stopRow = document.createElement('tr');
+      stopRow.className = 'scholia-export-row';
+      var stopTd = document.createElement('td');
+      stopTd.setAttribute('colspan', '2');
+      var stopBtn = document.createElement('button');
+      stopBtn.className = 'scholia-export-btn';
+      stopBtn.textContent = 'Stop server';
+      stopBtn.addEventListener('click', function () {
+        stopBtn.disabled = true;
+        stopBtn.textContent = 'Stopping\u2026';
+        menu.remove();
+        fetch('/api/shutdown', { method: 'POST' }).catch(function () {});
+      });
+      stopTd.appendChild(stopBtn);
+      stopRow.appendChild(stopTd);
+      tbl.appendChild(stopRow);
+
       menu.appendChild(tbl);
 
       optionsWrap.appendChild(menu);
@@ -1017,7 +1038,11 @@
       var level = parseInt(h.tagName[1]);
       items.push({ heading: h, section: section, level: level, id: section.id || h.id || '' });
     }
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      if (tocWrapEl) tocWrapEl.style.display = 'none';
+      return;
+    }
+    if (tocWrapEl) tocWrapEl.style.display = '';
 
     // Clean heading HTML for ToC: flatten citations to text, keep math spans
     function tocHTML(heading) {

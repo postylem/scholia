@@ -31,9 +31,7 @@ from scholia.state import load_state, mark_read, mark_unread
 def _check_pandoc():
     """Verify Pandoc is installed."""
     if shutil.which("pandoc") is None:
-        raise RuntimeError(
-            "Pandoc not found. Install it from https://pandoc.org/installing.html"
-        )
+        raise RuntimeError("Pandoc not found. Install it from https://pandoc.org/installing.html")
 
 
 _MERMAID_FILTER = str(Path(__file__).parent / "filters" / "mermaid.lua")
@@ -86,13 +84,17 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
 
     cmd = ["pandoc"]
     if _HAS_CROSSREF:
-        cmd.extend([
-            "--filter", "pandoc-crossref",
-            "--metadata=linkReferences:true",
-            "--metadata=secPrefix:§",
-        ])
+        cmd.extend(
+            [
+                "--filter",
+                "pandoc-crossref",
+                "--metadata=linkReferences:true",
+                "--metadata=secPrefix:§",
+            ]
+        )
     cmd += [
-        "--lua-filter", _MERMAID_FILTER,
+        "--lua-filter",
+        _MERMAID_FILTER,
         "--citeproc",
         "--metadata=link-citations:true",
         "--from=markdown+tex_math_single_backslash",
@@ -136,7 +138,9 @@ async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
 
 
 def _render_export_sync(
-    doc_path: Path, fmt: str, output_path: Path | None = None,
+    doc_path: Path,
+    fmt: str,
+    output_path: Path | None = None,
     pdf_engine: str | None = None,
 ) -> bytes | None:
     """Export document to pdf/html/latex. Returns bytes if output_path is None."""
@@ -163,7 +167,11 @@ def _render_export_sync(
     if output_path:
         cmd.extend(["-o", str(output_path)])
         result = subprocess.run(
-            cmd, input=md_text, capture_output=True, text=True, check=True,
+            cmd,
+            input=md_text,
+            capture_output=True,
+            text=True,
+            check=True,
             cwd=str(doc_path.parent),
         )
         if result.stderr:
@@ -174,7 +182,10 @@ def _render_export_sync(
         # omit text=True so stdout is captured as raw bytes (needed for PDF
         # binary output). Pandoc writes to stdout when no -o is given.
         result = subprocess.run(
-            cmd, input=md_text.encode(), capture_output=True, check=True,
+            cmd,
+            input=md_text.encode(),
+            capture_output=True,
+            check=True,
             cwd=str(doc_path.parent),
         )
         if result.stderr:
@@ -183,7 +194,9 @@ def _render_export_sync(
 
 
 async def render_export(
-    doc_path: Path, fmt: str, output_path: Path | None = None,
+    doc_path: Path,
+    fmt: str,
+    output_path: Path | None = None,
     pdf_engine: str | None = None,
 ) -> bytes | None:
     """Export document without blocking the event loop."""
@@ -215,7 +228,10 @@ def _extract_bibliography(doc_path: Path) -> tuple[str | None, str | None]:
 
 
 def _render_markdown_fragment_sync(
-    text: str, cwd: str = ".", bibliography: str | None = None, csl: str | None = None,
+    text: str,
+    cwd: str = ".",
+    bibliography: str | None = None,
+    csl: str | None = None,
 ) -> str:
     """Render a markdown fragment to HTML via Pandoc (blocking)."""
     cmd = [
@@ -233,13 +249,21 @@ def _render_markdown_fragment_sync(
     elif not csl:
         cmd.append("--csl=" + _DEFAULT_CSL)
     result = subprocess.run(
-        cmd, input=text, capture_output=True, text=True, check=True, cwd=cwd,
+        cmd,
+        input=text,
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=cwd,
     )
     return result.stdout
 
 
 async def render_markdown_fragment(
-    text: str, cwd: str = ".", bibliography: str | None = None, csl: str | None = None,
+    text: str,
+    cwd: str = ".",
+    bibliography: str | None = None,
+    csl: str | None = None,
 ) -> str:
     """Render a markdown fragment without blocking the event loop."""
     loop = asyncio.get_running_loop()
@@ -267,9 +291,14 @@ async def build_page(
     html = await render_pandoc(doc_path, sidenotes=sidenotes)
     title = _extract_title(doc_path.read_text(encoding="utf-8"))
     return _fill_template(
-        template, title=title, html=html, doc_path=doc_path,
-        display_path=display_path, sidenotes=sidenotes,
-        comments=load_comments(doc_path), state=load_state(doc_path),
+        template,
+        title=title,
+        html=html,
+        doc_path=doc_path,
+        display_path=display_path,
+        sidenotes=sidenotes,
+        comments=load_comments(doc_path),
+        state=load_state(doc_path),
     )
 
 
@@ -283,9 +312,15 @@ def _is_binary(path: Path) -> bool:
 
 
 def _fill_template(
-    template: str, *, title: str, html: str, doc_path: Path,
-    display_path: str = "", sidenotes: bool = False,
-    comments: list | None = None, state: dict | None = None,
+    template: str,
+    *,
+    title: str,
+    html: str,
+    doc_path: Path,
+    display_path: str = "",
+    sidenotes: bool = False,
+    comments: list | None = None,
+    state: dict | None = None,
     readonly: bool = False,
 ) -> str:
     """Fill the page template with the given content and metadata."""
@@ -303,34 +338,46 @@ def _fill_template(
 
 
 def _build_raw_page(
-    doc_path: Path, template: str, display_path: str = "", force: bool = False,
+    doc_path: Path,
+    template: str,
+    display_path: str = "",
+    force: bool = False,
 ) -> str:
     """Build HTML page for a non-markdown file, displayed as raw text."""
     import html as html_mod
+
     if not force and _is_binary(doc_path):
         content = (
-            '<p>This appears to be a binary file.</p>'
+            "<p>This appears to be a binary file.</p>"
             f'<p><a href="/?file={html_mod.escape(display_path or str(doc_path))}&amp;raw=1">'
-            'Display anyway</a></p>'
+            "Display anyway</a></p>"
         )
         return _fill_template(
-            template, title=doc_path.name + " — Scholia", html=content,
-            doc_path=doc_path, display_path=display_path, readonly=True,
+            template,
+            title=doc_path.name + " — Scholia",
+            html=content,
+            doc_path=doc_path,
+            display_path=display_path,
+            readonly=True,
         )
     raw = doc_path.read_text(encoding="utf-8", errors="replace")
     escaped = html_mod.escape(raw)
     content = f'<pre class="scholia-raw-file"><code>{escaped}</code></pre>'
     return _fill_template(
-        template, title=doc_path.name + " — Scholia", html=content,
-        doc_path=doc_path, display_path=display_path,
-        comments=load_comments(doc_path), state=load_state(doc_path),
+        template,
+        title=doc_path.name + " — Scholia",
+        html=content,
+        doc_path=doc_path,
+        display_path=display_path,
+        comments=load_comments(doc_path),
+        state=load_state(doc_path),
     )
 
 
 class _FileChangeHandler(FileSystemEventHandler):
     """Watch for changes to any registered doc or its .scholia.jsonl."""
 
-    def __init__(self, server: 'ScholiaServer', loop: asyncio.AbstractEventLoop):
+    def __init__(self, server: "ScholiaServer", loop: asyncio.AbstractEventLoop):
         self.server = server
         self.loop = loop
 
@@ -338,13 +385,9 @@ class _FileChangeHandler(FileSystemEventHandler):
         resolved = path.resolve()
         for doc_path in list(self.server.ws_clients.keys()):
             if resolved == doc_path:
-                self.loop.call_soon_threadsafe(
-                    self.server._on_file_change, doc_path, "doc"
-                )
+                self.loop.call_soon_threadsafe(self.server._on_file_change, doc_path, "doc")
             elif resolved == annotation_path(doc_path).resolve():
-                self.loop.call_soon_threadsafe(
-                    self.server._on_file_change, doc_path, "comments"
-                )
+                self.loop.call_soon_threadsafe(self.server._on_file_change, doc_path, "comments")
 
     def on_modified(self, event):
         self._check_path(Path(event.src_path))
@@ -357,8 +400,14 @@ class _FileChangeHandler(FileSystemEventHandler):
 
 
 class ScholiaServer:
-    def __init__(self, doc_path: str, host: str = "127.0.0.1", port: int = 8088,
-                 ephemeral: bool = False):
+    def __init__(
+        self,
+        doc_path: str,
+        host: str = "127.0.0.1",
+        port: int = 8088,
+        ephemeral: bool = False,
+        open_browser: bool = True,
+    ):
         _check_pandoc()
         self.display_path = doc_path  # as given on command line
         self.doc_path = Path(doc_path).resolve()
@@ -378,6 +427,8 @@ class ScholiaServer:
         self._observers: dict[Path, Observer] = {}  # parent_dir -> Observer
         self._observer_refcount: dict[Path, int] = {}  # parent_dir -> count
         self._ephemeral = ephemeral
+        self._open_browser = open_browser
+        self._stop_event: asyncio.Event | None = None
 
     def _load_template(self) -> str:
         template_path = Path(__file__).parent / "template.html"
@@ -396,17 +447,20 @@ class ScholiaServer:
         self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
         self.app.router.add_post("/api/relocate", self._handle_relocate)
+        self.app.router.add_post("/api/shutdown", self._handle_shutdown)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
 
     def _register_server_state(self, port: int):
         """Write _server key to state file."""
         from scholia.state import set_server
+
         set_server(self.doc_path, port=port, pid=os.getpid())
 
     def _clear_server_state(self):
         """Remove _server key from state file."""
         from scholia.state import clear_server
+
         try:
             clear_server(self.doc_path)
         except Exception:
@@ -417,6 +471,7 @@ class ScholiaServer:
         if not self._ephemeral:
             return
         from scholia.files import remove_doc
+
         try:
             remove_doc(self.doc_path)
         except (FileNotFoundError, OSError):
@@ -438,34 +493,47 @@ class ScholiaServer:
             if _is_markdown(doc_path):
                 sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
                 page = await build_page(
-                    doc_path, self.template,
+                    doc_path,
+                    self.template,
                     sidenotes=sidenotes,
                     display_path=display,
                 )
             else:
                 force_raw = request.query.get("raw") == "1"
                 page = _build_raw_page(
-                    doc_path, self.template, display_path=display, force=force_raw,
+                    doc_path,
+                    self.template,
+                    display_path=display,
+                    force=force_raw,
                 )
-        except (FileNotFoundError, OSError) as e:
+        except (FileNotFoundError, OSError):
             import html as html_mod
+
             error_html = (
-                '<h2>File not found</h2>'
-                f'<p><code>{html_mod.escape(str(doc_path))}</code></p>'
+                "<h2>File not found</h2>" f"<p><code>{html_mod.escape(str(doc_path))}</code></p>"
             )
             page = _fill_template(
-                self.template, title="Error — Scholia", html=error_html,
-                doc_path=doc_path, display_path=display, readonly=True,
+                self.template,
+                title="Error — Scholia",
+                html=error_html,
+                doc_path=doc_path,
+                display_path=display,
+                readonly=True,
             )
         except subprocess.CalledProcessError as e:
             import html as html_mod
+
             error_html = (
-                '<h2>Render error</h2>'
-                f'<p><code>{html_mod.escape(str(e.stderr or str(e)))}</code></p>'
+                "<h2>Render error</h2>"
+                f"<p><code>{html_mod.escape(str(e.stderr or str(e)))}</code></p>"
             )
             page = _fill_template(
-                self.template, title="Error — Scholia", html=error_html,
-                doc_path=doc_path, display_path=display, readonly=True,
+                self.template,
+                title="Error — Scholia",
+                html=error_html,
+                doc_path=doc_path,
+                display_path=display,
+                readonly=True,
             )
 
         return web.Response(text=page, content_type="text/html")
@@ -517,11 +585,19 @@ class ScholiaServer:
             pdf_bytes = await render_export(doc_path, "pdf")
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")
-            if "pdf" in stderr.lower() or "latex" in stderr.lower() or "xelatex" in stderr.lower() or "tectonic" in stderr.lower():
-                return web.json_response({
-                    "error": "PDF export requires a LaTeX engine (xelatex, tectonic, etc.).",
-                    "fallback": "print",
-                }, status=422)
+            if (
+                "pdf" in stderr.lower()
+                or "latex" in stderr.lower()
+                or "xelatex" in stderr.lower()
+                or "tectonic" in stderr.lower()
+            ):
+                return web.json_response(
+                    {
+                        "error": "PDF export requires a LaTeX engine (xelatex, tectonic, etc.).",
+                        "fallback": "print",
+                    },
+                    status=422,
+                )
             return web.json_response({"error": f"Export failed: {stderr}"}, status=500)
 
         return web.Response(
@@ -596,8 +672,7 @@ class ScholiaServer:
         try:
             result = await self._do_relocate(Path(dest).expanduser().resolve(), force=force)
         except FileExistsError:
-            return web.json_response(
-                {"error": f"Destination already exists: {dest}"}, status=409)
+            return web.json_response({"error": f"Destination already exists: {dest}"}, status=409)
         except FileNotFoundError as e:
             return web.json_response({"error": str(e)}, status=404)
 
@@ -687,10 +762,12 @@ class ScholiaServer:
                 try:
                     await self._do_relocate(Path(dest).expanduser().resolve())
                 except FileExistsError:
-                    await ws.send_json({
-                        "type": "error",
-                        "message": f"Destination already exists: {dest}",
-                    })
+                    await ws.send_json(
+                        {
+                            "type": "error",
+                            "message": f"Destination already exists: {dest}",
+                        }
+                    )
                 except Exception as e:
                     await ws.send_json({"type": "error", "message": str(e)})
             elif msg_type == "render_markdown":
@@ -701,11 +778,13 @@ class ScholiaServer:
                     bibliography=bib,
                     csl=csl,
                 )
-                await ws.send_json({
-                    "type": "rendered_markdown",
-                    "request_id": msg.get("request_id", ""),
-                    "html": html,
-                })
+                await ws.send_json(
+                    {
+                        "type": "rendered_markdown",
+                        "request_id": msg.get("request_id", ""),
+                        "html": html,
+                    }
+                )
         except Exception as e:
             try:
                 await ws.send_json({"type": "error", "message": str(e)})
@@ -736,11 +815,13 @@ class ScholiaServer:
             closed = set()
             for sn_val, ws_list in by_sidenotes.items():
                 html = await render_pandoc(doc_path, sidenotes=sn_val)
-                payload = json.dumps({
-                    "type": "doc_update",
-                    "html": html,
-                    "sidenotes": sn_val,
-                })
+                payload = json.dumps(
+                    {
+                        "type": "doc_update",
+                        "html": html,
+                        "sidenotes": sn_val,
+                    }
+                )
                 for ws in ws_list:
                     try:
                         await ws.send_str(payload)
@@ -785,12 +866,20 @@ class ScholiaServer:
         if handle:
             handle.cancel()
         self._debounce_handles[key] = self._loop.call_later(
-            0.2, lambda dp=doc_path, ct=change_type: asyncio.ensure_future(self._broadcast(dp, ct))
+            0.2,
+            lambda dp=doc_path, ct=change_type: asyncio.ensure_future(self._broadcast(dp, ct)),
         )
+
+    async def _handle_shutdown(self, request: web.Request) -> web.Response:
+        """POST /api/shutdown — stop the server gracefully."""
+        if self._stop_event is not None:
+            self._stop_event.set()
+        return web.json_response({"status": "stopping"})
 
     async def start(self):
         self._loop = asyncio.get_running_loop()
         stop_event = asyncio.Event()
+        self._stop_event = stop_event
 
         def _request_stop():
             if not stop_event.is_set():
@@ -831,8 +920,10 @@ class ScholiaServer:
 
         self._register_server_state(actual_port)
 
-        import webbrowser
-        webbrowser.open(url)
+        if self._open_browser:
+            import webbrowser
+
+            webbrowser.open(url)
 
         try:
             await stop_event.wait()

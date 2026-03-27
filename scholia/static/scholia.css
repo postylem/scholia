@@ -1875,22 +1875,31 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
   min-height: 2.5rem;
 }
 
-/* Export PDF in Options menu */
+/* Action items in Options menu (Export PDF, Stop server) */
 .scholia-export-row td {
   padding-top: 6px;
   border-top: 1px solid var(--s-border);
 }
+.scholia-export-row + .scholia-export-row td {
+  padding-top: 4px;
+  border-top: none;
+}
 .scholia-export-btn {
   width: 100%;
-  padding: 4px 8px;
+  padding: 0.15rem 0.5rem;
+  min-height: 1.6rem;
   cursor: pointer;
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius);
-  background: var(--s-surface);
-  color: var(--s-text);
+  background: none;
+  color: var(--s-text-dim);
+  font-size: 0.7rem;
+  font-family: var(--s-sans);
+  transition: color 0.15s, border-color 0.15s;
 }
 .scholia-export-btn:hover {
-  background: var(--s-card-hover);
+  color: var(--s-accent);
+  border-color: var(--s-accent);
 }
 
 /* Export warning banner */
@@ -1910,25 +1919,53 @@ body.scholia-dark .scholia-message-body.scholia-raw-view { background: var(--s-c
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
-/* Disconnect banner */
+/* Disconnect indicator — inline badge + toolbar color change */
 .scholia-disconnect-banner {
-  height: 0;
-  overflow: hidden;
-  display: flex;
+  display: none;
   align-items: center;
-  justify-content: center;
-  background: rgba(217, 119, 6, 0.9);
   color: white;
-  font-size: 12px;
+  font-size: 0.65rem;
   font-family: var(--s-sans);
-  pointer-events: none;
-  transition: height 0.3s;
+  padding: 0.1rem 0.6rem;
+  border-radius: var(--s-radius);
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.15);
 }
 .scholia-disconnect-banner.visible {
-  height: 28px;
+  display: inline-flex;
 }
-body.scholia-dark .scholia-disconnect-banner {
-  background: rgba(180, 83, 9, 0.9);
+#scholia-toolbar.scholia-disconnected {
+  background: #d97706;
+  border-bottom-color: #b45309;
+}
+#scholia-toolbar.scholia-disconnected .scholia-toolbar-path {
+  color: rgba(255, 255, 255, 0.7);
+  opacity: 1;
+}
+#scholia-toolbar.scholia-disconnected .scholia-breadcrumb-sep {
+  color: rgba(255, 255, 255, 0.5);
+}
+#scholia-toolbar.scholia-disconnected .scholia-breadcrumb-seg {
+  color: white;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+#scholia-toolbar.scholia-disconnected .scholia-breadcrumb-seg:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+#scholia-toolbar.scholia-disconnected .scholia-toolbar-btn {
+  color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+#scholia-toolbar.scholia-disconnected .scholia-toolbar-btn:hover {
+  color: white;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+#scholia-toolbar.scholia-disconnected .scholia-toolbar-btn svg {
+  stroke: currentColor;
+}
+body.scholia-dark #scholia-toolbar.scholia-disconnected {
+  background: #b45309;
+  border-bottom-color: #92400e;
 }
 
 /* Save As modal */

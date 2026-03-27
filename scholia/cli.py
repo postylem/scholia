@@ -13,7 +13,6 @@ from scholia.comments import (
     append_comment,
     append_reply,
     edit_body,
-    get_human_username,
     list_open,
     load_comments,
     resolve,
@@ -23,20 +22,21 @@ from scholia.comments import (
 )
 from scholia.context import format_orphan_context, locate_anchor, render_doc_plain
 
-
 # ── Format constants ────────────────────────────────────
 
-FORMAT_CONTEXT = "context"         # messages + document context (default)
+FORMAT_CONTEXT = "context"  # messages + document context (default)
 FORMAT_MESSAGES = "messages-only"  # messages without doc lookup
-FORMAT_SUMMARY = "summary"         # one-line-per-thread overview
-FORMAT_RAW = "raw"                 # raw JSONL selector fields + metadata
+FORMAT_SUMMARY = "summary"  # one-line-per-thread overview
+FORMAT_RAW = "raw"  # raw JSONL selector fields + metadata
 FORMAT_CHOICES = [FORMAT_CONTEXT, FORMAT_MESSAGES, FORMAT_SUMMARY, FORMAT_RAW]
 
 
 # ── Display helpers ─────────────────────────────────────
 
+
 def _use_color() -> bool:
     import os
+
     if os.environ.get("NO_COLOR"):
         return False
     if os.environ.get("FORCE_COLOR"):
@@ -74,9 +74,17 @@ def _author_label(creator: dict) -> str:
     return name
 
 
-def _print_annotation(ann, fmt=FORMAT_CONTEXT, doc_path=None, *,
-                      short_id=None, show_status=True, ctx=None,
-                      context_before=2, context_after=2):
+def _print_annotation(
+    ann,
+    fmt=FORMAT_CONTEXT,
+    doc_path=None,
+    *,
+    short_id=None,
+    show_status=True,
+    ctx=None,
+    context_before=2,
+    context_after=2,
+):
     """Print a single annotation in the requested format."""
     selector = ann.get("target", {}).get("selector", {})
     exact = selector.get("exact", "")
@@ -101,16 +109,19 @@ def _print_annotation(ann, fmt=FORMAT_CONTEXT, doc_path=None, *,
 
     if fmt == FORMAT_SUMMARY:
         anchor_display = exact[:60] + ("\u2026" if len(exact) > 60 else "")
-        print(f'  anchor: \u201c{anchor_display}\u201d')
+        print(f"  anchor: \u201c{anchor_display}\u201d")
         print(f"  {n_msgs} message(s), last by {last_author}")
         return
 
     # Context lookup (for FORMAT_CONTEXT)
     if fmt == FORMAT_CONTEXT and doc_path:
         if ctx is None:
-            ctx = locate_anchor(doc_path, selector,
-                                context_before=context_before,
-                                context_after=context_after)
+            ctx = locate_anchor(
+                doc_path,
+                selector,
+                context_before=context_before,
+                context_after=context_after,
+            )
         if ctx["found"]:
             # File location reference
             loc = f"{doc_path}:{ctx['line']}:{ctx['col']}"
@@ -122,19 +133,19 @@ def _print_annotation(ann, fmt=FORMAT_CONTEXT, doc_path=None, *,
             heading = ctx["heading"] or ""
             if heading:
                 print(f"  in {heading}")
-            for cline in (ctx["context_lines"] or []):
+            for cline in ctx["context_lines"] or []:
                 print(cline)
         else:
             color = _use_color()
-            warn = f"\033[33mwarning:\033[0m" if color else "warning:"
+            warn = "\033[33mwarning:\033[0m" if color else "warning:"
             print(f"  {warn} anchor text not found in document (orphaned)")
-            print(f"  original context:")
+            print("  original context:")
             for line in format_orphan_context(selector):
                 print(line)
     else:
         # FORMAT_MESSAGES or context without doc_path
         anchor_display = exact[:80] + ("\u2026" if len(exact) > 80 else "")
-        print(f'  anchor: \u201c{anchor_display}\u201d')
+        print(f"  anchor: \u201c{anchor_display}\u201d")
 
     # Messages
     if bodies:
@@ -171,6 +182,7 @@ def _print_raw(ann):
 
 
 # ── File picker ─────────────────────────────────────────
+
 
 def _default_new_filename() -> str:
     """Return 'notes.md' or 'notes_N.md' if notes.md already exists."""
@@ -224,14 +236,13 @@ def _pick_or_create_doc() -> str:
         name = default
     if not name.endswith(".md"):
         name += ".md"
-    Path(name).write_text(
-        f"---\ntitle: {Path(name).stem}\n---\n\n", encoding="utf-8"
-    )
+    Path(name).write_text(f"---\ntitle: {Path(name).stem}\n---\n\n", encoding="utf-8")
     print(f"Created {name}")
     return name
 
 
 # ── Author resolution ───────────────────────────────────
+
 
 def _resolve_author(args):
     """Resolve --author-ai-model / --author-name into (creator, nickname, is_software)."""
@@ -256,11 +267,15 @@ def _resolve_author(args):
 def _add_author_args(parser):
     """Add --author-ai-model and --author-name flags to a subparser."""
     parser.add_argument(
-        "--author-ai-model", default=None, metavar="MODEL",
-        help="AI model name and version (e.g. 'Opus 4.6'). Marks the comment as written by software.",
+        "--author-ai-model",
+        default=None,
+        metavar="MODEL",
+        help="AI model name and version (e.g. 'Opus 4.6'). "
+        "Marks the comment as written by software.",
     )
     parser.add_argument(
-        "--author-name", default=None,
+        "--author-name",
+        default=None,
         help="Human author name (default: SCHOLIA_USERNAME or system username)",
     )
 
@@ -268,13 +283,17 @@ def _add_author_args(parser):
 def _add_format_arg(parser):
     """Add --format argument to a subparser."""
     parser.add_argument(
-        "--format", dest="fmt", default=FORMAT_CONTEXT,
-        choices=FORMAT_CHOICES, metavar="FORMAT",
+        "--format",
+        dest="fmt",
+        default=FORMAT_CONTEXT,
+        choices=FORMAT_CHOICES,
+        metavar="FORMAT",
         help=f"Output format: {', '.join(FORMAT_CHOICES)} (default: context)",
     )
 
 
 # ── Commands ────────────────────────────────────────────
+
 
 def _stdin_to_tempfile(content, title=None):
     """Write content to a temp markdown file. Return the path.
@@ -336,7 +355,13 @@ def cmd_view(args):
         doc = args.doc or _pick_or_create_doc()
         ephemeral = False
 
-    server = ScholiaServer(doc, host=args.host, port=args.port, ephemeral=ephemeral)
+    server = ScholiaServer(
+        doc,
+        host=args.host,
+        port=args.port,
+        ephemeral=ephemeral,
+        open_browser=not args.no_open,
+    )
     try:
         asyncio.run(server.start())
     except (KeyboardInterrupt, SystemExit):
@@ -360,7 +385,10 @@ def cmd_list(args):
             try:
                 since = datetime.strptime(args.since, "%Y-%m-%d")
             except ValueError:
-                print(f"Error: invalid date format '{args.since}', use YYYY-MM-DD", file=sys.stderr)
+                print(
+                    f"Error: invalid date format '{args.since}', use YYYY-MM-DD",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
 
     if args.all:
@@ -396,32 +424,48 @@ def cmd_list(args):
         orphaned = []
         for ann in items:
             selector = ann.get("target", {}).get("selector", {})
-            ctx = locate_anchor(args.doc, selector,
-                                context_before=context_before,
-                                context_after=context_after,
-                                rendered_text=rendered_text)
+            ctx = locate_anchor(
+                args.doc,
+                selector,
+                context_before=context_before,
+                context_after=context_after,
+                rendered_text=rendered_text,
+            )
             if ctx["found"]:
                 anchored.append((ann, ctx))
             else:
                 orphaned.append(ann)
         anchored.sort(key=lambda pair: pair[1]["line"])
         for ann, ctx in anchored:
-            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
-                              short_id=id_map.get(ann["id"]),
-                              show_status=show_status, ctx=ctx)
+            _print_annotation(
+                ann,
+                fmt=args.fmt,
+                doc_path=args.doc,
+                short_id=id_map.get(ann["id"]),
+                show_status=show_status,
+                ctx=ctx,
+            )
         if orphaned:
             print(f"── orphaned threads ({len(orphaned)}) ──\n")
             for ann in orphaned:
-                _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
-                                  short_id=id_map.get(ann["id"]),
-                                  show_status=show_status,
-                                  context_before=context_before,
-                                  context_after=context_after)
+                _print_annotation(
+                    ann,
+                    fmt=args.fmt,
+                    doc_path=args.doc,
+                    short_id=id_map.get(ann["id"]),
+                    show_status=show_status,
+                    context_before=context_before,
+                    context_after=context_after,
+                )
     else:
         for ann in items:
-            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
-                              short_id=id_map.get(ann["id"]),
-                              show_status=show_status)
+            _print_annotation(
+                ann,
+                fmt=args.fmt,
+                doc_path=args.doc,
+                short_id=id_map.get(ann["id"]),
+                show_status=show_status,
+            )
 
 
 def cmd_show(args):
@@ -435,11 +479,15 @@ def cmd_show(args):
         sys.exit(1)
     for ann in comments:
         if ann["id"] == full_id:
-            _print_annotation(ann, fmt=args.fmt, doc_path=args.doc,
-                              short_id=id_map.get(ann["id"]),
-                              show_status=True,
-                              context_before=context_before,
-                              context_after=context_after)
+            _print_annotation(
+                ann,
+                fmt=args.fmt,
+                doc_path=args.doc,
+                short_id=id_map.get(ann["id"]),
+                show_status=True,
+                context_before=context_before,
+                context_after=context_after,
+            )
             return
 
 
@@ -447,8 +495,12 @@ def cmd_reply(args):
     full_id = resolve_id(args.doc, args.id)
     creator, nickname, is_software = _resolve_author(args)
     ann = append_reply(
-        args.doc, full_id, args.text,
-        creator=creator, nickname=nickname, is_software=is_software,
+        args.doc,
+        full_id,
+        args.text,
+        creator=creator,
+        nickname=nickname,
+        is_software=is_software,
     )
     if not args.quiet:
         print(f"Reply added to {ann['id']}")
@@ -464,8 +516,12 @@ def cmd_edit(args):
 def cmd_comment(args):
     creator, nickname, is_software = _resolve_author(args)
     ann = append_comment(
-        args.doc, exact=args.anchor, body_text=args.text,
-        creator=creator, nickname=nickname, is_software=is_software,
+        args.doc,
+        exact=args.anchor,
+        body_text=args.text,
+        creator=creator,
+        nickname=nickname,
+        is_software=is_software,
     )
     if not args.quiet:
         print(f"Comment created: {ann['id']}")
@@ -534,8 +590,7 @@ def cmd_rm(args):
 
     server_info = get_server(doc)
     if server_info:
-        print("Warning: a scholia view server is watching this file.",
-              file=sys.stderr)
+        print("Warning: a scholia view server is watching this file.", file=sys.stderr)
 
     files = [Path(doc).resolve()] + sidecar_paths(doc)
 
@@ -602,6 +657,7 @@ def cmd_mv(args):
 
 
 # ── Skill init ──────────────────────────────────────────
+
 
 def _load_instruction_template() -> str:
     """Load the bundled agent instruction template."""
@@ -674,6 +730,7 @@ def cmd_skill_init(args):
 
 # ── Main ────────────────────────────────────────────────
 
+
 def main():
     from scholia import __version__
 
@@ -683,9 +740,7 @@ def main():
         "Add comments anchored to specific text, collaborate in threaded "
         "discussions, and review with AI agents via CLI or browser.",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"scholia {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"scholia {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     # view
@@ -694,24 +749,36 @@ def main():
         help="Launch a live-rendering server and open the document in a browser",
     )
     p_view.add_argument(
-        "doc", nargs="?", default=None,
+        "doc",
+        nargs="?",
+        default=None,
         help="Markdown document path (interactive picker if omitted)",
     )
     p_view.add_argument(
-        "--host", default="127.0.0.1",
+        "--host",
+        default="127.0.0.1",
         help="Server bind address (default: 127.0.0.1)",
     )
     p_view.add_argument(
-        "--port", type=int, default=8088,
+        "--port",
+        type=int,
+        default=8088,
         help="Server port (default: 8088)",
     )
     p_view.add_argument(
-        "--title", default=None,
+        "--title",
+        default=None,
         help="Document title (YAML frontmatter, only used with stdin '-')",
     )
     p_view.add_argument(
-        "--keep", action="store_true",
+        "--keep",
+        action="store_true",
         help="Keep stdin temp file after server exits (default: auto-cleanup)",
+    )
+    p_view.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Don't auto-open the browser (just print the URL)",
     )
 
     # list
@@ -721,16 +788,21 @@ def main():
     )
     p_list.add_argument("doc", help="Markdown document path")
     p_list.add_argument(
-        "--all", action="store_true",
+        "--all",
+        action="store_true",
         help="Include resolved threads (default: open only)",
     )
     p_list.add_argument(
-        "--since", metavar="DATE",
+        "--since",
+        metavar="DATE",
         help="Filter to threads modified since DATE (YYYY-MM-DD)",
     )
     _add_format_arg(p_list)
     p_list.add_argument(
-        "--context", nargs=2, type=int, default=[2, 2],
+        "--context",
+        nargs=2,
+        type=int,
+        default=[2, 2],
         metavar=("BEFORE", "AFTER"),
         help="Lines of context before/after anchor (default: 2 2)",
     )
@@ -741,10 +813,16 @@ def main():
         help="Show a single annotation thread with document context",
     )
     p_show.add_argument("doc", help="Markdown document path")
-    p_show.add_argument("id", help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')")
+    p_show.add_argument(
+        "id",
+        help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')",
+    )
     _add_format_arg(p_show)
     p_show.add_argument(
-        "--context", nargs=2, type=int, default=[2, 2],
+        "--context",
+        nargs=2,
+        type=int,
+        default=[2, 2],
         metavar=("BEFORE", "AFTER"),
         help="Lines of context before/after anchor (default: 2 2)",
     )
@@ -752,7 +830,10 @@ def main():
     # reply
     p_reply = sub.add_parser("reply", help="Reply to an annotation thread")
     p_reply.add_argument("doc", help="Markdown document path")
-    p_reply.add_argument("id", help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')")
+    p_reply.add_argument(
+        "id",
+        help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')",
+    )
     p_reply.add_argument("text", help="Reply text")
     p_reply.add_argument("-q", "--quiet", action="store_true", help="Suppress confirmation output")
     _add_author_args(p_reply)
@@ -768,7 +849,9 @@ def main():
         help="Exact text from the document to anchor the comment to",
     )
     p_comment.add_argument("text", help="Comment text")
-    p_comment.add_argument("-q", "--quiet", action="store_true", help="Suppress confirmation output")
+    p_comment.add_argument(
+        "-q", "--quiet", action="store_true", help="Suppress confirmation output"
+    )
     _add_author_args(p_comment)
 
     # edit
@@ -777,21 +860,34 @@ def main():
         help="Edit the last message in a thread (your own messages only)",
     )
     p_edit.add_argument("doc", help="Markdown document path")
-    p_edit.add_argument("id", help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')")
+    p_edit.add_argument(
+        "id",
+        help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')",
+    )
     p_edit.add_argument("text", help="Replacement text for the last message")
     p_edit.add_argument("-q", "--quiet", action="store_true", help="Suppress confirmation output")
 
     # resolve
     p_resolve = sub.add_parser("resolve", help="Mark a thread as resolved (closed)")
     p_resolve.add_argument("doc", help="Markdown document path")
-    p_resolve.add_argument("id", help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')")
-    p_resolve.add_argument("-q", "--quiet", action="store_true", help="Suppress confirmation output")
+    p_resolve.add_argument(
+        "id",
+        help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')",
+    )
+    p_resolve.add_argument(
+        "-q", "--quiet", action="store_true", help="Suppress confirmation output"
+    )
 
     # unresolve
     p_unresolve = sub.add_parser("unresolve", help="Reopen a resolved thread")
     p_unresolve.add_argument("doc", help="Markdown document path")
-    p_unresolve.add_argument("id", help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')")
-    p_unresolve.add_argument("-q", "--quiet", action="store_true", help="Suppress confirmation output")
+    p_unresolve.add_argument(
+        "id",
+        help="Annotation ID or unique prefix (e.g. full urn:uuid:..., or just 'a72')",
+    )
+    p_unresolve.add_argument(
+        "-q", "--quiet", action="store_true", help="Suppress confirmation output"
+    )
 
     # export
     p_export = sub.add_parser(
@@ -800,15 +896,23 @@ def main():
     )
     p_export.add_argument("doc", help="Markdown document path")
     p_export.add_argument(
-        "--to", "-t", default="pdf", choices=["pdf", "html", "latex"],
+        "--to",
+        "-t",
+        default="pdf",
+        choices=["pdf", "html", "latex"],
         help="Output format (default: pdf)",
     )
     p_export.add_argument(
-        "--output", "-o", default=None, metavar="PATH",
+        "--output",
+        "-o",
+        default=None,
+        metavar="PATH",
         help="Output file path (default: <input-stem>.<ext> in cwd)",
     )
     p_export.add_argument(
-        "--pdf-engine", default=None, metavar="ENGINE",
+        "--pdf-engine",
+        default=None,
+        metavar="ENGINE",
         help="LaTeX engine for PDF output (e.g. xelatex, tectonic)",
     )
 
@@ -819,8 +923,7 @@ def main():
     )
     p_mv.add_argument("source", help="Source markdown document path")
     p_mv.add_argument("dest", help="Destination path")
-    p_mv.add_argument("--force", action="store_true",
-                       help="Overwrite destination if it exists")
+    p_mv.add_argument("--force", action="store_true", help="Overwrite destination if it exists")
 
     # rm
     p_rm = sub.add_parser(
@@ -828,8 +931,7 @@ def main():
         help="Delete a document and its scholia sidecars",
     )
     p_rm.add_argument("doc", help="Markdown document path")
-    p_rm.add_argument("--force", action="store_true",
-                       help="Delete without confirmation prompt")
+    p_rm.add_argument("--force", action="store_true", help="Delete without confirmation prompt")
 
     # skill-init
     p_skill = sub.add_parser(
@@ -837,7 +939,9 @@ def main():
         help="Install an AI agent skill file that teaches your coding agent how to use scholia",
     )
     p_skill.add_argument(
-        "path", nargs="?", default=None,
+        "path",
+        nargs="?",
+        default=None,
         help="Target file path (default: ~/.claude/skills/scholia/SKILL.md)",
     )
     p_skill.add_argument("--force", action="store_true", help="Overwrite existing file")
