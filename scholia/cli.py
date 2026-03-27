@@ -530,14 +530,46 @@ def cmd_edit(args):
 
 
 def cmd_comment(args):
+    from scholia.comments import _pandoc_plain
+    from scholia.context import generate_selector_context, render_doc_plain
+
     creator, nickname, is_software = _resolve_author(args)
+    raw_exact = args.anchor
+    doc_text = Path(args.doc).read_text(encoding="utf-8")
+
+    # Source selector: find in raw markdown, generate adaptive context
+    pos = doc_text.find(raw_exact)
+    if pos == -1:
+        print("Error: anchor text not found in document", file=sys.stderr)
+        sys.exit(1)
+    source_prefix, source_suffix = generate_selector_context(doc_text, raw_exact, pos)
+    source_selector = {
+        "exact": raw_exact,
+        "prefix": source_prefix,
+        "suffix": source_suffix,
+    }
+
+    # Browser selector: find in pandoc plain-text rendering for DOM re-anchoring
+    browser_exact = _pandoc_plain(raw_exact) if is_software else raw_exact
+    browser_prefix, browser_suffix = "", ""
+    rendered = render_doc_plain(args.doc)
+    if rendered:
+        rpos = rendered.find(browser_exact)
+        if rpos != -1:
+            browser_prefix, browser_suffix = generate_selector_context(
+                rendered, browser_exact, rpos
+            )
+
     ann = append_comment(
         args.doc,
-        exact=args.anchor,
+        exact=browser_exact,
+        prefix=browser_prefix,
+        suffix=browser_suffix,
         body_text=args.text,
         creator=creator,
         nickname=nickname,
         is_software=is_software,
+        source_selector=source_selector,
         via="cli",
     )
     if not args.quiet:
