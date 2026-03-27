@@ -285,24 +285,55 @@
       }
     }
 
+    // Fallback: container is inside a special entry (math, ref, cite)
+    // that swallowed its children during the walk. Snap to entry boundary.
+    var el = container.nodeType === Node.TEXT_NODE ? container.parentElement : container;
+    if (el) {
+      for (i = 0; i < entries.length; i++) {
+        if (entries[i].type !== 'text' && entries[i].node.contains(el)) {
+          return entries[i].rtEnd;
+        }
+      }
+    }
+
     return 0;
   }
 
+  /**
+   * Find the nearest "atomic" element that shouldn't be partially selected:
+   * math expressions, crossref links, or citation links.
+   */
+  function _closestAtomicElement(el) {
+    if (!el || !el.closest) return null;
+    var math = el.closest('span.math');
+    if (math) return math;
+    var link = el.closest('a');
+    if (link) {
+      var href = link.getAttribute('href') || '';
+      if (/^#(?:(?:sec|eq|fig|tbl|lst):|ref-)/.test(href)) return link;
+    }
+    return null;
+  }
+
+  /**
+   * Snap a range so it doesn't start or end inside a math expression,
+   * crossref link, or citation link. Returns a new (cloned) Range.
+   */
   function snapToMathBoundaries(range) {
     var newRange = range.cloneRange();
 
     var startEl = range.startContainer.nodeType === Node.TEXT_NODE
       ? range.startContainer.parentElement : range.startContainer;
-    var startMath = startEl && startEl.closest && startEl.closest('span.math');
-    if (startMath) {
-      newRange.setStartBefore(startMath);
+    var startAtomic = _closestAtomicElement(startEl);
+    if (startAtomic) {
+      newRange.setStartBefore(startAtomic);
     }
 
     var endEl = range.endContainer.nodeType === Node.TEXT_NODE
       ? range.endContainer.parentElement : range.endContainer;
-    var endMath = endEl && endEl.closest && endEl.closest('span.math');
-    if (endMath) {
-      newRange.setEndAfter(endMath);
+    var endAtomic = _closestAtomicElement(endEl);
+    if (endAtomic) {
+      newRange.setEndAfter(endAtomic);
     }
 
     return newRange;
