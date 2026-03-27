@@ -168,74 +168,141 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
-def _render_quarto_sync(doc_path: Path) -> str:
-    """Render a Quarto document to an HTML fragment (blocking).
+def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
+    """Render a Quarto document to an HTML body + head tags (blocking).
 
-    Runs ``quarto render`` with KaTeX math, extracts the ``<main>``
-    body content, and returns it as an HTML fragment suitable for
-    injection into scholia's template.
+    Runs ``quarto render`` in the document's own directory so that
+    ``<stem>_files/`` persists for the /quarto-assets/ route to serve.
+
+    Returns ``(body_html, head_tags)`` where:
+    - ``body_html`` is the inner content of ``<main>`` plus any post-body
+      ``<script>`` tags, with asset paths rewritten to ``/quarto-assets/``.
+    - ``head_tags`` is a string of ``<link>`` and ``<script>`` tags extracted
+      from ``<head>``, with paths rewritten to ``/quarto-assets/``.  KaTeX
+      CDN, non-local assets, and ``quarto.js`` are excluded.
     """
-    import tempfile
-
     quarto = shutil.which("quarto")
     if not quarto:
         raise RuntimeError(
             "Quarto is not installed. Install from https://quarto.org/docs/get-started/"
         )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out_file = Path(tmp) / "output.html"
-        cmd = [
-            quarto,
-            "render",
-            str(doc_path.resolve()),
-            "--to",
-            "html",
-            "-M",
-            "html-math-method:katex",
-            "--output",
-            out_file.name,
-            "--output-dir",
-            tmp,
-        ]
-        env = {**os.environ}
-        py = _find_quarto_python(doc_path)
-        if py:
-            env["QUARTO_PYTHON"] = py
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=str(doc_path.parent),
-            timeout=120,
+    out_file = doc_path.with_suffix(".html")
+    cmd = [
+        quarto,
+        "render",
+        str(doc_path.resolve()),
+        "--to",
+        "html",
+    ]
+    env = {**os.environ}
+    py = _find_quarto_python(doc_path)
+    if py:
+        env["QUARTO_PYTHON"] = py
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(doc_path.parent),
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"quarto render failed: {result.stderr}")
+
+    html = out_file.read_text(encoding="utf-8")
+
+    stem = doc_path.stem
+
+    def _rewrite_path(src: str) -> str:
+        """Rewrite a relative local asset path to /quarto-assets/..."""
+        # Already absolute URL or data URI — leave unchanged
+        if src.startswith(("http://", "https://", "//", "data:")):
+            return src
+        # Strip leading stem_files/ prefix if present, then prefix with route
+        prefix = stem + "_files/"
+        if src.startswith(prefix):
+            return "/quarto-assets/" + src[len(prefix) :]
+        # Other relative paths (e.g. site_libs/) served from same dir
+        return "/quarto-assets/../" + src
+
+    def _rewrite_attrs(tag: str) -> str:
+        """Rewrite href= and src= attributes in a single tag string."""
+
+        def replace_href(m):
+            val = m.group(1)
+            return f'href="{_rewrite_path(val)}"'
+
+        def replace_src(m):
+            val = m.group(1)
+            return f'src="{_rewrite_path(val)}"'
+
+        tag = re.sub(r'href="([^"]*)"', replace_href, tag)
+        tag = re.sub(r"href='([^']*)'", lambda m: f"href='{_rewrite_path(m.group(1))}'", tag)
+        tag = re.sub(r'src="([^"]*)"', replace_src, tag)
+        tag = re.sub(r"src='([^']*)'", lambda m: f"src='{_rewrite_path(m.group(1))}'", tag)
+        return tag
+
+    # --- Extract head tags ---
+    head_tags_list: list[str] = []
+    head_match = re.search(r"<head[^>]*>(.*?)</head>", html, re.DOTALL | re.IGNORECASE)
+    if head_match:
+        head_content = head_match.group(1)
+        # Collect <link> and <script> tags
+        _tag_pat = re.compile(
+            r"<(?:link|script)[^>]*(?:/>|>(?:.*?</script>)?)",
+            re.DOTALL | re.IGNORECASE,
         )
-        if result.returncode != 0:
-            raise RuntimeError(f"quarto render failed: {result.stderr}")
+        for tag_match in _tag_pat.finditer(head_content):
+            tag = tag_match.group(0)
+            # Skip KaTeX CDN
+            if "cdn.jsdelivr.net" in tag or "cdnjs.cloudflare.com" in tag:
+                continue
+            # Skip quarto.js
+            if "quarto.js" in tag:
+                continue
+            # Skip tags with no local asset reference (e.g. pure inline scripts are ok to keep)
+            tag = _rewrite_attrs(tag)
+            head_tags_list.append(tag)
+    quarto_head = "\n".join(head_tags_list)
 
-        html = out_file.read_text(encoding="utf-8")
+    # --- Extract body: <main> content + post-body scripts ---
+    body_parts: list[str] = []
 
-    # Extract <main> body content
-    main_start = html.find("<main")
-    main_end = html.find("</main>")
-    if main_start == -1 or main_end == -1:
-        # Fallback: return everything in <body>
-        body_start = html.find("<body")
-        body_end = html.find("</body>")
-        if body_start != -1 and body_end != -1:
-            # Skip the <body ...> tag itself
-            body_start = html.find(">", body_start) + 1
-            return html[body_start:body_end]
-        return html
+    main_match = re.search(r"<main[^>]*>(.*?)</main>", html, re.DOTALL | re.IGNORECASE)
+    if main_match:
+        body_parts.append(_rewrite_attrs(main_match.group(1)))
+    else:
+        # Fallback: inner content of <body>
+        body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
+        if body_match:
+            body_parts.append(_rewrite_attrs(body_match.group(1)))
+        else:
+            body_parts.append(_rewrite_attrs(html))
 
-    # Include the closing </main> tag content but strip the <main> wrapper
-    # since scholia's template already provides <article id="scholia-doc">
-    inner_start = html.find(">", main_start) + 1
-    return html[inner_start:main_end]
+    # Collect post-body <script> tags (Quarto puts initialization scripts after </main>)
+    body_tag_match = re.search(r"<body[^>]*>", html, re.IGNORECASE)
+    body_end = html.find("</body>")
+    if body_tag_match and body_end != -1:
+        main_end_tag = "</main>"
+        if main_end_tag in html:
+            after_main = html[html.find(main_end_tag) + len(main_end_tag) : body_end]
+        else:
+            after_main = ""
+        _script_pat = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
+        for script_match in _script_pat.finditer(after_main):
+            body_parts.append(_rewrite_attrs(script_match.group(0)))
+
+    body_html = "\n".join(body_parts)
+    return body_html, quarto_head
 
 
-async def render_doc(doc_path: Path, sidenotes: bool = False) -> str:
-    """Render a document to an HTML fragment, choosing the right pipeline."""
+async def render_doc(doc_path: Path, sidenotes: bool = False) -> str | tuple[str, str]:
+    """Render a document to an HTML fragment, choosing the right pipeline.
+
+    For Quarto documents returns ``(body_html, head_tags)``; for all others
+    returns a plain ``str`` HTML fragment.
+    """
     loop = asyncio.get_running_loop()
     if _is_quarto(doc_path):
         return await loop.run_in_executor(None, _render_quarto_sync, doc_path)
@@ -399,7 +466,12 @@ async def build_page(
     doc_path: Path, template: str, sidenotes: bool = False, display_path: str = ""
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
-    html = await render_doc(doc_path, sidenotes=sidenotes)
+    rendered = await render_doc(doc_path, sidenotes=sidenotes)
+    is_quarto = _is_quarto(doc_path)
+    if is_quarto:
+        html, quarto_head = rendered  # type: ignore[misc]
+    else:
+        html, quarto_head = rendered, ""  # type: ignore[assignment]
     title = _extract_title(doc_path.read_text(encoding="utf-8"))
     return _fill_template(
         template,
@@ -410,6 +482,8 @@ async def build_page(
         sidenotes=sidenotes,
         comments=load_comments(doc_path),
         state=load_state(doc_path),
+        quarto_head=quarto_head,
+        is_quarto=is_quarto,
     )
 
 
@@ -433,6 +507,8 @@ def _fill_template(
     comments: list | None = None,
     state: dict | None = None,
     readonly: bool = False,
+    quarto_head: str = "",
+    is_quarto: bool = False,
 ) -> str:
     """Fill the page template with the given content and metadata."""
     page = template.replace("{{TITLE}}", title)
@@ -445,6 +521,8 @@ def _fill_template(
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments or []))
     page = page.replace("{{STATE_JSON}}", json.dumps(state or {}))
     page = page.replace("{{READONLY}}", json.dumps(readonly))
+    page = page.replace("{{QUARTO_HEAD}}", quarto_head)
+    page = page.replace("{{IS_QUARTO}}", json.dumps(is_quarto))
     return page
 
 
@@ -555,12 +633,24 @@ class ScholiaServer:
     def _setup_routes(self):
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ws", self._handle_ws)
+        self.app.router.add_get("/quarto-assets/{path:.+}", self._handle_quarto_assets)
         self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
         self.app.router.add_post("/api/relocate", self._handle_relocate)
         self.app.router.add_post("/api/shutdown", self._handle_shutdown)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
+
+    async def _handle_quarto_assets(self, request):
+        """Serve Quarto support files (CSS, JS, images) from <stem>_files/."""
+        rel_path = request.match_info["path"]
+        assets_dir = self.doc_path.parent / (self.doc_path.stem + "_files")
+        file_path = (assets_dir / rel_path).resolve()
+        if not str(file_path).startswith(str(assets_dir.resolve())):
+            return web.Response(status=403)
+        if not file_path.is_file():
+            return web.Response(status=404)
+        return web.FileResponse(file_path)
 
     def _register_server_state(self, port: int):
         """Write _server key to state file."""
@@ -942,11 +1032,16 @@ class ScholiaServer:
 
             closed = set()
             for sn_val, ws_list in by_sidenotes.items():
-                html = await render_doc(doc_path, sidenotes=sn_val)
+                rendered = await render_doc(doc_path, sidenotes=sn_val)
+                if _is_quarto(doc_path):
+                    html, quarto_head = rendered  # type: ignore[misc]
+                else:
+                    html, quarto_head = rendered, ""  # type: ignore[assignment]
                 payload = json.dumps(
                     {
                         "type": "doc_update",
                         "html": html,
+                        "quarto_head": quarto_head,
                         "sidenotes": sn_val,
                     }
                 )
