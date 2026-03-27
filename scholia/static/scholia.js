@@ -3321,13 +3321,14 @@
       compactMode = true;
       document.body.classList.add('scholia-compact');
       resizeHandle.style.display = 'none';
+      sidebarEl.style.display = 'none';
       dismissCommentPrompt();
-      if (!sidebarHidden) { positionCards(); }
       renderToolbar();
     } else if (compactMode && vw > COMPACT_LEAVE) {
       compactMode = false;
       document.body.classList.remove('scholia-compact');
       resizeHandle.style.display = '';
+      if (!sidebarHidden) sidebarEl.style.display = '';
       dismissCompactComment();
       if (!sidebarHidden) {
         positionCards();
