@@ -532,6 +532,9 @@ def _fill_template(
     page = page.replace("{{READONLY}}", json.dumps(readonly))
     page = page.replace("{{QUARTO_HEAD}}", quarto_head)
     page = page.replace("{{IS_QUARTO}}", json.dumps(is_quarto))
+    # Pandoc docs get scholia.css for content styling; Quarto brings its own CSS
+    content_css = "" if is_quarto else '<link rel="stylesheet" href="/static/scholia.css">'
+    page = page.replace("{{CONTENT_CSS}}", content_css)
     return page
 
 

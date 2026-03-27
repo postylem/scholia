@@ -44,10 +44,28 @@ def test_template_has_quarto_placeholders():
     assert "{{IS_QUARTO}}" in t
 
 
-def test_template_keeps_scholia_css_link():
-    """scholia.css in <head> for content styles (also loaded in shadow by JS)."""
+def test_template_has_content_css_placeholder():
+    """Content CSS is conditional — loaded for Pandoc, skipped for Quarto."""
     t = _load_template()
-    assert 'href="/static/scholia.css"' in t
+    assert "{{CONTENT_CSS}}" in t
+
+
+def test_fill_template_pandoc_gets_scholia_css():
+    from scholia.server import _fill_template
+
+    t = _load_template()
+    page = _fill_template(t, title="Test", html="<p>hi</p>", doc_path=Path("/tmp/t.md"))
+    assert 'href="/static/scholia.css"' in page
+
+
+def test_fill_template_quarto_no_scholia_css():
+    from scholia.server import _fill_template
+
+    t = _load_template()
+    page = _fill_template(
+        t, title="Test", html="<p>hi</p>", doc_path=Path("/tmp/t.qmd"), is_quarto=True
+    )
+    assert 'href="/static/scholia.css"' not in page
 
 
 # ── JS shadow DOM ──

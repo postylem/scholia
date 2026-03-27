@@ -26,13 +26,17 @@
   shadow.appendChild(katexCssLink);
 
   // Inject body grid layout into document head
+  var isQuarto = window.__SCHOLIA_IS_QUARTO__ || false;
   var layoutStyle = document.createElement('style');
+  var bodyStyles = isQuarto
+    ? 'body { margin: 0; display: grid; min-height: 100vh;'
+    : 'body { margin: 0; display: grid; min-height: 100vh;'
+    + '  background: var(--s-bg); color: var(--s-text);'
+    + '  font-family: var(--s-body); font-size: 1.1rem; line-height: 1.7;';
   layoutStyle.textContent = [
-    'body { margin: 0; display: grid; min-height: 100vh;',
+    bodyStyles,
     '  grid-template-columns: 1fr 4px minmax(200px, var(--sidebar-width, 320px));',
     '  grid-template-rows: auto 1fr;',
-    '  background: var(--s-bg); color: var(--s-text);',
-    '  font-family: var(--s-body); font-size: 1.1rem; line-height: 1.7;',
     '  overflow-x: hidden; }',
     'body { transition: grid-template-columns 0.3s ease; }',
     'scholia-sidebar { display: contents; }',
