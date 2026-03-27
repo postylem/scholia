@@ -15,11 +15,15 @@
   var shadowHost = document.querySelector('scholia-sidebar');
   var shadow = shadowHost.attachShadow({ mode: 'open' });
 
-  // Load scholia.css inside shadow root
+  // Load scholia.css and KaTeX CSS inside shadow root
   var cssLink = document.createElement('link');
   cssLink.rel = 'stylesheet';
   cssLink.href = '/static/scholia.css';
   shadow.appendChild(cssLink);
+  var katexCssLink = document.createElement('link');
+  katexCssLink.rel = 'stylesheet';
+  katexCssLink.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+  shadow.appendChild(katexCssLink);
 
   // Inject body grid layout into document head
   var layoutStyle = document.createElement('style');
@@ -1061,6 +1065,8 @@
   }
 
   function rerenderMath() {
+    // Quarto already renders math with KaTeX server-side; skip to avoid double-render
+    if (window.__SCHOLIA_IS_QUARTO__) return;
     renderMathIn(docEl);
   }
 

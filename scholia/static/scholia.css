@@ -161,6 +161,74 @@ body {
   width: 60%;
 }
 
+/* ── Quarto: disable scholia content styling ──────── */
+/* Quarto documents bring their own CSS (Bootstrap, etc.).
+   Reset scholia's Pandoc-targeted content styles so they
+   don't conflict.  Only basic layout properties are kept. */
+#scholia-doc.scholia-quarto {
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+#scholia-doc.scholia-quarto > p,
+#scholia-doc.scholia-quarto > ul, #scholia-doc.scholia-quarto > ol, #scholia-doc.scholia-quarto > dl,
+#scholia-doc.scholia-quarto > blockquote,
+#scholia-doc.scholia-quarto > pre, #scholia-doc.scholia-quarto > figure,
+#scholia-doc.scholia-quarto > table, #scholia-doc.scholia-quarto > header,
+#scholia-doc.scholia-quarto > div.sourceCode,
+#scholia-doc.scholia-quarto section > p,
+#scholia-doc.scholia-quarto section > ul, #scholia-doc.scholia-quarto section > ol,
+#scholia-doc.scholia-quarto section > dl,
+#scholia-doc.scholia-quarto section > blockquote,
+#scholia-doc.scholia-quarto section > pre, #scholia-doc.scholia-quarto section > figure,
+#scholia-doc.scholia-quarto section > table,
+#scholia-doc.scholia-quarto section > div.sourceCode,
+#scholia-doc.scholia-quarto h1, #scholia-doc.scholia-quarto h2,
+#scholia-doc.scholia-quarto h3, #scholia-doc.scholia-quarto h4,
+#scholia-doc.scholia-quarto h5, #scholia-doc.scholia-quarto h6 {
+  width: auto;
+}
+#scholia-doc.scholia-quarto h1, #scholia-doc.scholia-quarto h2,
+#scholia-doc.scholia-quarto h3, #scholia-doc.scholia-quarto h4,
+#scholia-doc.scholia-quarto h5, #scholia-doc.scholia-quarto h6 {
+  font-family: inherit;
+  border-left: none;
+  padding-left: 0;
+  margin-left: 0;
+}
+#scholia-doc.scholia-quarto section > h1,
+#scholia-doc.scholia-quarto section > h2,
+#scholia-doc.scholia-quarto section > h3,
+#scholia-doc.scholia-quarto section > h4 {
+  cursor: default;
+}
+#scholia-doc.scholia-quarto section > h1::after,
+#scholia-doc.scholia-quarto section > h2::after,
+#scholia-doc.scholia-quarto section > h3::after,
+#scholia-doc.scholia-quarto section > h4::after {
+  display: none;
+}
+#scholia-doc.scholia-quarto code {
+  all: revert;
+}
+#scholia-doc.scholia-quarto pre {
+  all: revert;
+}
+#scholia-doc.scholia-quarto a {
+  all: revert;
+}
+#scholia-doc.scholia-quarto blockquote {
+  all: revert;
+}
+#scholia-doc.scholia-quarto table, #scholia-doc.scholia-quarto th,
+#scholia-doc.scholia-quarto td {
+  all: revert;
+}
+#scholia-doc.scholia-quarto .katex {
+  font-size: inherit;
+}
+
 /* ── Title block ───────────────────────────────────── */
 
 #title-block-header {
