@@ -168,18 +168,15 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
-def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
-    """Render a Quarto document to an HTML body + head tags (blocking).
+def _render_quarto_sync(doc_path: Path) -> str:
+    """Render a Quarto document and return the full HTML page (blocking).
 
     Runs ``quarto render`` in the document's own directory so that
     ``<stem>_files/`` persists for the /quarto-assets/ route to serve.
+    Asset paths are rewritten from ``<stem>_files/`` to ``/quarto-assets/``.
 
-    Returns ``(body_html, head_tags)`` where:
-    - ``body_html`` is the inner content of ``<main>`` plus any post-body
-      ``<script>`` tags, with asset paths rewritten to ``/quarto-assets/``.
-    - ``head_tags`` is a string of ``<link>`` and ``<script>`` tags extracted
-      from ``<head>``, with paths rewritten to ``/quarto-assets/``.  KaTeX
-      CDN, non-local assets, and ``quarto.js`` are excluded.
+    Returns the complete Quarto HTML page with asset paths rewritten.
+    The caller injects scholia's overlay (sidebar, scripts) into this page.
     """
     quarto = shutil.which("quarto")
     if not quarto:
@@ -213,116 +210,19 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
         raise RuntimeError(f"quarto render failed: {result.stderr}")
 
     html = out_file.read_text(encoding="utf-8")
-
     stem = doc_path.stem
 
-    def _rewrite_path(src: str) -> str:
-        """Rewrite a relative local asset path to /quarto-assets/..."""
-        # Already absolute URL or data URI — leave unchanged
-        if src.startswith(("http://", "https://", "//", "data:")):
-            return src
-        # Strip leading stem_files/ prefix if present, then prefix with route
-        prefix = stem + "_files/"
-        if src.startswith(prefix):
-            return "/quarto-assets/" + src[len(prefix) :]
-        # Other relative paths (e.g. site_libs/) — not served, skip
-        return None
+    # Rewrite local asset paths to go through /quarto-assets/
+    html = html.replace(f"{stem}_files/", "/quarto-assets/")
 
-    def _rewrite_attrs(tag: str) -> str | None:
-        """Rewrite href= and src= in a tag. Returns None if any path can't be served."""
-        _skip = False
-
-        def _replace(m, attr):
-            nonlocal _skip
-            val = m.group(1)
-            new = _rewrite_path(val)
-            if new is None:
-                _skip = True
-                return m.group(0)
-            return f'{attr}="{new}"'
-
-        tag = re.sub(r'href="([^"]*)"', lambda m: _replace(m, "href"), tag)
-        tag = re.sub(r"href='([^']*)'", lambda m: _replace(m, "href"), tag)
-        tag = re.sub(r'src="([^"]*)"', lambda m: _replace(m, "src"), tag)
-        tag = re.sub(r"src='([^']*)'", lambda m: _replace(m, "src"), tag)
-        return None if _skip else tag
-
-    # --- Extract head tags ---
-    head_tags_list: list[str] = []
-    head_match = re.search(r"<head[^>]*>(.*?)</head>", html, re.DOTALL | re.IGNORECASE)
-    if head_match:
-        head_content = head_match.group(1)
-        # Collect <link>, <script>, and <style> tags
-        _tag_pat = re.compile(
-            r"<(?:link[^>]*/?>|script[^>]*>.*?</script>|style[^>]*>.*?</style>)",
-            re.DOTALL | re.IGNORECASE,
-        )
-        for tag_match in _tag_pat.finditer(head_content):
-            tag = tag_match.group(0)
-            # Skip KaTeX CDN
-            if "cdn.jsdelivr.net" in tag or "cdnjs.cloudflare.com" in tag:
-                continue
-            # Skip quarto.js module (it manipulates body layout with nav/sidebar
-            # that we don't include), but keep quarto-html assets like tippy, popper
-            if re.search(r'quarto\.js["\']', tag) and 'type="module"' in tag:
-                continue
-            # Inline <style> blocks need no path rewriting — pass through
-            if tag.strip().startswith("<style"):
-                head_tags_list.append(tag)
-                continue
-            # Rewrite asset paths; skip tags referencing paths we can't serve
-            rewritten = _rewrite_attrs(tag)
-            if rewritten is not None:
-                head_tags_list.append(rewritten)
-    quarto_head = "\n".join(head_tags_list)
-
-    # --- Extract body: <main> content + post-body scripts ---
-    body_parts: list[str] = []
-
-    def _rewrite_body(text: str) -> str:
-        """Rewrite <stem>_files/ paths in body HTML via simple string replace."""
-        return text.replace(stem + "_files/", "/quarto-assets/")
-
-    # Keep the <main> tag with its classes (Quarto CSS targets .content, .page-columns, etc.)
-    main_match = re.search(r"(<main[^>]*>)(.*?)(</main>)", html, re.DOTALL | re.IGNORECASE)
-    if main_match:
-        body_parts.append(
-            _rewrite_body(main_match.group(1) + main_match.group(2) + main_match.group(3))
-        )
-    else:
-        # Fallback: inner content of <body>
-        body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
-        if body_match:
-            body_parts.append(_rewrite_body(body_match.group(1)))
-        else:
-            body_parts.append(_rewrite_body(html))
-
-    # Collect post-body <script> tags (Quarto puts initialization scripts after </main>)
-    body_tag_match = re.search(r"<body[^>]*>", html, re.IGNORECASE)
-    body_end = html.find("</body>")
-    if body_tag_match and body_end != -1:
-        main_end_tag = "</main>"
-        if main_end_tag in html:
-            after_main = html[html.find(main_end_tag) + len(main_end_tag) : body_end]
-        else:
-            after_main = ""
-        _script_pat = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
-        for script_match in _script_pat.finditer(after_main):
-            body_parts.append(_rewrite_body(script_match.group(0)))
-
-    # Extract body classes (Quarto CSS targets e.g. .fullcontent on body)
-    body_class_match = re.search(r'<body[^>]*class="([^"]*)"', html, re.IGNORECASE)
-    body_classes = body_class_match.group(1) if body_class_match else ""
-
-    body_html = "\n".join(body_parts)
-    return body_html, quarto_head, body_classes
+    return html
 
 
-async def render_doc(doc_path: Path, sidenotes: bool = False) -> str | tuple[str, str, str]:
-    """Render a document to an HTML fragment, choosing the right pipeline.
+async def render_doc(doc_path: Path, sidenotes: bool = False) -> str:
+    """Render a document to HTML, choosing the right pipeline.
 
-    For Quarto documents returns ``(body_html, head_tags, body_classes)``; for all others
-    returns a plain ``str`` HTML fragment.
+    For Quarto documents returns a complete HTML page.
+    For Pandoc documents returns an HTML fragment.
     """
     loop = asyncio.get_running_loop()
     if _is_quarto(doc_path):
@@ -483,16 +383,95 @@ def _extract_title(markdown_text: str) -> str:
     return "Scholia"
 
 
+def _inject_scholia_into_quarto(
+    quarto_html: str,
+    doc_path: Path,
+    display_path: str = "",
+) -> str:
+    """Inject scholia's sidebar overlay into a complete Quarto HTML page.
+
+    Instead of extracting Quarto content into scholia's template, we take
+    Quarto's full rendered page and inject scholia on top of it — the same
+    approach as Hypothesis.  Quarto's CSS, JS, and page structure are
+    completely preserved.
+    """
+    dp = (display_path or str(doc_path)).replace("\\", "/")
+
+    # Add id="scholia-doc" to <main> so scholia.js can find the content element
+    quarto_html = re.sub(
+        r"<main\b([^>]*)>",
+        r'<main id="scholia-doc"\1>',
+        quarto_html,
+        count=1,
+    )
+
+    # Inject highlight CSS + comment rendering libs before </head>
+    # fmt: off
+    head_inject = (                                                     # noqa: E501
+        "  <style>\n"
+        "    mark.scholia-highlight {"
+        " background:rgba(255,220,100,.35); border-radius:2px; cursor:pointer }\n"
+        "    mark.scholia-highlight.scholia-highlight-active,"
+        " mark.scholia-highlight:hover {"
+        " background:rgba(255,200,50,.55) }\n"
+        "    mark.scholia-highlight.scholia-highlight-resolved {"
+        " background:rgba(200,200,200,.25) }\n"
+        "    mark.scholia-highlight.scholia-highlight-resolved"
+        ".scholia-highlight-active,\n"
+        "    mark.scholia-highlight.scholia-highlight-resolved:hover {"
+        " background:rgba(180,180,180,.35) }\n"
+        "    mark.scholia-highlight.scholia-pulse {"
+        " animation:scholia-pulse .6s ease-out }\n"
+        "    @keyframes scholia-pulse {\n"
+        "      0%{box-shadow:0 0 0 0 rgba(255,200,50,.7)}\n"
+        "      100%{box-shadow:0 0 0 8px rgba(255,200,50,0)} }\n"
+        "  </style>\n"
+        '  <script defer src="https://cdn.jsdelivr.net/npm/'
+        'markdown-it@14.1.0/dist/markdown-it.min.js"></script>\n'
+        '  <script defer src="https://cdn.jsdelivr.net/npm/'
+        'markdown-it-texmath@1.0.0/texmath.min.js"></script>\n'
+        '  <script defer src="https://cdn.jsdelivr.net/npm/'
+        'mermaid@11/dist/mermaid.min.js"></script>\n'
+    )
+    # fmt: on
+    quarto_html = quarto_html.replace("</head>", head_inject + "</head>")
+
+    # Inject <scholia-sidebar> + config + scripts before </body>
+    comments = load_comments(doc_path)
+    state = load_state(doc_path)
+    body_inject = f"""
+  <scholia-sidebar></scholia-sidebar>
+  <script>
+  window.__SCHOLIA_CREATOR__ = {json.dumps(get_human_username())};
+  window.__SCHOLIA_DOC_PATH__ = {json.dumps(dp)};
+  window.__SCHOLIA_DOC_FULLPATH__ = {json.dumps(str(doc_path).replace(chr(92), "/"))};
+  window.__SCHOLIA_SIDENOTES__ = false;
+  window.__SCHOLIA_COMMENTS__ = {json.dumps(comments)};
+  window.__SCHOLIA_STATE__ = {json.dumps(state)};
+  window.__SCHOLIA_READONLY__ = false;
+  window.__SCHOLIA_IS_QUARTO__ = true;
+  </script>
+  <script src="/static/vendor/dom-anchor-text-quote.js"></script>
+  <script src="/static/scholia.js"></script>
+"""
+    quarto_html = quarto_html.replace("</body>", body_inject + "</body>")
+
+    return quarto_html
+
+
 async def build_page(
     doc_path: Path, template: str, sidenotes: bool = False, display_path: str = ""
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
-    rendered = await render_doc(doc_path, sidenotes=sidenotes)
-    is_quarto = _is_quarto(doc_path)
-    if is_quarto:
-        html, quarto_head, body_classes = rendered  # type: ignore[misc]
-    else:
-        html, quarto_head, body_classes = rendered, "", ""  # type: ignore[assignment]
+    html = await render_doc(doc_path, sidenotes=sidenotes)
+
+    if _is_quarto(doc_path):
+        return _inject_scholia_into_quarto(
+            html,
+            doc_path,
+            display_path=display_path,
+        )
+
     title = _extract_title(doc_path.read_text(encoding="utf-8"))
     return _fill_template(
         template,
@@ -503,9 +482,6 @@ async def build_page(
         sidenotes=sidenotes,
         comments=load_comments(doc_path),
         state=load_state(doc_path),
-        quarto_head=quarto_head,
-        is_quarto=is_quarto,
-        quarto_body_classes=body_classes,
     )
 
 
@@ -529,15 +505,9 @@ def _fill_template(
     comments: list | None = None,
     state: dict | None = None,
     readonly: bool = False,
-    quarto_head: str = "",
-    is_quarto: bool = False,
-    quarto_body_classes: str = "",
 ) -> str:
-    """Fill the page template with the given content and metadata."""
+    """Fill the Pandoc page template with the given content and metadata."""
     page = template.replace("{{TITLE}}", title)
-    # For Quarto, add body classes to <body> tag (Quarto CSS targets e.g. .fullcontent)
-    if quarto_body_classes:
-        page = page.replace("<body>", f'<body class="{quarto_body_classes}">')
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
     dp = (display_path or str(doc_path)).replace("\\", "/")
@@ -547,10 +517,9 @@ def _fill_template(
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments or []))
     page = page.replace("{{STATE_JSON}}", json.dumps(state or {}))
     page = page.replace("{{READONLY}}", json.dumps(readonly))
-    page = page.replace("{{QUARTO_HEAD}}", quarto_head)
-    page = page.replace("{{IS_QUARTO}}", json.dumps(is_quarto))
-    # Pandoc docs get scholia.css for content styling; Quarto brings its own CSS
-    content_css = "" if is_quarto else '<link rel="stylesheet" href="/static/scholia.css">'
+    page = page.replace("{{QUARTO_HEAD}}", "")
+    page = page.replace("{{IS_QUARTO}}", json.dumps(False))
+    content_css = '<link rel="stylesheet" href="/static/scholia.css">'
     page = page.replace("{{CONTENT_CSS}}", content_css)
     return page
 
@@ -1063,14 +1032,17 @@ class ScholiaServer:
             for sn_val, ws_list in by_sidenotes.items():
                 rendered = await render_doc(doc_path, sidenotes=sn_val)
                 if _is_quarto(doc_path):
-                    html, quarto_head, _body_classes = rendered  # type: ignore[misc]
+                    # For Quarto, extract just <main> inner content for live update
+                    main_match = re.search(
+                        r"<main[^>]*>(.*)</main>", rendered, re.DOTALL | re.IGNORECASE
+                    )
+                    html = main_match.group(1) if main_match else rendered
                 else:
-                    html, quarto_head = rendered, ""  # type: ignore[assignment]
+                    html = rendered
                 payload = json.dumps(
                     {
                         "type": "doc_update",
                         "html": html,
-                        "quarto_head": quarto_head,
                         "sidenotes": sn_val,
                     }
                 )

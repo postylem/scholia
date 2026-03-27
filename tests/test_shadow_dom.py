@@ -45,27 +45,9 @@ def test_template_has_quarto_placeholders():
 
 
 def test_template_has_content_css_placeholder():
-    """Content CSS is conditional — loaded for Pandoc, skipped for Quarto."""
+    """Pandoc template includes scholia.css for content styling."""
     t = _load_template()
     assert "{{CONTENT_CSS}}" in t
-
-
-def test_fill_template_pandoc_gets_scholia_css():
-    from scholia.server import _fill_template
-
-    t = _load_template()
-    page = _fill_template(t, title="Test", html="<p>hi</p>", doc_path=Path("/tmp/t.md"))
-    assert 'href="/static/scholia.css"' in page
-
-
-def test_fill_template_quarto_no_scholia_css():
-    from scholia.server import _fill_template
-
-    t = _load_template()
-    page = _fill_template(
-        t, title="Test", html="<p>hi</p>", doc_path=Path("/tmp/t.qmd"), is_quarto=True
-    )
-    assert 'href="/static/scholia.css"' not in page
 
 
 # ── JS shadow DOM ──
@@ -150,20 +132,21 @@ def test_css_dark_mode_uses_host():
 # ── Server template filling ──
 
 
-def test_fill_template_quarto():
-    from scholia.server import _fill_template
+def test_inject_scholia_into_quarto():
+    from scholia.server import _inject_scholia_into_quarto
 
-    t = _load_template()
-    page = _fill_template(
-        t,
-        title="Test",
-        html="<p>Hello</p>",
-        doc_path=Path("/tmp/test.qmd"),
-        quarto_head='<link rel="stylesheet" href="/quarto-assets/bootstrap.css">',
-        is_quarto=True,
+    quarto_html = (
+        "<!DOCTYPE html><html><head><title>Test</title></head>"
+        '<body class="fullcontent"><main class="content">Hello</main></body></html>'
     )
-    assert "/quarto-assets/bootstrap.css" in page
+    page = _inject_scholia_into_quarto(quarto_html, Path("/tmp/test.qmd"))
+    assert "<scholia-sidebar>" in page
+    assert "scholia.js" in page
+    assert 'id="scholia-doc"' in page
     assert "__SCHOLIA_IS_QUARTO__ = true" in page
+    assert 'class="fullcontent"' in page  # body classes preserved
+    assert 'class="content"' in page  # main classes preserved
+    assert "mark.scholia-highlight" in page  # highlight CSS injected
 
 
 def test_fill_template_non_quarto():
