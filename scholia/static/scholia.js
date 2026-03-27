@@ -2716,7 +2716,7 @@
     }
     if (sidebarHidden || !pendingForm) return;
     var textarea = pendingForm.querySelector('textarea');
-    if (!textarea || document.activeElement === textarea) return;
+    if (!textarea || shadow.activeElement === textarea) return;
 
     if (e.key === 'Escape') {
       dismissCommentPrompt();
@@ -2737,7 +2737,7 @@
   document.addEventListener('selectionchange', function () {
     if (!pendingForm) return;
     var textarea = pendingForm.querySelector('textarea');
-    if (textarea && document.activeElement === textarea) return;
+    if (textarea && shadow.activeElement === textarea) return;
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) dismissCommentPrompt();
   });
