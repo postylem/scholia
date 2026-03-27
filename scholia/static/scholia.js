@@ -12,10 +12,50 @@
   var comments = window.__SCHOLIA_COMMENTS__ || [];
   var state = window.__SCHOLIA_STATE__ || {};
   var docEl = document.getElementById('scholia-doc');
-  var sidebarEl = document.getElementById('scholia-sidebar');
-  var containerEl = document.getElementById('scholia-container');
-  var toolbarEl = document.getElementById('scholia-toolbar');
-  var resizeHandle = document.getElementById('scholia-resize-handle');
+  var shadowHost = document.querySelector('scholia-sidebar');
+  var shadow = shadowHost.attachShadow({ mode: 'open' });
+
+  // Load scholia.css inside shadow root
+  var cssLink = document.createElement('link');
+  cssLink.rel = 'stylesheet';
+  cssLink.href = '/static/scholia.css';
+  shadow.appendChild(cssLink);
+
+  // Inject body grid layout into document head
+  var layoutStyle = document.createElement('style');
+  layoutStyle.textContent = [
+    'body { margin: 0; display: grid; min-height: 100vh;',
+    '  grid-template-columns: 1fr 4px minmax(200px, var(--sidebar-width, 320px));',
+    '  grid-template-rows: auto 1fr;',
+    '  background: var(--s-bg); color: var(--s-text);',
+    '  font-family: var(--s-body); font-size: 1.1rem; line-height: 1.7;',
+    '  overflow-x: hidden; }',
+    'body { transition: grid-template-columns 0.3s ease; }',
+    'scholia-sidebar { display: contents; }',
+    '#scholia-doc { grid-row: 2; grid-column: 1; }',
+    'body.scholia-sidebar-hidden { grid-template-columns: 1fr 0 0; }',
+    'body.scholia-compact { grid-template-columns: 1fr; }',
+    'body.scholia-compact .scholia-resize-handle { display: none; }',
+  ].join('\n');
+  document.head.appendChild(layoutStyle);
+
+  // Create shadow DOM structure
+  var toolbarEl = document.createElement('nav');
+  toolbarEl.className = 'scholia-toolbar';
+  shadow.appendChild(toolbarEl);
+
+  var resizeHandle = document.createElement('div');
+  resizeHandle.className = 'scholia-resize-handle';
+  shadow.appendChild(resizeHandle);
+
+  var sidebarEl = document.createElement('aside');
+  sidebarEl.className = 'scholia-sidebar';
+  shadow.appendChild(sidebarEl);
+
+  if (window.__SCHOLIA_IS_QUARTO__) {
+    docEl.classList.add('scholia-quarto');
+  }
+
   var highlights = new Map();   // annotation id → [mark elements]
   var orphanIds = new Set();
   var showResolved = false;
@@ -72,8 +112,8 @@
     dropdown.className = 'scholia-breadcrumb-dropdown';
     segEl.classList.add('active');
 
-    // Append to body to escape overflow:hidden on toolbar-path
-    document.body.appendChild(dropdown);
+    // Append to shadow root to escape overflow:hidden on toolbar-path
+    shadow.appendChild(dropdown);
     var rect = segEl.getBoundingClientRect();
     dropdown.style.position = 'fixed';
     dropdown.style.top = rect.bottom + 4 + 'px';
@@ -191,7 +231,7 @@
   // ── Unified dropdown dismiss (click-outside + Escape) ──
 
   function closeOptionsMenu() {
-    var menu = document.querySelector('.scholia-options-menu');
+    var menu = shadow.querySelector('.scholia-options-menu');
     if (menu) menu.remove();
   }
 
@@ -201,7 +241,7 @@
     if (except !== 'options') closeOptionsMenu();
   }
 
-  document.addEventListener('click', function (e) {
+  shadow.addEventListener('click', function (e) {
     // Breadcrumb
     if (activeBreadcrumbDropdown && !activeBreadcrumbDropdown.dropdown.contains(e.target) &&
         !activeBreadcrumbDropdown.seg.contains(e.target)) {
@@ -209,8 +249,8 @@
     }
     // TOC — handled in renderToolbar listener
     // Options
-    var optMenu = document.querySelector('.scholia-options-menu');
-    var optWrap = document.querySelector('.scholia-options-wrap');
+    var optMenu = shadow.querySelector('.scholia-options-menu');
+    var optWrap = shadow.querySelector('.scholia-options-wrap');
     if (optMenu && optWrap && !optWrap.contains(e.target)) {
       closeOptionsMenu();
     }
@@ -353,7 +393,7 @@
           var errEl = document.createElement('div');
           errEl.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:8px 18px;border-radius:6px;z-index:10000;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
           errEl.textContent = msg.message;
-          document.body.appendChild(errEl);
+          shadow.appendChild(errEl);
           setTimeout(function() { errEl.remove(); }, 5000);
         }
       }
@@ -383,7 +423,7 @@
     banner.textContent = text;
     banner.style.cursor = 'pointer';
     banner.addEventListener('click', function () { banner.remove(); });
-    document.body.appendChild(banner);
+    shadow.appendChild(banner);
     setTimeout(function () { banner.remove(); }, 8000);
   }
 
@@ -470,7 +510,7 @@
     btnRow.appendChild(saveBtn);
     dialog.appendChild(btnRow);
     overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
+    shadow.appendChild(overlay);
 
     function doSave() {
       var fn = fnInput.value.trim();
@@ -662,7 +702,7 @@
       tocWrapEl.appendChild(tocEl);
       renderMathIn(tocEl);
     }
-    document.addEventListener('click', function closeTocOutside(e) {
+    shadow.addEventListener('click', function closeTocOutside(e) {
       if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
         closeToc();
       }
@@ -707,6 +747,7 @@
             darkMode = mode === 'dark';
           }
           document.body.classList.toggle('scholia-dark', darkMode);
+          shadowHost.classList.toggle('scholia-dark', darkMode);
           menu.remove();
           renderToolbar();
         });
@@ -947,18 +988,18 @@
     cbBtn.addEventListener('click', function () {
       if (sidebarHidden) {
         sidebarHidden = false;
-        containerEl.classList.remove('scholia-sidebar-hidden');
+        document.body.classList.remove('scholia-sidebar-hidden');
         scheduleRender();
         // Reposition after grid transition completes
-        containerEl.addEventListener('transitionend', function handler(e) {
+        document.body.addEventListener('transitionend', function handler(e) {
           if (e.propertyName === 'grid-template-columns') {
-            containerEl.removeEventListener('transitionend', handler);
+            document.body.removeEventListener('transitionend', handler);
             positionCards();
           }
         });
       } else {
         sidebarHidden = true;
-        containerEl.classList.add('scholia-sidebar-hidden');
+        document.body.classList.add('scholia-sidebar-hidden');
         clearAllHighlights();
         dismissCommentPrompt();
       }
@@ -1354,7 +1395,7 @@
   function renderSidebar() {
     if (readonlyMode) { sidebarEl.innerHTML = ''; return; }
     // Preserve any open new-comment form
-    var existingForm = document.getElementById('scholia-new-comment');
+    var existingForm = sidebarEl.querySelector('#scholia-new-comment');
 
     sidebarEl.innerHTML = '';
 
@@ -2062,7 +2103,7 @@
     panel.appendChild(replyRow);
 
     backdrop.appendChild(panel);
-    document.body.appendChild(backdrop);
+    shadow.appendChild(backdrop);
     activeOverlay = { backdrop: backdrop, annotationId: ann.id };
 
     // Escape to close
@@ -2283,7 +2324,7 @@
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
 
     // Reserve space for new-comment form
-    var newCommentEl = document.getElementById('scholia-new-comment');
+    var newCommentEl = sidebarEl.querySelector('#scholia-new-comment');
     var minY = parseFloat(getComputedStyle(sidebarEl).paddingTop) || 0;
     if (newCommentEl) {
       var ncBottom = newCommentEl.getBoundingClientRect().bottom - sidebarTop;
@@ -2649,12 +2690,13 @@
     }
   }
 
-  // Dismiss on mousedown outside the form
+  // Dismiss on mousedown outside the form (use composedPath for shadow DOM)
   document.addEventListener('mousedown', function (e) {
-    if (pendingForm && !pendingForm.contains(e.target)) {
+    var path = e.composedPath();
+    if (pendingForm && path.indexOf(pendingForm) === -1) {
       dismissCommentPrompt();
     }
-    if (compactForm && !compactForm.contains(e.target)) {
+    if (compactForm && path.indexOf(compactForm) === -1) {
       dismissCompactComment();
     }
   });
@@ -2786,7 +2828,7 @@
     actions.appendChild(previewBtn);
 
     form.appendChild(actions);
-    document.body.appendChild(form);
+    shadow.appendChild(form);
     compactForm = form;
     textarea.focus();
   }
@@ -3007,7 +3049,7 @@
     });
     citationTooltip.addEventListener('mouseleave', scheduleCitationHide);
 
-    document.body.appendChild(citationTooltip);
+    shadow.appendChild(citationTooltip);
 
     var rect = link.getBoundingClientRect();
     var tipRect = citationTooltip.getBoundingClientRect();
@@ -3038,11 +3080,11 @@
 
   var aboveIndicator = document.createElement('div');
   aboveIndicator.className = 'scholia-offscreen-indicator scholia-offscreen-above';
-  document.body.appendChild(aboveIndicator);
+  shadow.appendChild(aboveIndicator);
 
   var belowIndicator = document.createElement('div');
   belowIndicator.className = 'scholia-offscreen-indicator scholia-offscreen-below';
-  document.body.appendChild(belowIndicator);
+  shadow.appendChild(belowIndicator);
 
   // Click to scroll to nearest offscreen thread
   aboveIndicator.addEventListener('click', function () {
@@ -3146,7 +3188,7 @@
   resizeHandle.addEventListener('mousedown', function (e) {
     e.preventDefault();
     resizeHandle.classList.add('dragging');
-    containerEl.style.transition = 'none';
+    document.body.style.transition = 'none';
 
     function onMove(e) {
       var newWidth = window.innerWidth - e.clientX;
@@ -3154,7 +3196,7 @@
         // Collapse: hide sidebar
         if (!sidebarHidden) {
           sidebarHidden = true;
-          containerEl.classList.add('scholia-sidebar-hidden');
+          document.body.classList.add('scholia-sidebar-hidden');
           clearAllHighlights();
           dismissCommentPrompt();
           renderToolbar();
@@ -3164,18 +3206,18 @@
       // Uncollapse if was hidden
       if (sidebarHidden) {
         sidebarHidden = false;
-        containerEl.classList.remove('scholia-sidebar-hidden');
+        document.body.classList.remove('scholia-sidebar-hidden');
         renderToolbar();
         scheduleRender();
       }
       var clamped = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, newWidth));
-      containerEl.style.setProperty('--sidebar-width', clamped + 'px');
+      document.body.style.setProperty('--sidebar-width', clamped + 'px');
       positionCards();
     }
 
     function onUp() {
       resizeHandle.classList.remove('dragging');
-      containerEl.style.transition = '';
+      document.body.style.transition = '';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     }
@@ -3190,7 +3232,10 @@
   if (!sidenotesEnabled) docEl.classList.add('scholia-no-sidenotes');
 
   // Apply persisted preferences
-  if (darkMode) document.body.classList.add('scholia-dark');
+  if (darkMode) {
+    document.body.classList.add('scholia-dark');
+    shadowHost.classList.add('scholia-dark');
+  }
   if (fontMode !== 'default') document.body.classList.add('scholia-font-' + fontMode);
   if (uiZoom !== 100) applyZoom();
 
@@ -3199,6 +3244,7 @@
     if (themeMode !== 'system') return;
     darkMode = e.matches;
     document.body.classList.toggle('scholia-dark', darkMode);
+    shadowHost.classList.toggle('scholia-dark', darkMode);
     renderToolbar();
   });
 
@@ -3237,13 +3283,13 @@
     var vw = window.innerWidth;
     if (!compactMode && vw < COMPACT_ENTER) {
       compactMode = true;
-      containerEl.classList.add('scholia-compact');
+      document.body.classList.add('scholia-compact');
       dismissCommentPrompt();
       if (!sidebarHidden) { reanchorAll(); }
       renderToolbar();
     } else if (compactMode && vw > COMPACT_LEAVE) {
       compactMode = false;
-      containerEl.classList.remove('scholia-compact');
+      document.body.classList.remove('scholia-compact');
       dismissCompactComment();
       if (!sidebarHidden) {
         scheduleRender();
