@@ -713,6 +713,13 @@ class ScholiaServer:
                 return
             doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
+                source_selector = None
+                if msg.get("source_exact"):
+                    source_selector = {
+                        "exact": msg["source_exact"],
+                        "prefix": msg.get("source_prefix", ""),
+                        "suffix": msg.get("source_suffix", ""),
+                    }
                 append_comment(
                     doc,
                     exact=msg["exact"],
@@ -720,6 +727,7 @@ class ScholiaServer:
                     suffix=msg.get("suffix", ""),
                     body_text=msg["body"],
                     creator=msg.get("creator", get_human_username()),
+                    source_selector=source_selector,
                 )
             elif msg_type == "reply":
                 append_reply(
@@ -747,12 +755,20 @@ class ScholiaServer:
             elif msg_type == "mark_unread":
                 mark_unread(doc, msg["annotation_id"])
             elif msg_type == "reanchor":
+                source_selector = None
+                if msg.get("source_exact"):
+                    source_selector = {
+                        "exact": msg["source_exact"],
+                        "prefix": msg.get("source_prefix", ""),
+                        "suffix": msg.get("source_suffix", ""),
+                    }
                 reanchor(
                     doc,
                     annotation_id=msg["annotation_id"],
                     exact=msg["exact"],
                     prefix=msg.get("prefix", ""),
                     suffix=msg.get("suffix", ""),
+                    source_selector=source_selector,
                 )
             elif msg_type == "save_as":
                 dest = msg.get("path", "")

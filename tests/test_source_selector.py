@@ -1,8 +1,10 @@
 """Tests for recoverable-text source selector storage and CLI resolution."""
 
 import pytest
+import pytest_asyncio
 from scholia.comments import append_comment, load_comments, reanchor
 from scholia.context import locate_anchor
+from scholia.server import ScholiaServer
 
 
 @pytest.fixture
@@ -135,3 +137,87 @@ def test_locate_anchor_backward_compat(tmp_path):
     selector = {"exact": "Hello world", "prefix": "", "suffix": ""}
     ctx = locate_anchor(doc, selector, rendered_text=None)
     assert ctx["found"]
+
+
+# ---------------------------------------------------------------------------
+# WebSocket tests
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def ss_client(aiohttp_client, stress_doc):
+    """aiohttp test client for source selector tests."""
+    server = ScholiaServer(str(stress_doc))
+    return await aiohttp_client(server.app), stress_doc
+
+
+@pytest.mark.asyncio
+async def test_ws_new_comment_with_source_selector(ss_client):
+    """WebSocket new_comment passes source selector through to storage."""
+    client, doc = ss_client
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(doc.resolve())})
+    await ws.send_json(
+        {
+            "type": "new_comment",
+            "exact": "converges",
+            "prefix": "garbled ",
+            "suffix": " garbled",
+            "source_exact": "converges",
+            "source_prefix": "$\\sum_k a_k$ ",
+            "source_suffix": " $\\zeta(s)$",
+            "body": "test comment",
+        }
+    )
+    await ws.close()
+    comments = load_comments(doc)
+    assert len(comments) == 1
+    ss = comments[0]["target"].get("scholia:sourceSelector")
+    assert ss is not None
+    assert ss["exact"] == "converges"
+    assert ss["prefix"] == "$\\sum_k a_k$ "
+
+
+@pytest.mark.asyncio
+async def test_ws_new_comment_without_source_selector(ss_client):
+    """WebSocket new_comment without source fields stores no source selector."""
+    client, doc = ss_client
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(doc.resolve())})
+    await ws.send_json(
+        {
+            "type": "new_comment",
+            "exact": "converges",
+            "prefix": "",
+            "suffix": "",
+            "body": "test",
+        }
+    )
+    await ws.close()
+    comments = load_comments(doc)
+    assert "scholia:sourceSelector" not in comments[0]["target"]
+
+
+@pytest.mark.asyncio
+async def test_ws_reanchor_with_source_selector(ss_client):
+    """WebSocket reanchor passes source selector through."""
+    client, doc = ss_client
+    ann = append_comment(doc, exact="converges", body_text="original")
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(doc.resolve())})
+    await ws.send_json(
+        {
+            "type": "reanchor",
+            "annotation_id": ann["id"],
+            "exact": "converges",
+            "prefix": "new browser",
+            "suffix": "new browser",
+            "source_exact": "converges",
+            "source_prefix": "new source",
+            "source_suffix": "new source",
+        }
+    )
+    await ws.close()
+    comments = load_comments(doc)
+    latest = comments[-1]
+    assert latest["target"]["scholia:sourceSelector"]["prefix"] == "new source"
