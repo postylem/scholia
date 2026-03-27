@@ -3322,7 +3322,7 @@
       document.body.classList.add('scholia-compact');
       resizeHandle.style.display = 'none';
       dismissCommentPrompt();
-      if (!sidebarHidden) { reanchorAll(); }
+      if (!sidebarHidden) { positionCards(); }
       renderToolbar();
     } else if (compactMode && vw > COMPACT_LEAVE) {
       compactMode = false;
@@ -3330,7 +3330,7 @@
       resizeHandle.style.display = '';
       dismissCompactComment();
       if (!sidebarHidden) {
-        scheduleRender();
+        positionCards();
       }
       renderToolbar();
     }
