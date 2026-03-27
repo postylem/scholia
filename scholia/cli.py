@@ -31,6 +31,17 @@ FORMAT_RAW = "raw"  # raw JSONL selector fields + metadata
 FORMAT_CHOICES = [FORMAT_CONTEXT, FORMAT_MESSAGES, FORMAT_SUMMARY, FORMAT_RAW]
 
 
+def _cli_selector(ann: dict) -> dict:
+    """Extract the best selector for CLI anchor resolution.
+
+    Prefers the source-space selector (from recoverable text extraction)
+    over the browser-space selector, since the CLI matches against raw
+    markdown.
+    """
+    target = ann.get("target", {})
+    return target.get("scholia:sourceSelector") or target.get("selector", {})
+
+
 # ── Display helpers ─────────────────────────────────────
 
 
@@ -86,7 +97,7 @@ def _print_annotation(
     context_after=2,
 ):
     """Print a single annotation in the requested format."""
-    selector = ann.get("target", {}).get("selector", {})
+    selector = _cli_selector(ann)
     exact = selector.get("exact", "")
     bodies = ann.get("body", [])
     n_msgs = len(bodies)
@@ -164,6 +175,7 @@ def _print_annotation(
 def _print_raw(ann):
     """Print raw JSONL fields for an annotation."""
     selector = ann.get("target", {}).get("selector", {})
+    source_sel = ann.get("target", {}).get("scholia:sourceSelector")
     print(f"id: {ann['id']}")
     print(f"status: {ann.get('scholia:status', '?')}")
     print(f"created: {ann.get('created', '?')}")
@@ -173,6 +185,10 @@ def _print_raw(ann):
     print(f"selector.exact: {selector.get('exact', '')}")
     print(f"selector.prefix: {selector.get('prefix', '')}")
     print(f"selector.suffix: {selector.get('suffix', '')}")
+    if source_sel:
+        print(f"sourceSelector.exact: {source_sel.get('exact', '')}")
+        print(f"sourceSelector.prefix: {source_sel.get('prefix', '')}")
+        print(f"sourceSelector.suffix: {source_sel.get('suffix', '')}")
     bodies = ann.get("body", [])
     print(f"body: {len(bodies)} message(s)")
     for i, b in enumerate(bodies):
@@ -423,7 +439,7 @@ def cmd_list(args):
         anchored = []
         orphaned = []
         for ann in items:
-            selector = ann.get("target", {}).get("selector", {})
+            selector = _cli_selector(ann)
             ctx = locate_anchor(
                 args.doc,
                 selector,

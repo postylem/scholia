@@ -2,6 +2,7 @@
 
 import pytest
 from scholia.comments import append_comment, load_comments, reanchor
+from scholia.context import locate_anchor
 
 
 @pytest.fixture
@@ -101,3 +102,36 @@ def test_reanchor_clears_source_selector_when_none(stress_doc):
     )
     updated = reanchor(stress_doc, ann["id"], exact="text")
     assert "scholia:sourceSelector" not in updated["target"]
+
+
+def test_locate_anchor_uses_source_selector(stress_doc):
+    """locate_anchor finds text using source selector when browser selector fails."""
+    source_selector = {
+        "exact": "converges",
+        "prefix": "$\\sum_k a_k$ ",
+        "suffix": " $\\zeta(s)$",
+    }
+    ctx_source = locate_anchor(stress_doc, source_selector, rendered_text=None)
+    assert ctx_source["found"]
+    assert "converges" in stress_doc.read_text().splitlines()[ctx_source["line"] - 1]
+
+
+def test_locate_anchor_source_selector_disambiguates(stress_doc):
+    """Source selector with unique prefix disambiguates identical plain text."""
+    source_selector = {
+        "exact": "Shannon's source coding theorem proves a limit.",
+        "prefix": "The Potts model generalizes the Ising model.\n\n",
+        "suffix": "\n",
+    }
+    ctx = locate_anchor(stress_doc, source_selector, rendered_text=None)
+    assert ctx["found"]
+    assert ctx["line"] == 17
+
+
+def test_locate_anchor_backward_compat(tmp_path):
+    """Old annotations without source selector still work."""
+    doc = tmp_path / "simple.md"
+    doc.write_text("---\ntitle: T\n---\n\nHello world.\n")
+    selector = {"exact": "Hello world", "prefix": "", "suffix": ""}
+    ctx = locate_anchor(doc, selector, rendered_text=None)
+    assert ctx["found"]
