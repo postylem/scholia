@@ -34,6 +34,7 @@
     'scholia-sidebar { display: contents; }',
     '#scholia-doc { grid-row: 2; grid-column: 1; }',
     'body.scholia-sidebar-hidden { grid-template-columns: 1fr 0 0; }',
+    'body.scholia-sidebar-hidden mark.scholia-highlight { background: transparent; cursor: default; }',
     'body.scholia-compact { grid-template-columns: 1fr; }',
   ].join('\n');
   document.head.appendChild(layoutStyle);
@@ -609,12 +610,12 @@
   // ── Debounced render pipeline ───────────────────────
 
   var renderRaf = 0;
-  function scheduleRender() {
+  function scheduleRender(skipAnchoring) {
     if (renderRaf) cancelAnimationFrame(renderRaf);
     renderRaf = requestAnimationFrame(function () {
       renderRaf = 0;
       renderSidebar();
-      reanchorAll();
+      if (!skipAnchoring) reanchorAll();
       positionCards();
     });
   }
@@ -993,7 +994,7 @@
         document.body.classList.remove('scholia-sidebar-hidden');
         sidebarEl.style.display = '';
         resizeHandle.style.display = '';
-        scheduleRender();
+        scheduleRender(highlights.size > 0);  // skip re-anchoring if highlights exist
         // Reposition after grid transition completes
         if (_sidebarTransitionHandler) {
           document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
@@ -1016,7 +1017,6 @@
         document.body.classList.add('scholia-sidebar-hidden');
         sidebarEl.style.display = 'none';
         resizeHandle.style.display = 'none';
-        clearAllHighlights();
         dismissCommentPrompt();
         updateOffscreenIndicators();
       }
@@ -3220,7 +3220,6 @@
           document.body.classList.add('scholia-sidebar-hidden');
           sidebarEl.style.display = 'none';
           resizeHandle.style.display = 'none';
-          clearAllHighlights();
           dismissCommentPrompt();
           updateOffscreenIndicators();
           renderToolbar();
@@ -3234,7 +3233,7 @@
         sidebarEl.style.display = '';
         resizeHandle.style.display = '';
         renderToolbar();
-        scheduleRender();
+        scheduleRender(highlights.size > 0);
       }
       var clamped = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, newWidth));
       document.body.style.setProperty('--sidebar-width', clamped + 'px');
