@@ -130,5 +130,156 @@
     return range;
   }
 
-  global.TextQuoteAnchor = { fromRange: fromRange, toRange: toRange };
+  function buildRecoverableMap(root) {
+    var text = '';
+    var entries = [];
+
+    function isInsideKatex(node) {
+      var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+      return el && el.closest && el.closest('.katex');
+    }
+
+    function walk(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (isInsideKatex(node)) return;
+        entries.push({ node: node, rtStart: text.length, type: 'text' });
+        text += node.textContent;
+        entries[entries.length - 1].rtEnd = text.length;
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+      // Math span (Pandoc outputs <span class="math inline"> or <span class="math display">)
+      // After KaTeX renders, data-latex holds the original LaTeX source
+      if (node.classList.contains('math') && node.dataset.latex) {
+        var d = node.classList.contains('display') ? '$$' : '$';
+        entries.push({ node: node, rtStart: text.length, type: 'math' });
+        text += d + node.dataset.latex + d;
+        entries[entries.length - 1].rtEnd = text.length;
+        return;
+      }
+
+      // Fallback: .math span with KaTeX annotation element (no data-latex)
+      if (node.classList.contains('math') && node.querySelector('.katex')) {
+        var ann = node.querySelector('annotation[encoding="application/x-tex"]');
+        if (ann) {
+          var d2 = node.classList.contains('display') ? '$$' : '$';
+          entries.push({ node: node, rtStart: text.length, type: 'math' });
+          text += d2 + ann.textContent + d2;
+          entries[entries.length - 1].rtEnd = text.length;
+          return;
+        }
+      }
+
+      // Skip nodes inside .katex (handled by the .math parent above)
+      if (isInsideKatex(node)) return;
+
+      // Crossref links: pandoc-crossref outputs <a href="#sec:id">sec. 1</a> etc
+      if (node.tagName === 'A') {
+        var href = node.getAttribute('href') || '';
+        var crMatch = href.match(/^#((?:sec|eq|fig|tbl|lst):.+)/);
+        if (crMatch) {
+          entries.push({ node: node, rtStart: text.length, type: 'ref' });
+          text += '@' + crMatch[1];
+          entries[entries.length - 1].rtEnd = text.length;
+          return;
+        }
+        // Citeproc links: <a href="#ref-shannon1948">...</a>
+        var citeMatch = href.match(/^#ref-(.+)/);
+        if (citeMatch) {
+          entries.push({ node: node, rtStart: text.length, type: 'cite' });
+          text += '@' + citeMatch[1];
+          entries[entries.length - 1].rtEnd = text.length;
+          return;
+        }
+      }
+
+      for (var i = 0; i < node.childNodes.length; i++) {
+        walk(node.childNodes[i]);
+      }
+    }
+
+    walk(root);
+    return { text: text, entries: entries };
+  }
+
+  function domToRT(entries, container, offset) {
+    var i;
+    // Text node: find matching entry
+    if (container.nodeType === Node.TEXT_NODE) {
+      for (i = 0; i < entries.length; i++) {
+        if (entries[i].node === container && entries[i].type === 'text') {
+          return entries[i].rtStart + Math.min(offset, container.textContent.length);
+        }
+      }
+    }
+
+    // Element node: offset is a child index
+    if (container.nodeType === Node.ELEMENT_NODE) {
+      var targetChild = container.childNodes[offset];
+      if (targetChild) {
+        for (i = 0; i < entries.length; i++) {
+          var eNode = entries[i].node;
+          if (eNode === targetChild || targetChild.contains(eNode)) {
+            return entries[i].rtStart;
+          }
+        }
+      }
+      // Past end of children: last entry inside container
+      for (i = entries.length - 1; i >= 0; i--) {
+        if (container.contains(entries[i].node)) {
+          return entries[i].rtEnd;
+        }
+      }
+    }
+
+    return 0;
+  }
+
+  function snapToMathBoundaries(range) {
+    var newRange = range.cloneRange();
+
+    var startEl = range.startContainer.nodeType === Node.TEXT_NODE
+      ? range.startContainer.parentElement : range.startContainer;
+    var startMath = startEl && startEl.closest && startEl.closest('span.math');
+    if (startMath) {
+      newRange.setStartBefore(startMath);
+    }
+
+    var endEl = range.endContainer.nodeType === Node.TEXT_NODE
+      ? range.endContainer.parentElement : range.endContainer;
+    var endMath = endEl && endEl.closest && endEl.closest('span.math');
+    if (endMath) {
+      newRange.setEndAfter(endMath);
+    }
+
+    return newRange;
+  }
+
+  function fromRangeRecoverable(root, range) {
+    var snapped = snapToMathBoundaries(range);
+    var map = buildRecoverableMap(root);
+    var text = map.text;
+
+    var start = domToRT(map.entries, snapped.startContainer, snapped.startOffset);
+    var end = domToRT(map.entries, snapped.endContainer, snapped.endOffset);
+
+    if (start > end) { var tmp = start; start = end; end = tmp; }
+    if (start === end) return null;
+
+    var CONTEXT = 256;
+    return {
+      type: 'TextQuoteSelector',
+      exact: text.slice(start, end),
+      prefix: text.slice(Math.max(0, start - CONTEXT), start),
+      suffix: text.slice(end, Math.min(text.length, end + CONTEXT)),
+    };
+  }
+
+  global.TextQuoteAnchor = {
+    fromRange: fromRange,
+    fromRangeRecoverable: fromRangeRecoverable,
+    snapToMathBoundaries: snapToMathBoundaries,
+    toRange: toRange
+  };
 })(window);

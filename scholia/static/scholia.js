@@ -992,6 +992,7 @@
     for (var i = 0; i < mathEls.length; i++) {
       var el = mathEls[i];
       var displayMode = el.classList.contains('display');
+      el.dataset.latex = el.textContent;
       try {
         katex.render(el.textContent, el, { displayMode: displayMode, throwOnError: false });
         el.classList.add('scholia-math-rendered');
