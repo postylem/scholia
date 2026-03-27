@@ -1008,11 +1008,17 @@
         document.body.addEventListener('transitionend', _sidebarTransitionHandler);
       } else {
         sidebarHidden = true;
+        // Cancel any pending show-transition handler
+        if (_sidebarTransitionHandler) {
+          document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+          _sidebarTransitionHandler = null;
+        }
         document.body.classList.add('scholia-sidebar-hidden');
         sidebarEl.style.display = 'none';
         resizeHandle.style.display = 'none';
         clearAllHighlights();
         dismissCommentPrompt();
+        updateOffscreenIndicators();
       }
       renderToolbar();
     });
@@ -3207,11 +3213,16 @@
         // Collapse: hide sidebar
         if (!sidebarHidden) {
           sidebarHidden = true;
+          if (_sidebarTransitionHandler) {
+            document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+            _sidebarTransitionHandler = null;
+          }
           document.body.classList.add('scholia-sidebar-hidden');
           sidebarEl.style.display = 'none';
           resizeHandle.style.display = 'none';
           clearAllHighlights();
           dismissCommentPrompt();
+          updateOffscreenIndicators();
           renderToolbar();
         }
         return;
@@ -3291,7 +3302,15 @@
   });
 
   // Reposition cards on resize (layout may change)
-  window.addEventListener('resize', positionCards);
+  // Debounce positionCards on resize — it's expensive (layout thrashing)
+  var resizeRaf = 0;
+  window.addEventListener('resize', function () {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(function () {
+      resizeRaf = 0;
+      positionCards();
+    });
+  });
 
   // ── Compact mode: viewport too narrow for sidebar ──
   var COMPACT_ENTER = 754;
