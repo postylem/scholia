@@ -1434,7 +1434,8 @@
     var header = document.createElement('div');
     header.className = 'scholia-card-header';
 
-    var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
+    var anchorText = (ann.target && ann.target['scholia:sourceSelector'] && ann.target['scholia:sourceSelector'].exact)
+      || (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
     var anchorSpan = document.createElement('span');
     anchorSpan.className = 'scholia-anchor-text';
     var openQ = document.createElement('span');
@@ -1831,7 +1832,8 @@
     var hdr = document.createElement('div');
     hdr.className = 'scholia-overlay-header';
 
-    var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
+    var anchorText = (ann.target && ann.target['scholia:sourceSelector'] && ann.target['scholia:sourceSelector'].exact)
+      || (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
     var hdrText = document.createElement('span');
     hdrText.className = 'scholia-overlay-anchor';
     var oOpenQ = document.createElement('span');
@@ -2508,8 +2510,9 @@
 
     var anchorDiv = document.createElement('div');
     anchorDiv.className = 'scholia-new-comment-anchor';
-    var excerpt = selector.exact.slice(0, 80);
-    anchorDiv.textContent = '\u201c' + excerpt + (selector.exact.length > 80 ? '\u2026' : '') + '\u201d';
+    var displayExact = (selector._source && selector._source.exact) || selector.exact;
+    var excerpt = displayExact.slice(0, 80);
+    anchorDiv.textContent = '\u201c' + excerpt + (displayExact.length > 80 ? '\u2026' : '') + '\u201d';
     form.appendChild(anchorDiv);
 
     var textarea = document.createElement('textarea');
@@ -2699,8 +2702,9 @@
 
     var anchorDiv = document.createElement('div');
     anchorDiv.className = 'scholia-new-comment-anchor';
-    var excerpt = selector.exact.slice(0, 80);
-    anchorDiv.textContent = '\u201c' + excerpt + (selector.exact.length > 80 ? '\u2026' : '') + '\u201d';
+    var displayExact = (selector._source && selector._source.exact) || selector.exact;
+    var excerpt = displayExact.slice(0, 80);
+    anchorDiv.textContent = '\u201c' + excerpt + (displayExact.length > 80 ? '\u2026' : '') + '\u201d';
     form.appendChild(anchorDiv);
 
     var textarea = document.createElement('textarea');
