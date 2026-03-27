@@ -61,6 +61,7 @@
   var showRead = true;
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
   var sidebarHidden = false;
+  var _sidebarTransitionHandler = null;
   var compactMode = false;   // auto-set when viewport too narrow for sidebar
   var themeMode = localStorage.getItem('scholia-theme') || 'system'; // 'light' | 'dark' | 'system'
   var darkMode = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -994,12 +995,17 @@
         resizeHandle.style.display = '';
         scheduleRender();
         // Reposition after grid transition completes
-        document.body.addEventListener('transitionend', function handler(e) {
+        if (_sidebarTransitionHandler) {
+          document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+        }
+        _sidebarTransitionHandler = function (e) {
           if (e.propertyName === 'grid-template-columns') {
-            document.body.removeEventListener('transitionend', handler);
+            document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+            _sidebarTransitionHandler = null;
             positionCards();
           }
-        });
+        };
+        document.body.addEventListener('transitionend', _sidebarTransitionHandler);
       } else {
         sidebarHidden = true;
         document.body.classList.add('scholia-sidebar-hidden');
