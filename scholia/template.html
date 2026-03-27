@@ -10,14 +10,44 @@
   <script defer src="https://cdn.jsdelivr.net/npm/markdown-it-texmath@1.0.0/texmath.min.js"></script>
   <link rel="stylesheet" href="/static/scholia.css">
   <script defer src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  {{QUARTO_HEAD}}
+  <style>
+    /* Highlight styles — in light DOM for marks on document content */
+    mark.scholia-highlight {
+      background: rgba(255, 220, 100, 0.35);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    mark.scholia-highlight.scholia-highlight-active,
+    mark.scholia-highlight:hover {
+      background: rgba(255, 200, 50, 0.55);
+    }
+    mark.scholia-highlight.scholia-highlight-resolved {
+      background: rgba(200, 200, 200, 0.25);
+    }
+    mark.scholia-highlight.scholia-highlight-resolved.scholia-highlight-active,
+    mark.scholia-highlight.scholia-highlight-resolved:hover {
+      background: rgba(180, 180, 180, 0.35);
+    }
+    mark.scholia-highlight.scholia-pulse {
+      animation: scholia-pulse 0.6s ease-out;
+    }
+    @keyframes scholia-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 200, 50, 0.7); }
+      100% { box-shadow: 0 0 0 8px rgba(255, 200, 50, 0); }
+    }
+    body.scholia-dark mark.scholia-highlight {
+      background: rgba(255, 220, 100, 0.15);
+    }
+    body.scholia-dark mark.scholia-highlight.scholia-highlight-active,
+    body.scholia-dark mark.scholia-highlight:hover {
+      background: rgba(255, 200, 50, 0.3);
+    }
+  </style>
 </head>
 <body>
-  <nav id="scholia-toolbar"></nav>
-  <div id="scholia-container">
-    <article id="scholia-doc">{{PANDOC_HTML}}</article>
-    <div id="scholia-resize-handle"></div>
-    <aside id="scholia-sidebar"></aside>
-  </div>
+  <scholia-sidebar></scholia-sidebar>
+  <article id="scholia-doc">{{PANDOC_HTML}}</article>
   <script>
   window.__SCHOLIA_CREATOR__ = {{CREATOR_NAME}};
   window.__SCHOLIA_DOC_PATH__ = {{DOC_PATH}};
@@ -26,6 +56,7 @@
   window.__SCHOLIA_COMMENTS__ = {{COMMENTS_JSON}};
   window.__SCHOLIA_STATE__ = {{STATE_JSON}};
   window.__SCHOLIA_READONLY__ = {{READONLY}};
+  window.__SCHOLIA_IS_QUARTO__ = {{IS_QUARTO}};
 </script>
   <script src="/static/vendor/dom-anchor-text-quote.js"></script>
   <script src="/static/scholia.js"></script>
