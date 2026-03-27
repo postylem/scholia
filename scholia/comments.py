@@ -144,6 +144,7 @@ def append_comment(
     creator: str | None = None,
     nickname: str | None = None,
     is_software: bool = False,
+    source_selector: dict | None = None,
 ) -> dict:
     """Create a new annotation with a TextQuoteSelector."""
     if creator is None:
@@ -154,20 +155,28 @@ def append_comment(
         exact = _pandoc_plain(exact)
     now = datetime.now(timezone.utc).isoformat()
     creator_obj = _make_creator(creator, nickname, is_software=is_software)
+    target: dict = {
+        "selector": {
+            "type": "TextQuoteSelector",
+            "exact": exact,
+            "prefix": prefix,
+            "suffix": suffix,
+        }
+    }
+    if source_selector is not None:
+        target["scholia:sourceSelector"] = {
+            "type": "TextQuoteSelector",
+            "exact": source_selector.get("exact", ""),
+            "prefix": source_selector.get("prefix", ""),
+            "suffix": source_selector.get("suffix", ""),
+        }
     ann = {
         "@context": "http://www.w3.org/ns/anno.jsonld",
         "id": f"urn:uuid:{uuid.uuid4()}",
         "type": "Annotation",
         "created": now,
         "creator": creator_obj,
-        "target": {
-            "selector": {
-                "type": "TextQuoteSelector",
-                "exact": exact,
-                "prefix": prefix,
-                "suffix": suffix,
-            }
-        },
+        "target": target,
         "body": [
             {
                 "type": "TextualBody",
@@ -305,6 +314,7 @@ def reanchor(
     exact: str,
     prefix: str = "",
     suffix: str = "",
+    source_selector: dict | None = None,
 ) -> dict:
     """Re-anchor an annotation to new text."""
     comments = load_comments(doc_path)
@@ -323,6 +333,15 @@ def reanchor(
         "prefix": prefix,
         "suffix": suffix,
     }
+    if source_selector is not None:
+        ann["target"]["scholia:sourceSelector"] = {
+            "type": "TextQuoteSelector",
+            "exact": source_selector.get("exact", ""),
+            "prefix": source_selector.get("prefix", ""),
+            "suffix": source_selector.get("suffix", ""),
+        }
+    else:
+        ann["target"].pop("scholia:sourceSelector", None)
     ann["modified"] = now
 
     path = annotation_path(doc_path)
