@@ -1539,30 +1539,10 @@ body {
 body.scholia-sidebar-hidden {
   grid-template-columns: 1fr 0px 0px;
 }
-body.scholia-sidebar-hidden .scholia-resize-handle {
-  display: none;
-}
-body.scholia-sidebar-hidden .scholia-sidebar {
-  overflow: hidden;
-  padding: 0;
-  opacity: 0;
-  border-left-color: transparent;
-  pointer-events: none;
-}
 
 /* ── Compact mode: sidebar hidden, highlights stay ── */
 body.scholia-compact {
   grid-template-columns: 1fr 0px 0px;
-}
-body.scholia-compact .scholia-resize-handle {
-  display: none;
-}
-body.scholia-compact .scholia-sidebar {
-  overflow: hidden;
-  padding: 0;
-  opacity: 0;
-  border-left-color: transparent;
-  pointer-events: none;
 }
 
 /* Compact new-comment overlay */

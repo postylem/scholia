@@ -35,7 +35,6 @@
     '#scholia-doc { grid-row: 2; grid-column: 1; }',
     'body.scholia-sidebar-hidden { grid-template-columns: 1fr 0 0; }',
     'body.scholia-compact { grid-template-columns: 1fr; }',
-    'body.scholia-compact .scholia-resize-handle { display: none; }',
   ].join('\n');
   document.head.appendChild(layoutStyle);
 
@@ -772,9 +771,13 @@
         btn.className = fontMode === mode ? 'active' : '';
         btn.addEventListener('click', function () {
           document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
+          shadowHost.classList.remove('scholia-font-system', 'scholia-font-latex');
           fontMode = mode;
           localStorage.setItem('scholia-font', mode);
-          if (mode !== 'default') document.body.classList.add('scholia-font-' + mode);
+          if (mode !== 'default') {
+            document.body.classList.add('scholia-font-' + mode);
+            shadowHost.classList.add('scholia-font-' + mode);
+          }
           menu.remove();
           renderToolbar();
         });
@@ -989,6 +992,8 @@
       if (sidebarHidden) {
         sidebarHidden = false;
         document.body.classList.remove('scholia-sidebar-hidden');
+        sidebarEl.style.display = '';
+        resizeHandle.style.display = '';
         scheduleRender();
         // Reposition after grid transition completes
         document.body.addEventListener('transitionend', function handler(e) {
@@ -1000,6 +1005,8 @@
       } else {
         sidebarHidden = true;
         document.body.classList.add('scholia-sidebar-hidden');
+        sidebarEl.style.display = 'none';
+        resizeHandle.style.display = 'none';
         clearAllHighlights();
         dismissCommentPrompt();
       }
@@ -3197,6 +3204,8 @@
         if (!sidebarHidden) {
           sidebarHidden = true;
           document.body.classList.add('scholia-sidebar-hidden');
+          sidebarEl.style.display = 'none';
+          resizeHandle.style.display = 'none';
           clearAllHighlights();
           dismissCommentPrompt();
           renderToolbar();
@@ -3207,6 +3216,8 @@
       if (sidebarHidden) {
         sidebarHidden = false;
         document.body.classList.remove('scholia-sidebar-hidden');
+        sidebarEl.style.display = '';
+        resizeHandle.style.display = '';
         renderToolbar();
         scheduleRender();
       }
@@ -3236,7 +3247,10 @@
     document.body.classList.add('scholia-dark');
     shadowHost.classList.add('scholia-dark');
   }
-  if (fontMode !== 'default') document.body.classList.add('scholia-font-' + fontMode);
+  if (fontMode !== 'default') {
+    document.body.classList.add('scholia-font-' + fontMode);
+    shadowHost.classList.add('scholia-font-' + fontMode);
+  }
   if (uiZoom !== 100) applyZoom();
 
   // Track system theme changes for 'system' mode
@@ -3284,12 +3298,14 @@
     if (!compactMode && vw < COMPACT_ENTER) {
       compactMode = true;
       document.body.classList.add('scholia-compact');
+      resizeHandle.style.display = 'none';
       dismissCommentPrompt();
       if (!sidebarHidden) { reanchorAll(); }
       renderToolbar();
     } else if (compactMode && vw > COMPACT_LEAVE) {
       compactMode = false;
       document.body.classList.remove('scholia-compact');
+      resizeHandle.style.display = '';
       dismissCompactComment();
       if (!sidebarHidden) {
         scheduleRender();
