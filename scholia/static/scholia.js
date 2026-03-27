@@ -3141,7 +3141,7 @@
   }
 
   function updateOffscreenIndicators() {
-    if (sidebarHidden) {
+    if (sidebarHidden || compactMode) {
       aboveIndicator.style.display = 'none';
       belowIndicator.style.display = 'none';
       return;
@@ -3323,6 +3323,7 @@
       resizeHandle.style.display = 'none';
       sidebarEl.style.display = 'none';
       dismissCommentPrompt();
+      updateOffscreenIndicators();
       renderToolbar();
     } else if (compactMode && vw > COMPACT_LEAVE) {
       compactMode = false;
