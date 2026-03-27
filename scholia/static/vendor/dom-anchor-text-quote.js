@@ -22,7 +22,7 @@
     preRange.setEnd(range.startContainer, range.startOffset);
     var start = preRange.toString().length;
 
-    var CONTEXT = 32;
+    var CONTEXT = 256;
     var prefixStart = Math.max(0, start - CONTEXT);
     var suffixEnd = Math.min(text.length, start + selected.length + CONTEXT);
 
