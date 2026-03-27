@@ -18,7 +18,7 @@ from scholia.comments import (
     short_id_map,
     unresolve,
 )
-from scholia.context import locate_anchor
+from scholia.context import locate_anchor, render_doc_plain
 from scholia.state import is_unread, load_state, mark_read, mark_unread, state_path
 
 
@@ -370,6 +370,87 @@ def test_locate_anchor_context_zero_zero(tmp_doc):
     ctx = locate_anchor(tmp_doc, selector, context_before=0, context_after=0)
     assert ctx["found"]
     assert len(ctx["context_lines"]) >= 1  # at least anchor + caret
+
+
+def test_locate_anchor_disambiguates_duplicate_text(tmp_doc):
+    """Scoring picks the right occurrence when exact text appears multiple times.
+
+    The tmp_doc fixture has "Duplicate text here." on lines 9 and 11.
+    Prefix/suffix context should disambiguate between them.
+    """
+    # Target the second occurrence (line 11) using surrounding context.
+    selector = {
+        "exact": "Duplicate text here.",
+        "prefix": "Duplicate text here.\n\n",
+        "suffix": "\n",
+    }
+    ctx = locate_anchor(tmp_doc, selector, rendered_text=None)
+    assert ctx["found"]
+    assert ctx["line"] == 11  # second occurrence, not first
+
+
+def test_locate_anchor_browser_math_prefix(tmp_path):
+    """Rendered-text scoring disambiguates browser annotations near math.
+
+    This tests the core anchoring bug: the browser captures prefix/suffix
+    from the rendered DOM (where KaTeX turns math into complex text), but
+    the CLI resolves against raw markdown.  When the same word appears
+    multiple times, the rendered-math prefix can't match raw markdown,
+    so the old all-or-nothing approach fell back to first occurrence.
+
+    The document below has "boosh" twice — once in plain text, once after
+    inline math.  The annotation targets the second occurrence.
+
+    Three text representations exist for the math `$2 + 3 = 5$`:
+
+      Raw markdown : ...Math $2 + 3 = 5$ boosh...
+                                       ^
+                                  '$' before the space
+
+      Pandoc plain : ...Math 2 + 3 = 5 boosh...
+                                     ^
+                                '5' before the space
+
+      Browser DOM  : ...Math 2+3=52 + 3 = 52+3=5 boosh...
+                     (KaTeX concatenates visual, source, and aria text)
+                                              ^
+                                         '5' before the space
+
+    The stored prefix ends with "...=5 " (from KaTeX).  Scoring this
+    against raw text gives every occurrence the same score (only the
+    trailing space matches, because raw has '$' where rendered has '5').
+    Scoring against Pandoc plain text gives the correct occurrence one
+    extra match on '5', breaking the tie.
+
+    The KaTeX text pattern (flattened + source + flattened) is based on
+    real annotations observed in production — see the e^{iπ}+1=0 prefix
+    stored in temp.md.scholia.jsonl.
+    """
+    doc = tmp_path / "math_dup.md"
+    doc.write_text(
+        #  line 1: "boosh" in plain-text context
+        #  line 3: "boosh" after inline math  ← annotation target
+        "Before boosh end.\n"
+        "\n"
+        "Math $2 + 3 = 5$ boosh end.\n"
+    )
+    # Prefix simulates what the browser stores: KaTeX renders $2+3=5$
+    # as "2+3=52 + 3 = 52+3=5" (flattened rendering, LaTeX source,
+    # flattened rendering).  The last chars before "boosh" are "=5 ".
+    #
+    # Suffix is identical after both occurrences (" end.") so it
+    # cannot disambiguate — only the prefix + rendered text can.
+    selector = {
+        "exact": "boosh",
+        "prefix": "2+3=52 + 3 = 52+3=5 ",
+        "suffix": " end.",
+    }
+    ctx = locate_anchor(doc, selector)
+    assert ctx["found"]
+    assert ctx["line"] == 3, (
+        f"Expected line 3 (2nd 'boosh', after math), got line {ctx['line']}. "
+        "Browser/CLI anchor disagreement — rendered-text scoring failed."
+    )
 
 
 # ── CLI export ─────────────────────────────────────────

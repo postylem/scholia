@@ -2,15 +2,100 @@
 
 import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 
-def _find_anchor_pos(full_text: str, selector: dict) -> int | None:
+def _find_all_occurrences(text: str, exact: str) -> list[int]:
+    """Find all character offsets where *exact* appears in *text*."""
+    candidates: list[int] = []
+    start = 0
+    while True:
+        idx = text.find(exact, start)
+        if idx == -1:
+            break
+        candidates.append(idx)
+        start = idx + 1
+    return candidates
+
+
+def _score_candidate(text: str, idx: int, exact: str, prefix: str, suffix: str) -> int:
+    """Score a single candidate by prefix/suffix character overlap.
+
+    Mirrors the browser's ``toRange()`` logic: count consecutive matching
+    characters from the boundary between context and exact text.
+    """
+    score = 0
+    if prefix:
+        before = text[max(0, idx - len(prefix)):idx]
+        for i in range(min(len(before), len(prefix))):
+            if before[len(before) - 1 - i] == prefix[len(prefix) - 1 - i]:
+                score += 1
+            else:
+                break
+    if suffix:
+        after = text[idx + len(exact):idx + len(exact) + len(suffix)]
+        for i in range(min(len(after), len(suffix))):
+            if after[i] == suffix[i]:
+                score += 1
+            else:
+                break
+    return score
+
+
+def _best_by_scoring(text: str, candidates: list[int], exact: str,
+                     prefix: str, suffix: str) -> tuple[int, bool]:
+    """Pick the best candidate using prefix/suffix scoring.
+
+    Returns ``(char_offset, is_decisive)`` where *is_decisive* is True when
+    the winner's score is strictly greater than the runner-up's.
+    """
+    best_idx = candidates[0]
+    best_score = -1
+    second_best = -1
+    for idx in candidates:
+        s = _score_candidate(text, idx, exact, prefix, suffix)
+        if s > best_score:
+            second_best = best_score
+            best_score = s
+            best_idx = idx
+        elif s > second_best:
+            second_best = s
+    return best_idx, (best_score > second_best)
+
+
+def render_doc_plain(doc_path: str | Path) -> str | None:
+    """Render a document to plain text via Pandoc for anchor resolution.
+
+    Returns the plain-text rendering, or None if Pandoc is unavailable.
+    """
+    if not shutil.which("pandoc"):
+        return None
+    try:
+        result = subprocess.run(
+            ["pandoc", "-t", "plain", "--wrap=none", str(doc_path)],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            return result.stdout
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return None
+
+
+def _find_anchor_pos(full_text: str, selector: dict,
+                     rendered_text: str | None = None) -> int | None:
     """Find the character offset where the exact anchor text starts.
 
-    Uses prefix+exact+suffix for precise disambiguation, falls back to exact only.
-    Returns character offset into full_text, or None if not found.
+    Uses prefix/suffix scoring (like the browser's ``toRange()``) to
+    disambiguate when the exact text appears multiple times.  When
+    *rendered_text* is supplied (Pandoc plain-text rendering of the
+    document), it is also scored — this handles annotations whose
+    prefix/suffix were captured from the browser's rendered DOM.
+
+    Returns a character offset into *full_text*, or None if not found.
     """
     exact = selector.get("exact", "")
     prefix = selector.get("prefix", "")
@@ -18,16 +103,36 @@ def _find_anchor_pos(full_text: str, selector: dict) -> int | None:
     if not exact:
         return None
 
-    # Try prefix+exact+suffix for precise match
-    if prefix or suffix:
-        pattern = re.escape(prefix) + re.escape(exact) + re.escape(suffix)
-        m = re.search(pattern, full_text)
-        if m:
-            return m.start() + len(prefix)
+    raw_candidates = _find_all_occurrences(full_text, exact)
+    if not raw_candidates:
+        return None
+    if len(raw_candidates) == 1:
+        return raw_candidates[0]
 
-    # Fall back to just exact
-    pos = full_text.find(exact)
-    return pos if pos >= 0 else None
+    # Multiple occurrences — disambiguate via prefix/suffix scoring.
+    if not prefix and not suffix:
+        return raw_candidates[0]
+
+    raw_best, raw_decisive = _best_by_scoring(
+        full_text, raw_candidates, exact, prefix, suffix)
+
+    if raw_decisive:
+        return raw_best
+
+    # Raw scoring was ambiguous.  Try rendered text (closer to browser DOM).
+    if rendered_text is not None:
+        rendered_candidates = _find_all_occurrences(rendered_text, exact)
+        if rendered_candidates:
+            rendered_best, rendered_decisive = _best_by_scoring(
+                rendered_text, rendered_candidates, exact, prefix, suffix)
+            if rendered_decisive:
+                # Map rendered occurrence index back to raw text.
+                occurrence = rendered_candidates.index(rendered_best)
+                if occurrence < len(raw_candidates):
+                    return raw_candidates[occurrence]
+
+    # Fallback: best raw score (or first occurrence if all tied at 0).
+    return raw_best
 
 
 def _heading_breadcrumb(lines: list[str], anchor_line: int) -> tuple[str | None, int | None]:
@@ -123,8 +228,15 @@ def format_orphan_context(selector: dict) -> list[str]:
     return _fmt_gutter_line(gutter, full_line, (col_s, col_e), color)
 
 
-def locate_anchor(doc_path: str | Path, selector: dict, *, context_before: int = 2, context_after: int = 2) -> dict:
+def locate_anchor(doc_path: str | Path, selector: dict, *,
+                  context_before: int = 2, context_after: int = 2,
+                  rendered_text: str | None = ...) -> dict:
     """Find an annotation's anchor in the document and return context.
+
+    *rendered_text* is an optional Pandoc plain-text rendering of the
+    document used for better anchor disambiguation.  Pass ``None`` to
+    skip rendered-text scoring; omit (or pass the sentinel ``...``) to
+    have it computed automatically via :func:`render_doc_plain`.
 
     Returns a dict with:
         found: bool
@@ -140,7 +252,10 @@ def locate_anchor(doc_path: str | Path, selector: dict, *, context_before: int =
     lines = text.splitlines()
     exact = selector.get("exact", "")
 
-    char_pos = _find_anchor_pos(text, selector)
+    if rendered_text is ...:
+        rendered_text = render_doc_plain(path)
+
+    char_pos = _find_anchor_pos(text, selector, rendered_text=rendered_text)
     if char_pos is None:
         return {"found": False, "line": None, "heading": None, "context_lines": None}
 

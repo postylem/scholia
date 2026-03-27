@@ -21,7 +21,7 @@ from scholia.comments import (
     short_id_map,
     unresolve,
 )
-from scholia.context import format_orphan_context, locate_anchor
+from scholia.context import format_orphan_context, locate_anchor, render_doc_plain
 
 
 # ── Format constants ────────────────────────────────────
@@ -391,13 +391,15 @@ def cmd_list(args):
     show_status = args.all
 
     if args.fmt == FORMAT_CONTEXT and args.doc:
+        rendered_text = render_doc_plain(args.doc)
         anchored = []
         orphaned = []
         for ann in items:
             selector = ann.get("target", {}).get("selector", {})
             ctx = locate_anchor(args.doc, selector,
                                 context_before=context_before,
-                                context_after=context_after)
+                                context_after=context_after,
+                                rendered_text=rendered_text)
             if ctx["found"]:
                 anchored.append((ann, ctx))
             else:
