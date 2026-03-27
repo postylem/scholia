@@ -226,21 +226,33 @@
       // Skip nodes inside .katex (handled by the .math parent above)
       if (isInsideKatex(node)) return;
 
+      // Citation spans: <span class="citation" data-cites="key">(...)</span>
+      // Treat the whole span as atomic — replace with @key
+      if (node.classList && node.classList.contains('citation') && node.dataset.cites) {
+        entries.push({ node: node, rtStart: text.length, type: 'cite' });
+        text += '@' + node.dataset.cites;
+        entries[entries.length - 1].rtEnd = text.length;
+        return;
+      }
+
       // Crossref links: pandoc-crossref outputs <a href="#sec:id">sec. 1</a> etc
       if (node.tagName === 'A') {
         var href = node.getAttribute('href') || '';
         var crMatch = href.match(/^#((?:sec|eq|fig|tbl|lst):.+)/);
         if (crMatch) {
+          // Trim pandoc-crossref display prefix from preceding text
+          // e.g., "eq.\xa0", "§\xa0", "fig.\xa0" etc.
+          if (entries.length > 0 && entries[entries.length - 1].type === 'text') {
+            var prev = entries[entries.length - 1];
+            var prevText = text.slice(prev.rtStart);
+            var trimmed = prevText.replace(/(?:§|sec\.|eq\.|fig\.|tbl\.|lst\.)[\s\xa0]*$/, '');
+            if (trimmed.length < prevText.length) {
+              text = text.slice(0, prev.rtStart) + trimmed;
+              prev.rtEnd = text.length;
+            }
+          }
           entries.push({ node: node, rtStart: text.length, type: 'ref' });
           text += '@' + crMatch[1];
-          entries[entries.length - 1].rtEnd = text.length;
-          return;
-        }
-        // Citeproc links: <a href="#ref-shannon1948">...</a>
-        var citeMatch = href.match(/^#ref-(.+)/);
-        if (citeMatch) {
-          entries.push({ node: node, rtStart: text.length, type: 'cite' });
-          text += '@' + citeMatch[1];
           entries[entries.length - 1].rtEnd = text.length;
           return;
         }
@@ -307,6 +319,8 @@
     if (!el || !el.closest) return null;
     var math = el.closest('span.math');
     if (math) return math;
+    var citation = el.closest('span.citation');
+    if (citation) return citation;
     var link = el.closest('a');
     if (link) {
       var href = link.getAttribute('href') || '';
