@@ -1,10 +1,14 @@
 """Tests for recoverable-text source selector storage and CLI resolution."""
 
+from pathlib import Path
+
 import pytest
 import pytest_asyncio
 from scholia.comments import append_comment, load_comments, reanchor
 from scholia.context import locate_anchor
 from scholia.server import ScholiaServer
+
+STRESS_DOC = Path(__file__).parent / "fixtures" / "anchoring-stress.md"
 
 
 @pytest.fixture
@@ -221,3 +225,103 @@ async def test_ws_reanchor_with_source_selector(ss_client):
     comments = load_comments(doc)
     latest = comments[-1]
     assert latest["target"]["scholia:sourceSelector"]["prefix"] == "new source"
+
+
+# ---------------------------------------------------------------------------
+# End-to-end tests with anchoring-stress fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def stress_fixture(tmp_path):
+    """Copy the anchoring stress-test fixture for isolated testing."""
+    dest = tmp_path / "anchoring-stress.md"
+    dest.write_text(STRESS_DOC.read_text())
+    return dest
+
+
+def test_math_surrounded_word_variant_one(stress_fixture):
+    """Source selector disambiguates 'converges' in Variant One vs Two."""
+    ann = append_comment(
+        stress_fixture,
+        exact="converges",
+        prefix="garbled katex ",
+        suffix=" garbled katex",
+        body_text="Variant One comment",
+        source_selector={
+            "exact": "converges",
+            "prefix": "$\\sum_k a_k$ ",
+            "suffix": " $\\zeta(s)$\nto a finite limit when",
+        },
+    )
+    source_sel = ann["target"]["scholia:sourceSelector"]
+    ctx = locate_anchor(stress_fixture, source_sel, rendered_text=None)
+    assert ctx["found"]
+    line_text = stress_fixture.read_text().splitlines()[ctx["line"] - 1]
+    assert "zeta(s)$" in line_text  # Variant One line, not Two
+
+
+def test_math_surrounded_word_variant_two(stress_fixture):
+    """Source selector disambiguates 'converges' in Variant Two."""
+    ann = append_comment(
+        stress_fixture,
+        exact="converges",
+        prefix="garbled katex ",
+        suffix=" garbled katex",
+        body_text="Variant Two comment",
+        source_selector={
+            "exact": "converges",
+            "prefix": "$\\sum_k a_k$ ",
+            "suffix": " $\\zeta(s)\\zeta(2s)$\nto a finite limit provided",
+        },
+    )
+    source_sel = ann["target"]["scholia:sourceSelector"]
+    ctx = locate_anchor(stress_fixture, source_sel, rendered_text=None)
+    assert ctx["found"]
+    line_text = stress_fixture.read_text().splitlines()[ctx["line"] - 1]
+    assert "zeta(2s)" in line_text  # Variant Two line
+
+
+def test_crossref_anchor(stress_fixture):
+    """Source selector with @sec:id matches raw crossref in source."""
+    ann = append_comment(
+        stress_fixture,
+        exact="sec. 1",
+        prefix="As shown in ",
+        suffix=", identical text",
+        body_text="crossref comment",
+        source_selector={
+            "exact": "@sec:identical",
+            "prefix": "As shown in ",
+            "suffix": ", identical text",
+        },
+    )
+    source_sel = ann["target"]["scholia:sourceSelector"]
+    ctx = locate_anchor(stress_fixture, source_sel, rendered_text=None)
+    assert ctx["found"]
+    line_text = stress_fixture.read_text().splitlines()[ctx["line"] - 1]
+    assert "@sec:identical" in line_text
+
+
+def test_display_equation_anchor(stress_fixture):
+    """Source selector anchors to display math with equation ID."""
+    ann = append_comment(
+        stress_fixture,
+        exact="garbled ELBO katex",
+        prefix="the objective is:\n\n",
+        suffix="",
+        body_text="equation comment",
+        source_selector={
+            "exact": (
+                "$$L_\\phi = \\mathbb{E}_{z \\sim p}"
+                "\\left[\\log \\frac{p(z)}{q_\\phi(z)}\\right]$$"
+            ),
+            "prefix": "the objective is:\n\n",
+            "suffix": " {#eq:elbo}",
+        },
+    )
+    source_sel = ann["target"]["scholia:sourceSelector"]
+    ctx = locate_anchor(stress_fixture, source_sel, rendered_text=None)
+    assert ctx["found"]
+    line_text = stress_fixture.read_text().splitlines()[ctx["line"] - 1]
+    assert "L_\\phi" in line_text or r"L_\phi" in line_text
