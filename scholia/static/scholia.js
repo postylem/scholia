@@ -2128,19 +2128,25 @@
       if (!showRead && !isUnread(ann)) continue;
 
       var selector = ann.target && ann.target.selector;
-      if (!selector || !selector.exact) {
+      var srcSel = ann.target && ann.target['scholia:sourceSelector'];
+      var via = ann['scholia:via'];
+
+      if ((!selector || !selector.exact) && (!srcSel || !srcSel.exact)) {
         orphanIds.add(ann.id);
         continue;
       }
 
-      var range = TextQuoteAnchor.toRange(docEl, selector);
-      // Fallback: try source selector in recoverable text space
-      if (!range) {
-        var srcSel = ann.target && ann.target['scholia:sourceSelector'];
-        if (srcSel && srcSel.exact) {
-          range = TextQuoteAnchor.toRangeRecoverable(docEl, srcSel);
-        }
+      // CLI annotations: source selector is authoritative (browser selector is approximate)
+      // Browser annotations: browser selector is authoritative (source selector is fallback)
+      var range = null;
+      if (via === 'cli') {
+        if (srcSel && srcSel.exact) range = TextQuoteAnchor.toRangeRecoverable(docEl, srcSel);
+        if (!range && selector && selector.exact) range = TextQuoteAnchor.toRange(docEl, selector);
+      } else {
+        if (selector && selector.exact) range = TextQuoteAnchor.toRange(docEl, selector);
+        if (!range && srcSel && srcSel.exact) range = TextQuoteAnchor.toRangeRecoverable(docEl, srcSel);
       }
+
       if (!range) {
         orphanIds.add(ann.id);
         continue;
