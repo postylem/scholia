@@ -2465,8 +2465,19 @@
     // Ignore if inside the comment form
     if (pendingForm && pendingForm.contains(range.commonAncestorContainer)) return;
 
-    var selector = TextQuoteAnchor.fromRange(docEl, range);
+    // Snap selection to math expression boundaries
+    var snapped = TextQuoteAnchor.snapToMathBoundaries(range);
+
+    var selector = TextQuoteAnchor.fromRange(docEl, snapped);
     if (!selector.exact.trim()) return;
+
+    // Build source-space selector for CLI resolution
+    var sourceSelector = TextQuoteAnchor.fromRangeRecoverable(docEl, snapped);
+    selector._source = sourceSelector;
+
+    // Update visual selection to reflect snapped boundaries
+    sel.removeAllRanges();
+    sel.addRange(snapped);
 
     if (compactMode) {
       showCompactCommentForm(selector);
@@ -2474,7 +2485,7 @@
     }
 
     // Position: at selection top, or viewport top if selection starts off-screen
-    var rangeRect = range.getBoundingClientRect();
+    var rangeRect = snapped.getBoundingClientRect();
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
     var trueAnchorY = rangeRect.top - sidebarTop;
     var initialY = Math.max(rangeRect.top, 0) - sidebarTop;
@@ -2530,13 +2541,19 @@
       if (!text) return;
 
       var doSend = function () {
-        wsSend({
+        var payload = {
           type: 'new_comment',
           exact: pendingSelector.exact,
           prefix: pendingSelector.prefix,
           suffix: pendingSelector.suffix,
           body: text
-        });
+        };
+        if (pendingSelector._source) {
+          payload.source_exact = pendingSelector._source.exact;
+          payload.source_prefix = pendingSelector._source.prefix;
+          payload.source_suffix = pendingSelector._source.suffix;
+        }
+        wsSend(payload);
         dismissCommentPrompt();
         window.getSelection().removeAllRanges();
       };
@@ -2712,13 +2729,19 @@
       e.stopPropagation();
       var text = textarea.value.trim();
       if (!text) return;
-      wsSend({
+      var compactPayload = {
         type: 'new_comment',
         exact: compactSelector.exact,
         prefix: compactSelector.prefix,
         suffix: compactSelector.suffix,
         body: text
-      });
+      };
+      if (compactSelector._source) {
+        compactPayload.source_exact = compactSelector._source.exact;
+        compactPayload.source_prefix = compactSelector._source.prefix;
+        compactPayload.source_suffix = compactSelector._source.suffix;
+      }
+      wsSend(compactPayload);
       dismissCompactComment();
     });
     actions.appendChild(submitBtn);
@@ -2864,20 +2887,30 @@
     var range = sel.getRangeAt(0);
     if (!docEl.contains(range.commonAncestorContainer)) return;
 
-    var selector = TextQuoteAnchor.fromRange(docEl, range);
+    // Snap selection to math expression boundaries
+    var snapped = TextQuoteAnchor.snapToMathBoundaries(range);
+
+    var selector = TextQuoteAnchor.fromRange(docEl, snapped);
     if (!selector.exact.trim()) return;
+
+    // Build source-space selector for CLI resolution
+    var sourceSelector = TextQuoteAnchor.fromRangeRecoverable(docEl, snapped);
 
     var annId = reanchorAnnotationId;
     var card = reanchorCard;
 
     // Send reanchor
-    wsSend({
+    var reanchorPayload = {
       type: 'reanchor',
       annotation_id: annId,
       exact: selector.exact,
       prefix: selector.prefix,
       suffix: selector.suffix,
-    });
+      source_exact: sourceSelector.exact,
+      source_prefix: sourceSelector.prefix,
+      source_suffix: sourceSelector.suffix,
+    };
+    wsSend(reanchorPayload);
     window.getSelection().removeAllRanges();
 
     // Clean up prompt, fade out dim
