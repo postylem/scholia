@@ -227,10 +227,14 @@
       if (isInsideKatex(node)) return;
 
       // Citation spans: <span class="citation" data-cites="key">(...)</span>
-      // Treat the whole span as atomic — replace with @key
+      // Parenthetical citations start with "(" → source is [@key]
+      // Narrative citations (e.g., "Turing (1936)") → source is @key
       if (node.classList && node.classList.contains('citation') && node.dataset.cites) {
+        var citeKey = node.dataset.cites;
+        var isParenthetical = (node.textContent || '').trimStart().charAt(0) === '(';
+        var citeText = isParenthetical ? '[@' + citeKey + ']' : '@' + citeKey;
         entries.push({ node: node, rtStart: text.length, type: 'cite' });
-        text += '@' + node.dataset.cites;
+        text += citeText;
         entries[entries.length - 1].rtEnd = text.length;
         return;
       }
