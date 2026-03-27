@@ -67,6 +67,30 @@ def _best_by_scoring(
     return best_idx, (best_score > second_best)
 
 
+def generate_selector_context(
+    text: str, exact: str, pos: int, *, max_context: int = 1024
+) -> tuple[str, str]:
+    """Generate adaptive prefix/suffix context for *exact* at *pos*.
+
+    Starts with 32 chars and doubles until the context uniquely
+    identifies this occurrence, or hits *max_context*.
+    """
+    candidates = _find_all_occurrences(text, exact)
+    ctx = 32
+    if len(candidates) > 1:
+        while ctx < max_context:
+            prefix = text[max(0, pos - ctx) : pos]
+            suffix = text[pos + len(exact) : min(len(text), pos + len(exact) + ctx)]
+            best, decisive = _best_by_scoring(text, candidates, exact, prefix, suffix)
+            if decisive and best == pos:
+                break
+            ctx *= 2
+    return (
+        text[max(0, pos - ctx) : pos],
+        text[pos + len(exact) : min(len(text), pos + len(exact) + ctx)],
+    )
+
+
 def render_doc_plain(doc_path: str | Path) -> str | None:
     """Render a document to plain text via Pandoc for anchor resolution.
 

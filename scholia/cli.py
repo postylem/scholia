@@ -31,6 +31,17 @@ FORMAT_RAW = "raw"  # raw JSONL selector fields + metadata
 FORMAT_CHOICES = [FORMAT_CONTEXT, FORMAT_MESSAGES, FORMAT_SUMMARY, FORMAT_RAW]
 
 
+def _cli_selector(ann: dict) -> dict:
+    """Extract the best selector for CLI anchor resolution.
+
+    Prefers the source-space selector (from recoverable text extraction)
+    over the browser-space selector, since the CLI matches against raw
+    markdown.
+    """
+    target = ann.get("target", {})
+    return target.get("scholia:sourceSelector") or target.get("selector", {})
+
+
 # ── Display helpers ─────────────────────────────────────
 
 
@@ -86,7 +97,7 @@ def _print_annotation(
     context_after=2,
 ):
     """Print a single annotation in the requested format."""
-    selector = ann.get("target", {}).get("selector", {})
+    selector = _cli_selector(ann)
     exact = selector.get("exact", "")
     bodies = ann.get("body", [])
     n_msgs = len(bodies)
@@ -164,6 +175,7 @@ def _print_annotation(
 def _print_raw(ann):
     """Print raw JSONL fields for an annotation."""
     selector = ann.get("target", {}).get("selector", {})
+    source_sel = ann.get("target", {}).get("scholia:sourceSelector")
     print(f"id: {ann['id']}")
     print(f"status: {ann.get('scholia:status', '?')}")
     print(f"created: {ann.get('created', '?')}")
@@ -173,6 +185,10 @@ def _print_raw(ann):
     print(f"selector.exact: {selector.get('exact', '')}")
     print(f"selector.prefix: {selector.get('prefix', '')}")
     print(f"selector.suffix: {selector.get('suffix', '')}")
+    if source_sel:
+        print(f"sourceSelector.exact: {source_sel.get('exact', '')}")
+        print(f"sourceSelector.prefix: {source_sel.get('prefix', '')}")
+        print(f"sourceSelector.suffix: {source_sel.get('suffix', '')}")
     bodies = ann.get("body", [])
     print(f"body: {len(bodies)} message(s)")
     for i, b in enumerate(bodies):
@@ -423,7 +439,7 @@ def cmd_list(args):
         anchored = []
         orphaned = []
         for ann in items:
-            selector = ann.get("target", {}).get("selector", {})
+            selector = _cli_selector(ann)
             ctx = locate_anchor(
                 args.doc,
                 selector,
@@ -514,14 +530,47 @@ def cmd_edit(args):
 
 
 def cmd_comment(args):
+    from scholia.comments import _pandoc_plain
+    from scholia.context import generate_selector_context, render_doc_plain
+
     creator, nickname, is_software = _resolve_author(args)
+    raw_exact = args.anchor
+    doc_text = Path(args.doc).read_text(encoding="utf-8")
+
+    # Source selector: find in raw markdown, generate adaptive context
+    pos = doc_text.find(raw_exact)
+    if pos == -1:
+        print("Error: anchor text not found in document", file=sys.stderr)
+        sys.exit(1)
+    source_prefix, source_suffix = generate_selector_context(doc_text, raw_exact, pos)
+    source_selector = {
+        "exact": raw_exact,
+        "prefix": source_prefix,
+        "suffix": source_suffix,
+    }
+
+    # Browser selector: find in pandoc plain-text rendering for DOM re-anchoring
+    browser_exact = _pandoc_plain(raw_exact) if is_software else raw_exact
+    browser_prefix, browser_suffix = "", ""
+    rendered = render_doc_plain(args.doc)
+    if rendered:
+        rpos = rendered.find(browser_exact)
+        if rpos != -1:
+            browser_prefix, browser_suffix = generate_selector_context(
+                rendered, browser_exact, rpos
+            )
+
     ann = append_comment(
         args.doc,
-        exact=args.anchor,
+        exact=browser_exact,
+        prefix=browser_prefix,
+        suffix=browser_suffix,
         body_text=args.text,
         creator=creator,
         nickname=nickname,
         is_software=is_software,
+        source_selector=source_selector,
+        via="cli",
     )
     if not args.quiet:
         print(f"Comment created: {ann['id']}")

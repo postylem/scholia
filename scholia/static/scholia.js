@@ -992,6 +992,7 @@
     for (var i = 0; i < mathEls.length; i++) {
       var el = mathEls[i];
       var displayMode = el.classList.contains('display');
+      el.dataset.latex = el.textContent;
       try {
         katex.render(el.textContent, el, { displayMode: displayMode, throwOnError: false });
         el.classList.add('scholia-math-rendered');
@@ -1433,7 +1434,8 @@
     var header = document.createElement('div');
     header.className = 'scholia-card-header';
 
-    var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
+    var anchorText = (ann.target && ann.target['scholia:sourceSelector'] && ann.target['scholia:sourceSelector'].exact)
+      || (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
     var anchorSpan = document.createElement('span');
     anchorSpan.className = 'scholia-anchor-text';
     var openQ = document.createElement('span');
@@ -1830,7 +1832,8 @@
     var hdr = document.createElement('div');
     hdr.className = 'scholia-overlay-header';
 
-    var anchorText = (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
+    var anchorText = (ann.target && ann.target['scholia:sourceSelector'] && ann.target['scholia:sourceSelector'].exact)
+      || (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
     var hdrText = document.createElement('span');
     hdrText.className = 'scholia-overlay-anchor';
     var oOpenQ = document.createElement('span');
@@ -2125,12 +2128,25 @@
       if (!showRead && !isUnread(ann)) continue;
 
       var selector = ann.target && ann.target.selector;
-      if (!selector || !selector.exact) {
+      var srcSel = ann.target && ann.target['scholia:sourceSelector'];
+      var via = ann['scholia:via'];
+
+      if ((!selector || !selector.exact) && (!srcSel || !srcSel.exact)) {
         orphanIds.add(ann.id);
         continue;
       }
 
-      var range = TextQuoteAnchor.toRange(docEl, selector);
+      // CLI annotations: source selector is authoritative (browser selector is approximate)
+      // Browser annotations: browser selector is authoritative (source selector is fallback)
+      var range = null;
+      if (via === 'cli') {
+        if (srcSel && srcSel.exact) range = TextQuoteAnchor.toRangeRecoverable(docEl, srcSel);
+        if (!range && selector && selector.exact) range = TextQuoteAnchor.toRange(docEl, selector);
+      } else {
+        if (selector && selector.exact) range = TextQuoteAnchor.toRange(docEl, selector);
+        if (!range && srcSel && srcSel.exact) range = TextQuoteAnchor.toRangeRecoverable(docEl, srcSel);
+      }
+
       if (!range) {
         orphanIds.add(ann.id);
         continue;
@@ -2464,8 +2480,19 @@
     // Ignore if inside the comment form
     if (pendingForm && pendingForm.contains(range.commonAncestorContainer)) return;
 
-    var selector = TextQuoteAnchor.fromRange(docEl, range);
+    // Snap selection to math expression boundaries
+    var snapped = TextQuoteAnchor.snapToMathBoundaries(range);
+
+    var selector = TextQuoteAnchor.fromRange(docEl, snapped);
     if (!selector.exact.trim()) return;
+
+    // Build source-space selector for CLI resolution
+    var sourceSelector = TextQuoteAnchor.fromRangeRecoverable(docEl, snapped);
+    selector._source = sourceSelector;
+
+    // Update visual selection to reflect snapped boundaries
+    sel.removeAllRanges();
+    sel.addRange(snapped);
 
     if (compactMode) {
       showCompactCommentForm(selector);
@@ -2473,7 +2500,7 @@
     }
 
     // Position: at selection top, or viewport top if selection starts off-screen
-    var rangeRect = range.getBoundingClientRect();
+    var rangeRect = snapped.getBoundingClientRect();
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
     var trueAnchorY = rangeRect.top - sidebarTop;
     var initialY = Math.max(rangeRect.top, 0) - sidebarTop;
@@ -2496,8 +2523,9 @@
 
     var anchorDiv = document.createElement('div');
     anchorDiv.className = 'scholia-new-comment-anchor';
-    var excerpt = selector.exact.slice(0, 80);
-    anchorDiv.textContent = '\u201c' + excerpt + (selector.exact.length > 80 ? '\u2026' : '') + '\u201d';
+    var displayExact = (selector._source && selector._source.exact) || selector.exact;
+    var excerpt = displayExact.slice(0, 80);
+    anchorDiv.textContent = '\u201c' + excerpt + (displayExact.length > 80 ? '\u2026' : '') + '\u201d';
     form.appendChild(anchorDiv);
 
     var textarea = document.createElement('textarea');
@@ -2529,13 +2557,19 @@
       if (!text) return;
 
       var doSend = function () {
-        wsSend({
+        var payload = {
           type: 'new_comment',
           exact: pendingSelector.exact,
           prefix: pendingSelector.prefix,
           suffix: pendingSelector.suffix,
           body: text
-        });
+        };
+        if (pendingSelector._source) {
+          payload.source_exact = pendingSelector._source.exact;
+          payload.source_prefix = pendingSelector._source.prefix;
+          payload.source_suffix = pendingSelector._source.suffix;
+        }
+        wsSend(payload);
         dismissCommentPrompt();
         window.getSelection().removeAllRanges();
       };
@@ -2681,8 +2715,9 @@
 
     var anchorDiv = document.createElement('div');
     anchorDiv.className = 'scholia-new-comment-anchor';
-    var excerpt = selector.exact.slice(0, 80);
-    anchorDiv.textContent = '\u201c' + excerpt + (selector.exact.length > 80 ? '\u2026' : '') + '\u201d';
+    var displayExact = (selector._source && selector._source.exact) || selector.exact;
+    var excerpt = displayExact.slice(0, 80);
+    anchorDiv.textContent = '\u201c' + excerpt + (displayExact.length > 80 ? '\u2026' : '') + '\u201d';
     form.appendChild(anchorDiv);
 
     var textarea = document.createElement('textarea');
@@ -2711,13 +2746,19 @@
       e.stopPropagation();
       var text = textarea.value.trim();
       if (!text) return;
-      wsSend({
+      var compactPayload = {
         type: 'new_comment',
         exact: compactSelector.exact,
         prefix: compactSelector.prefix,
         suffix: compactSelector.suffix,
         body: text
-      });
+      };
+      if (compactSelector._source) {
+        compactPayload.source_exact = compactSelector._source.exact;
+        compactPayload.source_prefix = compactSelector._source.prefix;
+        compactPayload.source_suffix = compactSelector._source.suffix;
+      }
+      wsSend(compactPayload);
       dismissCompactComment();
     });
     actions.appendChild(submitBtn);
@@ -2863,20 +2904,30 @@
     var range = sel.getRangeAt(0);
     if (!docEl.contains(range.commonAncestorContainer)) return;
 
-    var selector = TextQuoteAnchor.fromRange(docEl, range);
+    // Snap selection to math expression boundaries
+    var snapped = TextQuoteAnchor.snapToMathBoundaries(range);
+
+    var selector = TextQuoteAnchor.fromRange(docEl, snapped);
     if (!selector.exact.trim()) return;
+
+    // Build source-space selector for CLI resolution
+    var sourceSelector = TextQuoteAnchor.fromRangeRecoverable(docEl, snapped);
 
     var annId = reanchorAnnotationId;
     var card = reanchorCard;
 
     // Send reanchor
-    wsSend({
+    var reanchorPayload = {
       type: 'reanchor',
       annotation_id: annId,
       exact: selector.exact,
       prefix: selector.prefix,
       suffix: selector.suffix,
-    });
+      source_exact: sourceSelector.exact,
+      source_prefix: sourceSelector.prefix,
+      source_suffix: sourceSelector.suffix,
+    };
+    wsSend(reanchorPayload);
     window.getSelection().removeAllRanges();
 
     // Clean up prompt, fade out dim
