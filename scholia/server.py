@@ -252,9 +252,9 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
     head_match = re.search(r"<head[^>]*>(.*?)</head>", html, re.DOTALL | re.IGNORECASE)
     if head_match:
         head_content = head_match.group(1)
-        # Collect <link> and <script> tags
+        # Collect <link>, <script>, and <style> tags
         _tag_pat = re.compile(
-            r"<(?:link|script)[^>]*(?:/>|>(?:.*?</script>)?)",
+            r"<(?:link[^>]*/?>|script[^>]*>.*?</script>|style[^>]*>.*?</style>)",
             re.DOTALL | re.IGNORECASE,
         )
         for tag_match in _tag_pat.finditer(head_content):
@@ -262,8 +262,13 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
             # Skip KaTeX CDN
             if "cdn.jsdelivr.net" in tag or "cdnjs.cloudflare.com" in tag:
                 continue
-            # Skip quarto.js
-            if "quarto.js" in tag:
+            # Skip quarto.js module (it manipulates body layout with nav/sidebar
+            # that we don't include), but keep quarto-html assets like tippy, popper
+            if re.search(r'quarto\.js["\']', tag) and 'type="module"' in tag:
+                continue
+            # Inline <style> blocks need no path rewriting — pass through
+            if tag.strip().startswith("<style"):
+                head_tags_list.append(tag)
                 continue
             # Rewrite asset paths; skip tags referencing paths we can't serve
             rewritten = _rewrite_attrs(tag)
@@ -278,9 +283,12 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
         """Rewrite <stem>_files/ paths in body HTML via simple string replace."""
         return text.replace(stem + "_files/", "/quarto-assets/")
 
-    main_match = re.search(r"<main[^>]*>(.*?)</main>", html, re.DOTALL | re.IGNORECASE)
+    # Keep the <main> tag with its classes (Quarto CSS targets .content, .page-columns, etc.)
+    main_match = re.search(r"(<main[^>]*>)(.*?)(</main>)", html, re.DOTALL | re.IGNORECASE)
     if main_match:
-        body_parts.append(_rewrite_body(main_match.group(1)))
+        body_parts.append(
+            _rewrite_body(main_match.group(1) + main_match.group(2) + main_match.group(3))
+        )
     else:
         # Fallback: inner content of <body>
         body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
@@ -302,14 +310,18 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
         for script_match in _script_pat.finditer(after_main):
             body_parts.append(_rewrite_body(script_match.group(0)))
 
+    # Extract body classes (Quarto CSS targets e.g. .fullcontent on body)
+    body_class_match = re.search(r'<body[^>]*class="([^"]*)"', html, re.IGNORECASE)
+    body_classes = body_class_match.group(1) if body_class_match else ""
+
     body_html = "\n".join(body_parts)
-    return body_html, quarto_head
+    return body_html, quarto_head, body_classes
 
 
-async def render_doc(doc_path: Path, sidenotes: bool = False) -> str | tuple[str, str]:
+async def render_doc(doc_path: Path, sidenotes: bool = False) -> str | tuple[str, str, str]:
     """Render a document to an HTML fragment, choosing the right pipeline.
 
-    For Quarto documents returns ``(body_html, head_tags)``; for all others
+    For Quarto documents returns ``(body_html, head_tags, body_classes)``; for all others
     returns a plain ``str`` HTML fragment.
     """
     loop = asyncio.get_running_loop()
@@ -478,9 +490,9 @@ async def build_page(
     rendered = await render_doc(doc_path, sidenotes=sidenotes)
     is_quarto = _is_quarto(doc_path)
     if is_quarto:
-        html, quarto_head = rendered  # type: ignore[misc]
+        html, quarto_head, body_classes = rendered  # type: ignore[misc]
     else:
-        html, quarto_head = rendered, ""  # type: ignore[assignment]
+        html, quarto_head, body_classes = rendered, "", ""  # type: ignore[assignment]
     title = _extract_title(doc_path.read_text(encoding="utf-8"))
     return _fill_template(
         template,
@@ -493,6 +505,7 @@ async def build_page(
         state=load_state(doc_path),
         quarto_head=quarto_head,
         is_quarto=is_quarto,
+        quarto_body_classes=body_classes,
     )
 
 
@@ -518,9 +531,13 @@ def _fill_template(
     readonly: bool = False,
     quarto_head: str = "",
     is_quarto: bool = False,
+    quarto_body_classes: str = "",
 ) -> str:
     """Fill the page template with the given content and metadata."""
     page = template.replace("{{TITLE}}", title)
+    # For Quarto, add body classes to <body> tag (Quarto CSS targets e.g. .fullcontent)
+    if quarto_body_classes:
+        page = page.replace("<body>", f'<body class="{quarto_body_classes}">')
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
     dp = (display_path or str(doc_path)).replace("\\", "/")
@@ -1046,7 +1063,7 @@ class ScholiaServer:
             for sn_val, ws_list in by_sidenotes.items():
                 rendered = await render_doc(doc_path, sidenotes=sn_val)
                 if _is_quarto(doc_path):
-                    html, quarto_head = rendered  # type: ignore[misc]
+                    html, quarto_head, _body_classes = rendered  # type: ignore[misc]
                 else:
                     html, quarto_head = rendered, ""  # type: ignore[assignment]
                 payload = json.dumps(

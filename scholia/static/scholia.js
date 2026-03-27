@@ -25,15 +25,34 @@
   katexCssLink.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
   shadow.appendChild(katexCssLink);
 
-  // Inject body grid layout into document head
+  // Inject CSS variables + body grid layout into document head.
+  // CSS custom properties must be on :root in the light DOM so they
+  // inherit into the shadow DOM.  For Pandoc docs scholia.css in <head>
+  // provides these, but Quarto docs don't load scholia.css in <head>.
   var isQuarto = window.__SCHOLIA_IS_QUARTO__ || false;
   var layoutStyle = document.createElement('style');
+  var cssVars = [
+    ':root {',
+    '  --s-bg:#fefefe; --s-surface:#f6f8fa; --s-card:#fff;',
+    '  --s-card-hover:#f0efe8; --s-text:#111; --s-text-dim:#777;',
+    '  --s-accent:#467; --s-accent-dim:rgba(68,102,119,0.12);',
+    '  --s-human:#2a7a4a; --s-ai:#4a6fa5; --s-unread:#c44;',
+    '  --s-highlight:rgba(255,220,100,0.35); --s-highlight-active:rgba(255,200,50,0.55);',
+    '  --s-border:#ddd; --s-header-open:#f5f3eb; --s-header-resolved:#f0f0f0;',
+    '  --s-code-bg:#fbf5e6; --s-radius:4px;',
+    '  --s-body:et-book,Palatino,"Palatino Linotype","Palatino LT STD","Book Antiqua",Georgia,serif;',
+    '  --s-mono:Consolas,"Liberation Mono",Menlo,Monaco,Courier,monospace;',
+    '  --s-sans:"Gill Sans","Gill Sans MT",Calibri,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;',
+    '  --s-comment:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
+    '}',
+  ].join('\n');
   var bodyStyles = isQuarto
     ? 'body { margin: 0; display: grid; min-height: 100vh;'
     : 'body { margin: 0; display: grid; min-height: 100vh;'
     + '  background: var(--s-bg); color: var(--s-text);'
     + '  font-family: var(--s-body); font-size: 1.1rem; line-height: 1.7;';
   layoutStyle.textContent = [
+    cssVars,
     bodyStyles,
     '  grid-template-columns: 1fr 4px minmax(200px, var(--sidebar-width, 320px));',
     '  grid-template-rows: auto 1fr;',
