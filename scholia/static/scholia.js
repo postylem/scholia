@@ -246,7 +246,10 @@
         !activeBreadcrumbDropdown.seg.contains(e.target)) {
       closeBreadcrumbDropdown();
     }
-    // TOC — handled in renderToolbar listener
+    // TOC
+    if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
+      closeToc();
+    }
     // Options
     var optMenu = shadow.querySelector('.scholia-options-menu');
     var optWrap = shadow.querySelector('.scholia-options-wrap');
@@ -701,11 +704,6 @@
       tocWrapEl.appendChild(tocEl);
       renderMathIn(tocEl);
     }
-    shadow.addEventListener('click', function closeTocOutside(e) {
-      if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
-        closeToc();
-      }
-    });
 
     // Options dropdown
     var optionsWrap = document.createElement('span');
