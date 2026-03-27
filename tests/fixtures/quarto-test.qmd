@@ -1,0 +1,67 @@
+---
+title: Quarto Integration Test
+author: Test
+format:
+  html:
+    code-fold: false
+execute:
+  cache: true
+---
+
+## Prose and Math {#sec-math}
+
+The normal distribution has probability density function:
+
+$$f(x) = \frac{1}{\sigma\sqrt{2\pi}} \exp\left(-\frac{(x-\mu)^2}{2\sigma^2}\right)$$ {#eq-normal}
+
+As shown in @eq-normal, the distribution is parameterized by mean $\mu$
+and standard deviation $\sigma$.
+
+## Executable Code
+
+```{python}
+import numpy as np
+
+mu, sigma = 0, 1
+x = np.linspace(-4, 4, 200)
+y = (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
+print(f"Peak density: {y.max():.4f}")
+```
+
+## Plot Output
+
+```{python}
+#| label: fig-density
+#| fig-cap: "Standard normal density curve"
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(6, 3))
+ax.plot(x, y, 'steelblue', linewidth=2)
+ax.fill_between(x, y, alpha=0.15, color='steelblue')
+ax.set_xlabel('$x$')
+ax.set_ylabel('$f(x)$')
+ax.set_title('Standard Normal Distribution')
+plt.tight_layout()
+plt.show()
+```
+
+As shown in @fig-density, the density is symmetric about zero.
+
+## Callout
+
+::: {.callout-note}
+This is a Quarto callout block. It should render with special styling
+in Quarto but appears as a plain blockquote in Pandoc.
+:::
+
+## Cross-References
+
+See @eq-normal for the density formula and @fig-density for the plot.
+The math details are in @sec-math.
+
+## Citation
+
+The normal distribution was studied extensively by Gauss [@gauss1809].

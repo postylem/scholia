@@ -131,6 +131,117 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
     return result.stdout
 
 
+def _find_quarto_python(doc_path: Path) -> str | None:
+    """Find Python for Quarto code execution.
+
+    Priority: QUARTO_PYTHON env > .venv near document > active VIRTUAL_ENV.
+    Document-local venv wins over the active venv because the server's
+    own venv (e.g., set by ``uv run``) typically lacks Jupyter/numpy.
+    Returns None if nothing found (Quarto uses its own default).
+    """
+    explicit = os.environ.get("QUARTO_PYTHON")
+    if explicit:
+        return explicit
+    # Walk up from document directory looking for .venv
+    d = doc_path.parent.resolve()
+    for _ in range(10):
+        candidate = d / ".venv" / "bin" / "python"
+        if candidate.is_file():
+            return str(candidate)
+        parent = d.parent
+        if parent == d:
+            break
+        d = parent
+    # Fall back to active venv
+    active_venv = os.environ.get("VIRTUAL_ENV")
+    if active_venv:
+        candidate = Path(active_venv) / "bin" / "python"
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+_QUARTO_EXTENSIONS = {".qmd", ".rmd"}
+
+
+def _is_quarto(path: Path) -> bool:
+    return path.suffix.lower() in _QUARTO_EXTENSIONS
+
+
+def _render_quarto_sync(doc_path: Path) -> str:
+    """Render a Quarto document to an HTML fragment (blocking).
+
+    Runs ``quarto render`` with KaTeX math, extracts the ``<main>``
+    body content, and returns it as an HTML fragment suitable for
+    injection into scholia's template.
+    """
+    import tempfile
+
+    quarto = shutil.which("quarto")
+    if not quarto:
+        raise RuntimeError(
+            "Quarto is not installed. Install from https://quarto.org/docs/get-started/"
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_file = Path(tmp) / "output.html"
+        cmd = [
+            quarto,
+            "render",
+            str(doc_path.resolve()),
+            "--to",
+            "html",
+            "-M",
+            "html-math-method:katex",
+            "--output",
+            out_file.name,
+            "--output-dir",
+            tmp,
+        ]
+        env = {**os.environ}
+        py = _find_quarto_python(doc_path)
+        if py:
+            env["QUARTO_PYTHON"] = py
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(doc_path.parent),
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"quarto render failed: {result.stderr}")
+
+        html = out_file.read_text(encoding="utf-8")
+
+    # Extract <main> body content
+    main_start = html.find("<main")
+    main_end = html.find("</main>")
+    if main_start == -1 or main_end == -1:
+        # Fallback: return everything in <body>
+        body_start = html.find("<body")
+        body_end = html.find("</body>")
+        if body_start != -1 and body_end != -1:
+            # Skip the <body ...> tag itself
+            body_start = html.find(">", body_start) + 1
+            return html[body_start:body_end]
+        return html
+
+    # Include the closing </main> tag content but strip the <main> wrapper
+    # since scholia's template already provides <article id="scholia-doc">
+    inner_start = html.find(">", main_start) + 1
+    return html[inner_start:main_end]
+
+
+async def render_doc(doc_path: Path, sidenotes: bool = False) -> str:
+    """Render a document to an HTML fragment, choosing the right pipeline."""
+    loop = asyncio.get_running_loop()
+    if _is_quarto(doc_path):
+        return await loop.run_in_executor(None, _render_quarto_sync, doc_path)
+    return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
+
+
 async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
     """Render markdown to HTML fragment without blocking the event loop."""
     loop = asyncio.get_running_loop()
@@ -288,7 +399,7 @@ async def build_page(
     doc_path: Path, template: str, sidenotes: bool = False, display_path: str = ""
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
-    html = await render_pandoc(doc_path, sidenotes=sidenotes)
+    html = await render_doc(doc_path, sidenotes=sidenotes)
     title = _extract_title(doc_path.read_text(encoding="utf-8"))
     return _fill_template(
         template,
@@ -831,7 +942,7 @@ class ScholiaServer:
 
             closed = set()
             for sn_val, ws_list in by_sidenotes.items():
-                html = await render_pandoc(doc_path, sidenotes=sn_val)
+                html = await render_doc(doc_path, sidenotes=sn_val)
                 payload = json.dumps(
                     {
                         "type": "doc_update",

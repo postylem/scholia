@@ -239,24 +239,41 @@
         return;
       }
 
-      // Crossref links: pandoc-crossref outputs <a href="#sec:id">sec. 1</a> etc
+      // Quarto code cell outputs: skip entirely (no source correspondent)
+      if (node.classList && (
+        node.classList.contains('cell-output') ||
+        node.classList.contains('cell-output-display') ||
+        node.classList.contains('cell-output-stdout') ||
+        node.classList.contains('cell-output-stderr')
+      )) {
+        return;
+      }
+
+      // Crossref links: pandoc-crossref (#sec:id) and Quarto (#sec-id)
       if (node.tagName === 'A') {
         var href = node.getAttribute('href') || '';
+        // pandoc-crossref: #sec:id, #eq:id etc. (colon separator)
         var crMatch = href.match(/^#((?:sec|eq|fig|tbl|lst):.+)/);
-        if (crMatch) {
-          // Trim pandoc-crossref display prefix from preceding text
-          // e.g., "eq.\xa0", "§\xa0", "fig.\xa0" etc.
+        // Quarto: #sec-id, #eq-id, #fig-id etc. (hyphen separator)
+        var qMatch = !crMatch && href.match(/^#((?:sec|eq|fig|tbl|lst)-.+)/);
+        var refId = crMatch ? crMatch[1] : (qMatch ? qMatch[1] : null);
+        if (refId) {
+          // Trim display prefix from preceding text
+          // pandoc-crossref: "eq.\xa0", "§\xa0", "fig.\xa0"
+          // Quarto: "Equation\xa0", "Figure\xa0", "Section\xa0", "Table\xa0"
           if (entries.length > 0 && entries[entries.length - 1].type === 'text') {
             var prev = entries[entries.length - 1];
             var prevText = text.slice(prev.rtStart);
-            var trimmed = prevText.replace(/(?:§|sec\.|eq\.|fig\.|tbl\.|lst\.)[\s\xa0]*$/, '');
+            var trimmed = prevText.replace(
+              /(?:§|sec\.|eq\.|fig\.|tbl\.|lst\.|Equation|Figure|Section|Table|Listing)[\s\xa0]*$/i, ''
+            );
             if (trimmed.length < prevText.length) {
               text = text.slice(0, prev.rtStart) + trimmed;
               prev.rtEnd = text.length;
             }
           }
           entries.push({ node: node, rtStart: text.length, type: 'ref' });
-          text += '@' + crMatch[1];
+          text += '@' + refId;
           entries[entries.length - 1].rtEnd = text.length;
           return;
         }
@@ -325,10 +342,13 @@
     if (math) return math;
     var citation = el.closest('span.citation');
     if (citation) return citation;
+    // Quarto code cell outputs — not selectable for annotation
+    var cellOutput = el.closest('.cell-output, .cell-output-display');
+    if (cellOutput) return cellOutput;
     var link = el.closest('a');
     if (link) {
       var href = link.getAttribute('href') || '';
-      if (/^#(?:(?:sec|eq|fig|tbl|lst):|ref-)/.test(href)) return link;
+      if (/^#(?:(?:sec|eq|fig|tbl|lst)[:\-]|ref-)/.test(href)) return link;
     }
     return null;
   }
