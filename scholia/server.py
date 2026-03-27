@@ -194,6 +194,8 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
         str(doc_path.resolve()),
         "--to",
         "html",
+        "-M",
+        "html-math-method:katex",
     ]
     env = {**os.environ}
     py = _find_quarto_python(doc_path)
@@ -223,25 +225,27 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
         prefix = stem + "_files/"
         if src.startswith(prefix):
             return "/quarto-assets/" + src[len(prefix) :]
-        # Other relative paths (e.g. site_libs/) served from same dir
-        return "/quarto-assets/../" + src
+        # Other relative paths (e.g. site_libs/) — not served, skip
+        return None
 
-    def _rewrite_attrs(tag: str) -> str:
-        """Rewrite href= and src= attributes in a single tag string."""
+    def _rewrite_attrs(tag: str) -> str | None:
+        """Rewrite href= and src= in a tag. Returns None if any path can't be served."""
+        _skip = False
 
-        def replace_href(m):
+        def _replace(m, attr):
+            nonlocal _skip
             val = m.group(1)
-            return f'href="{_rewrite_path(val)}"'
+            new = _rewrite_path(val)
+            if new is None:
+                _skip = True
+                return m.group(0)
+            return f'{attr}="{new}"'
 
-        def replace_src(m):
-            val = m.group(1)
-            return f'src="{_rewrite_path(val)}"'
-
-        tag = re.sub(r'href="([^"]*)"', replace_href, tag)
-        tag = re.sub(r"href='([^']*)'", lambda m: f"href='{_rewrite_path(m.group(1))}'", tag)
-        tag = re.sub(r'src="([^"]*)"', replace_src, tag)
-        tag = re.sub(r"src='([^']*)'", lambda m: f"src='{_rewrite_path(m.group(1))}'", tag)
-        return tag
+        tag = re.sub(r'href="([^"]*)"', lambda m: _replace(m, "href"), tag)
+        tag = re.sub(r"href='([^']*)'", lambda m: _replace(m, "href"), tag)
+        tag = re.sub(r'src="([^"]*)"', lambda m: _replace(m, "src"), tag)
+        tag = re.sub(r"src='([^']*)'", lambda m: _replace(m, "src"), tag)
+        return None if _skip else tag
 
     # --- Extract head tags ---
     head_tags_list: list[str] = []
@@ -261,24 +265,29 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
             # Skip quarto.js
             if "quarto.js" in tag:
                 continue
-            # Skip tags with no local asset reference (e.g. pure inline scripts are ok to keep)
-            tag = _rewrite_attrs(tag)
-            head_tags_list.append(tag)
+            # Rewrite asset paths; skip tags referencing paths we can't serve
+            rewritten = _rewrite_attrs(tag)
+            if rewritten is not None:
+                head_tags_list.append(rewritten)
     quarto_head = "\n".join(head_tags_list)
 
     # --- Extract body: <main> content + post-body scripts ---
     body_parts: list[str] = []
 
+    def _rewrite_body(text: str) -> str:
+        """Rewrite <stem>_files/ paths in body HTML via simple string replace."""
+        return text.replace(stem + "_files/", "/quarto-assets/")
+
     main_match = re.search(r"<main[^>]*>(.*?)</main>", html, re.DOTALL | re.IGNORECASE)
     if main_match:
-        body_parts.append(_rewrite_attrs(main_match.group(1)))
+        body_parts.append(_rewrite_body(main_match.group(1)))
     else:
         # Fallback: inner content of <body>
         body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
         if body_match:
-            body_parts.append(_rewrite_attrs(body_match.group(1)))
+            body_parts.append(_rewrite_body(body_match.group(1)))
         else:
-            body_parts.append(_rewrite_attrs(html))
+            body_parts.append(_rewrite_body(html))
 
     # Collect post-body <script> tags (Quarto puts initialization scripts after </main>)
     body_tag_match = re.search(r"<body[^>]*>", html, re.IGNORECASE)
@@ -291,7 +300,7 @@ def _render_quarto_sync(doc_path: Path) -> tuple[str, str]:
             after_main = ""
         _script_pat = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
         for script_match in _script_pat.finditer(after_main):
-            body_parts.append(_rewrite_attrs(script_match.group(0)))
+            body_parts.append(_rewrite_body(script_match.group(0)))
 
     body_html = "\n".join(body_parts)
     return body_html, quarto_head
@@ -646,7 +655,7 @@ class ScholiaServer:
         rel_path = request.match_info["path"]
         assets_dir = self.doc_path.parent / (self.doc_path.stem + "_files")
         file_path = (assets_dir / rel_path).resolve()
-        if not str(file_path).startswith(str(assets_dir.resolve())):
+        if not file_path.is_relative_to(assets_dir.resolve()):
             return web.Response(status=403)
         if not file_path.is_file():
             return web.Response(status=404)
