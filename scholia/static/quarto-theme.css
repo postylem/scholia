@@ -147,7 +147,7 @@ section.scholia-collapsed > section {
 /* ── Code: smaller font, warm background ─────────────────────────── */
 
 #scholia-doc code {
-  font-size: 0.85rem;
+  font-size: 0.70rem;
 }
 
 #scholia-doc pre.sourceCode,
