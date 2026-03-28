@@ -168,77 +168,72 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
-def _render_quarto_sync(doc_path: Path) -> str:
-    """Render a Quarto document to an HTML fragment (blocking).
+def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> str:
+    """Render a Quarto document and return the full HTML page (blocking).
 
-    Runs ``quarto render`` with KaTeX math, extracts the ``<main>``
-    body content, and returns it as an HTML fragment suitable for
-    injection into scholia's template.
+    Runs ``quarto render`` in the document's own directory so that
+    ``<stem>_files/`` persists for the /quarto-assets/ route to serve.
+    Asset paths are rewritten from ``<stem>_files/`` to ``/quarto-assets/``.
+
+    Returns the complete Quarto HTML page with asset paths rewritten.
+    The caller injects scholia's overlay (sidebar, scripts) into this page.
     """
-    import tempfile
-
     quarto = shutil.which("quarto")
     if not quarto:
         raise RuntimeError(
             "Quarto is not installed. Install from https://quarto.org/docs/get-started/"
         )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out_file = Path(tmp) / "output.html"
-        cmd = [
-            quarto,
-            "render",
-            str(doc_path.resolve()),
-            "--to",
-            "html",
-            "-M",
-            "html-math-method:katex",
-            "--output",
-            out_file.name,
-            "--output-dir",
-            tmp,
+    out_file = doc_path.with_suffix(".html")
+    cmd = [
+        quarto,
+        "render",
+        str(doc_path.resolve()),
+        "--to",
+        "html",
+        "-M",
+        "html-math-method:katex",
+    ]
+    if use_defaults:
+        cmd += [
+            "--metadata-file",
+            str(Path(__file__).parent / "data" / "quarto-defaults.yml"),
         ]
-        env = {**os.environ}
-        py = _find_quarto_python(doc_path)
-        if py:
-            env["QUARTO_PYTHON"] = py
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=str(doc_path.parent),
-            timeout=120,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"quarto render failed: {result.stderr}")
+    env = {**os.environ}
+    py = _find_quarto_python(doc_path)
+    if py:
+        env["QUARTO_PYTHON"] = py
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(doc_path.parent),
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"quarto render failed: {result.stderr}")
 
-        html = out_file.read_text(encoding="utf-8")
+    html = out_file.read_text(encoding="utf-8")
+    stem = doc_path.stem
 
-    # Extract <main> body content
-    main_start = html.find("<main")
-    main_end = html.find("</main>")
-    if main_start == -1 or main_end == -1:
-        # Fallback: return everything in <body>
-        body_start = html.find("<body")
-        body_end = html.find("</body>")
-        if body_start != -1 and body_end != -1:
-            # Skip the <body ...> tag itself
-            body_start = html.find(">", body_start) + 1
-            return html[body_start:body_end]
-        return html
+    # Rewrite local asset paths to go through /quarto-assets/
+    html = html.replace(f"{stem}_files/", "/quarto-assets/")
 
-    # Include the closing </main> tag content but strip the <main> wrapper
-    # since scholia's template already provides <article id="scholia-doc">
-    inner_start = html.find(">", main_start) + 1
-    return html[inner_start:main_end]
+    return html
 
 
-async def render_doc(doc_path: Path, sidenotes: bool = False) -> str:
-    """Render a document to an HTML fragment, choosing the right pipeline."""
+async def render_doc(
+    doc_path: Path, sidenotes: bool = False, quarto_use_defaults: bool = True
+) -> str:
+    """Render a document to HTML, choosing the right pipeline.
+
+    For Quarto documents returns a complete HTML page.
+    For Pandoc documents returns an HTML fragment.
+    """
     loop = asyncio.get_running_loop()
     if _is_quarto(doc_path):
-        return await loop.run_in_executor(None, _render_quarto_sync, doc_path)
+        return await loop.run_in_executor(None, _render_quarto_sync, doc_path, quarto_use_defaults)
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
@@ -304,6 +299,48 @@ def _render_export_sync(
         return result.stdout
 
 
+def _render_quarto_export_sync(doc_path: Path, fmt: str) -> bytes:
+    """Export a Quarto document to pdf/html/etc. Returns bytes."""
+    import tempfile
+
+    quarto = shutil.which("quarto")
+    if not quarto:
+        raise RuntimeError(
+            "Quarto is not installed. Install from https://quarto.org/docs/get-started/"
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_name = f"output.{fmt}"
+        cmd = [
+            quarto,
+            "render",
+            str(doc_path.resolve()),
+            "--to",
+            fmt,
+            "--output",
+            out_name,
+            "--output-dir",
+            tmp,
+        ]
+        env = {**os.environ}
+        py = _find_quarto_python(doc_path)
+        if py:
+            env["QUARTO_PYTHON"] = py
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(doc_path.parent),
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode, cmd, output=result.stdout, stderr=result.stderr
+            )
+        return Path(tmp, out_name).read_bytes()
+
+
 async def render_export(
     doc_path: Path,
     fmt: str,
@@ -312,6 +349,8 @@ async def render_export(
 ) -> bytes | None:
     """Export document without blocking the event loop."""
     loop = asyncio.get_running_loop()
+    if _is_quarto(doc_path):
+        return await loop.run_in_executor(None, _render_quarto_export_sync, doc_path, fmt)
     return await loop.run_in_executor(
         None, _render_export_sync, doc_path, fmt, output_path, pdf_engine
     )
@@ -395,11 +434,108 @@ def _extract_title(markdown_text: str) -> str:
     return "Scholia"
 
 
+def _inject_scholia_into_quarto(
+    quarto_html: str,
+    doc_path: Path,
+    display_path: str = "",
+    include_theme_css: bool = True,
+) -> str:
+    """Inject scholia's sidebar overlay into a complete Quarto HTML page.
+
+    Instead of extracting Quarto content into scholia's template, we take
+    Quarto's full rendered page and inject scholia on top of it — the same
+    approach as Hypothesis.  Quarto's CSS, JS, and page structure are
+    completely preserved.
+    """
+    dp = (display_path or str(doc_path)).replace("\\", "/")
+
+    # Add id="scholia-doc" to <main> so scholia.js can find the content element
+    quarto_html = re.sub(
+        r"<main\b([^>]*)>",
+        r'<main id="scholia-doc"\1>',
+        quarto_html,
+        count=1,
+    )
+
+    # Inject highlight CSS + comment rendering libs before </head>
+    # fmt: off
+    head_inject = (                                                     # noqa: E501
+        "  <style>\n"
+        "    mark.scholia-highlight {"
+        " background:rgba(255,220,100,.35); border-radius:2px; cursor:pointer }\n"
+        "    mark.scholia-highlight.scholia-highlight-active,"
+        " mark.scholia-highlight:hover {"
+        " background:rgba(255,200,50,.55) }\n"
+        "    mark.scholia-highlight.scholia-highlight-resolved {"
+        " background:rgba(200,200,200,.25) }\n"
+        "    mark.scholia-highlight.scholia-highlight-resolved"
+        ".scholia-highlight-active,\n"
+        "    mark.scholia-highlight.scholia-highlight-resolved:hover {"
+        " background:rgba(180,180,180,.35) }\n"
+        "    mark.scholia-highlight.scholia-pulse {"
+        " animation:scholia-pulse .6s ease-out }\n"
+        "    @keyframes scholia-pulse {\n"
+        "      0%{box-shadow:0 0 0 0 rgba(255,200,50,.7)}\n"
+        "      100%{box-shadow:0 0 0 8px rgba(255,200,50,0)} }\n"
+        "  </style>\n"
+        + (
+            '  <link id="scholia-quarto-theme" rel="stylesheet"'
+            ' href="/static/quarto-theme.css">\n'
+            if include_theme_css
+            else ""
+        )
+        + '  <script defer src="https://cdn.jsdelivr.net/npm/'
+        'markdown-it@14.1.0/dist/markdown-it.min.js"></script>\n'
+        '  <script defer src="https://cdn.jsdelivr.net/npm/'
+        'markdown-it-texmath@1.0.0/texmath.min.js"></script>\n'
+        '  <script defer src="https://cdn.jsdelivr.net/npm/'
+        'mermaid@11/dist/mermaid.min.js"></script>\n'
+    )
+    # fmt: on
+    quarto_html = quarto_html.replace("</head>", head_inject + "</head>")
+
+    # Inject <scholia-sidebar> + config + scripts before </body>
+    comments = load_comments(doc_path)
+    state = load_state(doc_path)
+    body_inject = f"""
+  <scholia-sidebar></scholia-sidebar>
+  <script>
+  window.__SCHOLIA_CREATOR__ = {json.dumps(get_human_username())};
+  window.__SCHOLIA_DOC_PATH__ = {json.dumps(dp)};
+  window.__SCHOLIA_DOC_FULLPATH__ = {json.dumps(str(doc_path).replace(chr(92), "/"))};
+  window.__SCHOLIA_SIDENOTES__ = false;
+  window.__SCHOLIA_COMMENTS__ = {json.dumps(comments)};
+  window.__SCHOLIA_STATE__ = {json.dumps(state)};
+  window.__SCHOLIA_READONLY__ = false;
+  window.__SCHOLIA_IS_QUARTO__ = true;
+  </script>
+  <script src="/static/vendor/dom-anchor-text-quote.js"></script>
+  <script src="/static/scholia.js"></script>
+"""
+    quarto_html = quarto_html.replace("</body>", body_inject + "</body>")
+
+    return quarto_html
+
+
 async def build_page(
-    doc_path: Path, template: str, sidenotes: bool = False, display_path: str = ""
+    doc_path: Path,
+    template: str,
+    sidenotes: bool = False,
+    display_path: str = "",
+    quarto_theme: str = "scholia",
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
-    html = await render_doc(doc_path, sidenotes=sidenotes)
+    use_defaults = quarto_theme != "default"
+    html = await render_doc(doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults)
+
+    if _is_quarto(doc_path):
+        return _inject_scholia_into_quarto(
+            html,
+            doc_path,
+            display_path=display_path,
+            include_theme_css=use_defaults,
+        )
+
     title = _extract_title(doc_path.read_text(encoding="utf-8"))
     return _fill_template(
         template,
@@ -434,7 +570,7 @@ def _fill_template(
     state: dict | None = None,
     readonly: bool = False,
 ) -> str:
-    """Fill the page template with the given content and metadata."""
+    """Fill the Pandoc page template with the given content and metadata."""
     page = template.replace("{{TITLE}}", title)
     page = page.replace("{{PANDOC_HTML}}", html)
     page = page.replace("{{CREATOR_NAME}}", json.dumps(get_human_username()))
@@ -445,6 +581,10 @@ def _fill_template(
     page = page.replace("{{COMMENTS_JSON}}", json.dumps(comments or []))
     page = page.replace("{{STATE_JSON}}", json.dumps(state or {}))
     page = page.replace("{{READONLY}}", json.dumps(readonly))
+    page = page.replace("{{QUARTO_HEAD}}", "")
+    page = page.replace("{{IS_QUARTO}}", json.dumps(False))
+    content_css = '<link rel="stylesheet" href="/static/scholia.css">'
+    page = page.replace("{{CONTENT_CSS}}", content_css)
     return page
 
 
@@ -555,12 +695,24 @@ class ScholiaServer:
     def _setup_routes(self):
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ws", self._handle_ws)
+        self.app.router.add_get("/quarto-assets/{path:.+}", self._handle_quarto_assets)
         self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
         self.app.router.add_post("/api/relocate", self._handle_relocate)
         self.app.router.add_post("/api/shutdown", self._handle_shutdown)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
+
+    async def _handle_quarto_assets(self, request):
+        """Serve Quarto support files (CSS, JS, images) from <stem>_files/."""
+        rel_path = request.match_info["path"]
+        assets_dir = self.doc_path.parent / (self.doc_path.stem + "_files")
+        file_path = (assets_dir / rel_path).resolve()
+        if not file_path.is_relative_to(assets_dir.resolve()):
+            return web.Response(status=403)
+        if not file_path.is_file():
+            return web.Response(status=404)
+        return web.FileResponse(file_path)
 
     def _register_server_state(self, port: int):
         """Write _server key to state file."""
@@ -603,11 +755,13 @@ class ScholiaServer:
         try:
             if _is_markdown(doc_path):
                 sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
+                quarto_theme = request.query.get("quarto_theme", "scholia")
                 page = await build_page(
                     doc_path,
                     self.template,
                     sidenotes=sidenotes,
                     display_path=display,
+                    quarto_theme=quarto_theme,
                 )
             else:
                 force_raw = request.query.get("raw") == "1"
@@ -942,7 +1096,15 @@ class ScholiaServer:
 
             closed = set()
             for sn_val, ws_list in by_sidenotes.items():
-                html = await render_doc(doc_path, sidenotes=sn_val)
+                rendered = await render_doc(doc_path, sidenotes=sn_val)
+                if _is_quarto(doc_path):
+                    # For Quarto, extract just <main> inner content for live update
+                    main_match = re.search(
+                        r"<main[^>]*>(.*)</main>", rendered, re.DOTALL | re.IGNORECASE
+                    )
+                    html = main_match.group(1) if main_match else rendered
+                else:
+                    html = rendered
                 payload = json.dumps(
                     {
                         "type": "doc_update",

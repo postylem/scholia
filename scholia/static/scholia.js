@@ -12,20 +12,121 @@
   var comments = window.__SCHOLIA_COMMENTS__ || [];
   var state = window.__SCHOLIA_STATE__ || {};
   var docEl = document.getElementById('scholia-doc');
-  var sidebarEl = document.getElementById('scholia-sidebar');
-  var containerEl = document.getElementById('scholia-container');
-  var toolbarEl = document.getElementById('scholia-toolbar');
-  var resizeHandle = document.getElementById('scholia-resize-handle');
+  var shadowHost = document.querySelector('scholia-sidebar');
+  var shadow = shadowHost.attachShadow({ mode: 'open' });
+
+  // Load scholia.css and KaTeX CSS inside shadow root
+  var cssLink = document.createElement('link');
+  cssLink.rel = 'stylesheet';
+  cssLink.href = '/static/scholia.css';
+  shadow.appendChild(cssLink);
+  var katexCssLink = document.createElement('link');
+  katexCssLink.rel = 'stylesheet';
+  katexCssLink.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+  shadow.appendChild(katexCssLink);
+
+  // Inject CSS variables + layout into document head.
+  var isQuarto = window.__SCHOLIA_IS_QUARTO__ || false;
+  var layoutStyle = document.createElement('style');
+  var cssVars = [
+    ':root {',
+    '  --s-bg:#fefefe; --s-surface:#f6f8fa; --s-card:#fff;',
+    '  --s-card-hover:#f0efe8; --s-text:#111; --s-text-dim:#777;',
+    '  --s-accent:#467; --s-accent-dim:rgba(68,102,119,0.12);',
+    '  --s-human:#2a7a4a; --s-ai:#4a6fa5; --s-unread:#c44;',
+    '  --s-highlight:rgba(255,220,100,0.35); --s-highlight-active:rgba(255,200,50,0.55);',
+    '  --s-border:#ddd; --s-header-open:#f5f3eb; --s-header-resolved:#f0f0f0;',
+    '  --s-code-bg:#fbf5e6; --s-radius:4px;',
+    '  --s-body:et-book,Palatino,"Palatino Linotype","Palatino LT STD","Book Antiqua",Georgia,serif;',
+    '  --s-mono:Consolas,"Liberation Mono",Menlo,Monaco,Courier,monospace;',
+    '  --s-sans:"Gill Sans","Gill Sans MT",Calibri,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;',
+    '  --s-comment:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
+    '}',
+    'body.scholia-sidebar-hidden mark.scholia-highlight { all: unset; display: inline; }',
+  ].join('\n');
+
+  if (isQuarto) {
+    // Quarto: fixed-position overlay — don't touch Quarto's body layout
+    layoutStyle.textContent = [
+      cssVars,
+      'scholia-sidebar {',
+      '  position: fixed; top: 0; right: 0; bottom: 0;',
+      '  width: calc(var(--sidebar-width, 320px) + 4px);',
+      '  z-index: 1050; display: block; }',
+      'html { scroll-padding-top: var(--scholia-toolbar-h, 38px); }',
+      'body { margin-right: calc(var(--sidebar-width, 320px) + 4px) !important;',
+      '  padding-top: var(--scholia-toolbar-h, 38px);',
+      '  transition: margin-right 0.3s ease; }',
+      'body.scholia-sidebar-hidden { margin-right: 0 !important; }',
+      'body.scholia-sidebar-hidden scholia-sidebar { width: 0; overflow: hidden; }',
+      'body.scholia-compact { margin-right: 0 !important; }',
+    ].join('\n');
+  } else {
+    // Pandoc: CSS grid layout with sidebar as grid participant
+    layoutStyle.textContent = [
+      cssVars,
+      'body { margin: 0; display: grid; min-height: 100vh;',
+      '  background: var(--s-bg); color: var(--s-text);',
+      '  font-family: var(--s-body); font-size: 1.1rem; line-height: 1.7;',
+      '  grid-template-columns: 1fr 4px minmax(200px, var(--sidebar-width, 320px));',
+      '  grid-template-rows: auto 1fr;',
+      '  overflow-x: hidden; }',
+      'body { transition: grid-template-columns 0.3s ease; }',
+      'scholia-sidebar { display: contents; }',
+      '#scholia-doc { grid-row: 2; grid-column: 1; }',
+      'body.scholia-sidebar-hidden { grid-template-columns: 1fr 0 0; }',
+      'body.scholia-compact { grid-template-columns: 1fr; }',
+    ].join('\n');
+  }
+  document.head.appendChild(layoutStyle);
+
+  // For Quarto, inject shadow-internal layout overrides.
+  // The shadow host is position:fixed (not display:contents), so
+  // shadow children need their own layout instead of grid participation.
+  if (isQuarto) {
+    var quartoShadowStyle = document.createElement('style');
+    quartoShadowStyle.textContent = [
+      ':host { display: block; }',
+      '.scholia-toolbar {',
+      '  position: fixed; top: 0; left: 0; right: 0; z-index: 1051; }',
+      '.scholia-resize-handle {',
+      '  position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }',
+      '.scholia-sidebar {',
+      '  position: absolute; left: 4px; top: 0; right: 0; bottom: 0;',
+      '  overflow-y: auto; }',
+    ].join('\n');
+    shadow.appendChild(quartoShadowStyle);
+  }
+
+  // Create shadow DOM structure
+  var toolbarEl = document.createElement('nav');
+  toolbarEl.className = 'scholia-toolbar';
+  shadow.appendChild(toolbarEl);
+
+  var resizeHandle = document.createElement('div');
+  resizeHandle.className = 'scholia-resize-handle';
+  shadow.appendChild(resizeHandle);
+
+  var sidebarEl = document.createElement('aside');
+  sidebarEl.className = 'scholia-sidebar';
+  shadow.appendChild(sidebarEl);
+
+  if (isQuarto) {
+    docEl.classList.add('scholia-quarto');
+  }
+
   var highlights = new Map();   // annotation id → [mark elements]
   var orphanIds = new Set();
   var showResolved = false;
   var showRead = true;
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
   var sidebarHidden = false;
+  var _sidebarTransitionHandler = null;
   var compactMode = false;   // auto-set when viewport too narrow for sidebar
   var themeMode = localStorage.getItem('scholia-theme') || 'system'; // 'light' | 'dark' | 'system'
   var darkMode = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   var fontMode = localStorage.getItem('scholia-font') || 'default';  // 'default' | 'system' | 'latex'
+  var quartoTheme = localStorage.getItem('scholia-quarto-theme') || 'scholia'; // 'scholia' | 'default'
   var uiZoom = parseInt(localStorage.getItem('scholia-zoom'), 10) || 100;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
   var readonlyMode = window.__SCHOLIA_READONLY__ || false;
@@ -72,8 +173,8 @@
     dropdown.className = 'scholia-breadcrumb-dropdown';
     segEl.classList.add('active');
 
-    // Append to body to escape overflow:hidden on toolbar-path
-    document.body.appendChild(dropdown);
+    // Append to shadow root to escape overflow:hidden on toolbar-path
+    shadow.appendChild(dropdown);
     var rect = segEl.getBoundingClientRect();
     dropdown.style.position = 'fixed';
     dropdown.style.top = rect.bottom + 4 + 'px';
@@ -191,7 +292,7 @@
   // ── Unified dropdown dismiss (click-outside + Escape) ──
 
   function closeOptionsMenu() {
-    var menu = document.querySelector('.scholia-options-menu');
+    var menu = shadow.querySelector('.scholia-options-menu');
     if (menu) menu.remove();
   }
 
@@ -201,16 +302,19 @@
     if (except !== 'options') closeOptionsMenu();
   }
 
-  document.addEventListener('click', function (e) {
+  shadow.addEventListener('click', function (e) {
     // Breadcrumb
     if (activeBreadcrumbDropdown && !activeBreadcrumbDropdown.dropdown.contains(e.target) &&
         !activeBreadcrumbDropdown.seg.contains(e.target)) {
       closeBreadcrumbDropdown();
     }
-    // TOC — handled in renderToolbar listener
+    // TOC
+    if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
+      closeToc();
+    }
     // Options
-    var optMenu = document.querySelector('.scholia-options-menu');
-    var optWrap = document.querySelector('.scholia-options-wrap');
+    var optMenu = shadow.querySelector('.scholia-options-menu');
+    var optWrap = shadow.querySelector('.scholia-options-wrap');
     if (optMenu && optWrap && !optWrap.contains(e.target)) {
       closeOptionsMenu();
     }
@@ -309,6 +413,13 @@
     ws.onmessage = function (e) {
       var msg = JSON.parse(e.data);
       if (msg.type === 'doc_update') {
+        if (isQuarto) {
+          // Quarto's client-side JS (KaTeX, tippy, popper) only runs once
+          // on page load. Replacing innerHTML breaks math and tooltips.
+          // Reload the page to get a fresh full Quarto render.
+          window.location.reload();
+          return;
+        }
         if (msg.sidenotes !== undefined) {
           sidenotesEnabled = msg.sidenotes;
           docEl.classList.toggle('scholia-no-sidenotes', !sidenotesEnabled);
@@ -353,7 +464,7 @@
           var errEl = document.createElement('div');
           errEl.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:8px 18px;border-radius:6px;z-index:10000;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
           errEl.textContent = msg.message;
-          document.body.appendChild(errEl);
+          shadow.appendChild(errEl);
           setTimeout(function() { errEl.remove(); }, 5000);
         }
       }
@@ -383,7 +494,7 @@
     banner.textContent = text;
     banner.style.cursor = 'pointer';
     banner.addEventListener('click', function () { banner.remove(); });
-    document.body.appendChild(banner);
+    shadow.appendChild(banner);
     setTimeout(function () { banner.remove(); }, 8000);
   }
 
@@ -470,7 +581,7 @@
     btnRow.appendChild(saveBtn);
     dialog.appendChild(btnRow);
     overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
+    shadow.appendChild(overlay);
 
     function doSave() {
       var fn = fnInput.value.trim();
@@ -566,12 +677,12 @@
   // ── Debounced render pipeline ───────────────────────
 
   var renderRaf = 0;
-  function scheduleRender() {
+  function scheduleRender(skipAnchoring) {
     if (renderRaf) cancelAnimationFrame(renderRaf);
     renderRaf = requestAnimationFrame(function () {
       renderRaf = 0;
       renderSidebar();
-      reanchorAll();
+      if (!skipAnchoring) reanchorAll();
       positionCards();
     });
   }
@@ -662,11 +773,6 @@
       tocWrapEl.appendChild(tocEl);
       renderMathIn(tocEl);
     }
-    document.addEventListener('click', function closeTocOutside(e) {
-      if (tocOpen && tocWrapEl && !tocWrapEl.contains(e.target)) {
-        closeToc();
-      }
-    });
 
     // Options dropdown
     var optionsWrap = document.createElement('span');
@@ -685,7 +791,8 @@
 
       var tbl = document.createElement('table');
 
-      // Theme row
+      // Theme row (Pandoc only — Quarto has its own theming)
+      if (!isQuarto) {
       var themeRow = document.createElement('tr');
       var themeTd1 = document.createElement('td');
       themeTd1.textContent = 'Theme';
@@ -707,6 +814,7 @@
             darkMode = mode === 'dark';
           }
           document.body.classList.toggle('scholia-dark', darkMode);
+          shadowHost.classList.toggle('scholia-dark', darkMode);
           menu.remove();
           renderToolbar();
         });
@@ -715,8 +823,42 @@
       themeTd2.appendChild(themeGroup);
       themeRow.appendChild(themeTd2);
       tbl.appendChild(themeRow);
+      } // end theme (Pandoc only)
 
-      // Typeface row
+      // Quarto theme row (Quarto only)
+      if (isQuarto) {
+      var qtRow = document.createElement('tr');
+      var qtTd1 = document.createElement('td');
+      qtTd1.textContent = 'Quarto theme';
+      qtRow.appendChild(qtTd1);
+      var qtTd2 = document.createElement('td');
+      var qtGroup = document.createElement('span');
+      qtGroup.className = 'scholia-options-toggle';
+      ['scholia', 'default'].forEach(function (mode) {
+        var btn = document.createElement('button');
+        btn.textContent = mode;
+        btn.className = quartoTheme === mode ? 'active' : '';
+        btn.addEventListener('click', function () {
+          localStorage.setItem('scholia-quarto-theme', mode);
+          if (mode === 'default') {
+            localStorage.setItem('scholia-font', 'default');
+          }
+          // Re-render: reload with query parameter so server
+          // renders with/without --metadata-file and theme CSS
+          var url = new URL(window.location.href);
+          url.searchParams.set('quarto_theme', mode);
+          window.location.href = url.toString();
+        });
+        qtGroup.appendChild(btn);
+      });
+      qtTd2.appendChild(qtGroup);
+      qtRow.appendChild(qtTd2);
+      tbl.appendChild(qtRow);
+      }
+
+      // Typeface row (disabled when Quarto theme = "default")
+      var fontDisabled = isQuarto && quartoTheme === 'default';
+      if (!fontDisabled) {
       var fontRow = document.createElement('tr');
       var fontTd1 = document.createElement('td');
       fontTd1.textContent = 'Typeface';
@@ -731,9 +873,13 @@
         btn.className = fontMode === mode ? 'active' : '';
         btn.addEventListener('click', function () {
           document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
+          shadowHost.classList.remove('scholia-font-system', 'scholia-font-latex');
           fontMode = mode;
           localStorage.setItem('scholia-font', mode);
-          if (mode !== 'default') document.body.classList.add('scholia-font-' + mode);
+          if (mode !== 'default') {
+            document.body.classList.add('scholia-font-' + mode);
+            shadowHost.classList.add('scholia-font-' + mode);
+          }
           menu.remove();
           renderToolbar();
         });
@@ -742,8 +888,10 @@
       fontTd2.appendChild(fontGroup);
       fontRow.appendChild(fontTd2);
       tbl.appendChild(fontRow);
+      }
 
-      // Footnote display row
+      // Footnote display row (Pandoc only)
+      if (!isQuarto) {
       var fnRow = document.createElement('tr');
       var fnTd1 = document.createElement('td');
       fnTd1.textContent = 'Footnotes';
@@ -780,6 +928,7 @@
       fnTd2.appendChild(fnGroup);
       fnRow.appendChild(fnTd2);
       tbl.appendChild(fnRow);
+      } // end footnotes (Pandoc only)
 
       // Zoom row
       var zoomRow = document.createElement('tr');
@@ -947,26 +1096,48 @@
     cbBtn.addEventListener('click', function () {
       if (sidebarHidden) {
         sidebarHidden = false;
-        containerEl.classList.remove('scholia-sidebar-hidden');
-        scheduleRender();
+        document.body.classList.remove('scholia-sidebar-hidden');
+        sidebarEl.style.display = '';
+        resizeHandle.style.display = '';
+        scheduleRender(highlights.size > 0);  // skip re-anchoring if highlights exist
         // Reposition after grid transition completes
-        containerEl.addEventListener('transitionend', function handler(e) {
+        if (_sidebarTransitionHandler) {
+          document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+        }
+        _sidebarTransitionHandler = function (e) {
           if (e.propertyName === 'grid-template-columns') {
-            containerEl.removeEventListener('transitionend', handler);
+            document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+            _sidebarTransitionHandler = null;
             positionCards();
           }
-        });
+        };
+        document.body.addEventListener('transitionend', _sidebarTransitionHandler);
       } else {
         sidebarHidden = true;
-        containerEl.classList.add('scholia-sidebar-hidden');
-        clearAllHighlights();
+        // Cancel any pending show-transition handler
+        if (_sidebarTransitionHandler) {
+          document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+          _sidebarTransitionHandler = null;
+        }
+        document.body.classList.add('scholia-sidebar-hidden');
+        sidebarEl.style.display = 'none';
+        resizeHandle.style.display = 'none';
         dismissCommentPrompt();
+        updateOffscreenIndicators();
       }
       renderToolbar();
     });
     btnGroup.appendChild(cbBtn);
 
     toolbarEl.appendChild(btnGroup);
+
+    // Update toolbar height CSS variable for body padding/scroll offset
+    if (isQuarto) {
+      requestAnimationFrame(function () {
+        var h = toolbarEl.offsetHeight;
+        document.documentElement.style.setProperty('--scholia-toolbar-h', h + 'px');
+      });
+    }
   }
 
   function clearAllHighlights() {
@@ -1003,6 +1174,8 @@
   }
 
   function rerenderMath() {
+    // Quarto already renders math with KaTeX server-side; skip to avoid double-render
+    if (window.__SCHOLIA_IS_QUARTO__) return;
     renderMathIn(docEl);
   }
 
@@ -1131,8 +1304,8 @@
       renderMathIn(tocEl);
     }
 
-    // Set up collapsible sections
-    setupCollapsibleSections();
+    // Set up collapsible sections (skip for Quarto vanilla theme)
+    if (!isQuarto || quartoTheme === 'scholia') setupCollapsibleSections();
 
     // Highlight active section on scroll
     window.removeEventListener('scroll', updateTocActive);
@@ -1354,7 +1527,7 @@
   function renderSidebar() {
     if (readonlyMode) { sidebarEl.innerHTML = ''; return; }
     // Preserve any open new-comment form
-    var existingForm = document.getElementById('scholia-new-comment');
+    var existingForm = sidebarEl.querySelector('#scholia-new-comment');
 
     sidebarEl.innerHTML = '';
 
@@ -2062,7 +2235,7 @@
     panel.appendChild(replyRow);
 
     backdrop.appendChild(panel);
-    document.body.appendChild(backdrop);
+    shadow.appendChild(backdrop);
     activeOverlay = { backdrop: backdrop, annotationId: ann.id };
 
     // Escape to close
@@ -2283,7 +2456,7 @@
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
 
     // Reserve space for new-comment form
-    var newCommentEl = document.getElementById('scholia-new-comment');
+    var newCommentEl = sidebarEl.querySelector('#scholia-new-comment');
     var minY = parseFloat(getComputedStyle(sidebarEl).paddingTop) || 0;
     if (newCommentEl) {
       var ncBottom = newCommentEl.getBoundingClientRect().bottom - sidebarTop;
@@ -2649,12 +2822,13 @@
     }
   }
 
-  // Dismiss on mousedown outside the form
+  // Dismiss on mousedown outside the form (use composedPath for shadow DOM)
   document.addEventListener('mousedown', function (e) {
-    if (pendingForm && !pendingForm.contains(e.target)) {
+    var path = e.composedPath();
+    if (pendingForm && path.indexOf(pendingForm) === -1) {
       dismissCommentPrompt();
     }
-    if (compactForm && !compactForm.contains(e.target)) {
+    if (compactForm && path.indexOf(compactForm) === -1) {
       dismissCompactComment();
     }
   });
@@ -2667,7 +2841,7 @@
     }
     if (sidebarHidden || !pendingForm) return;
     var textarea = pendingForm.querySelector('textarea');
-    if (!textarea || document.activeElement === textarea) return;
+    if (!textarea || shadow.activeElement === textarea) return;
 
     if (e.key === 'Escape') {
       dismissCommentPrompt();
@@ -2688,7 +2862,7 @@
   document.addEventListener('selectionchange', function () {
     if (!pendingForm) return;
     var textarea = pendingForm.querySelector('textarea');
-    if (textarea && document.activeElement === textarea) return;
+    if (textarea && shadow.activeElement === textarea) return;
     var sel = window.getSelection();
     if (!sel || sel.isCollapsed) dismissCommentPrompt();
   });
@@ -2786,7 +2960,7 @@
     actions.appendChild(previewBtn);
 
     form.appendChild(actions);
-    document.body.appendChild(form);
+    shadow.appendChild(form);
     compactForm = form;
     textarea.focus();
   }
@@ -3007,7 +3181,7 @@
     });
     citationTooltip.addEventListener('mouseleave', scheduleCitationHide);
 
-    document.body.appendChild(citationTooltip);
+    shadow.appendChild(citationTooltip);
 
     var rect = link.getBoundingClientRect();
     var tipRect = citationTooltip.getBoundingClientRect();
@@ -3038,11 +3212,11 @@
 
   var aboveIndicator = document.createElement('div');
   aboveIndicator.className = 'scholia-offscreen-indicator scholia-offscreen-above';
-  document.body.appendChild(aboveIndicator);
+  shadow.appendChild(aboveIndicator);
 
   var belowIndicator = document.createElement('div');
   belowIndicator.className = 'scholia-offscreen-indicator scholia-offscreen-below';
-  document.body.appendChild(belowIndicator);
+  shadow.appendChild(belowIndicator);
 
   // Click to scroll to nearest offscreen thread
   aboveIndicator.addEventListener('click', function () {
@@ -3082,7 +3256,7 @@
   }
 
   function updateOffscreenIndicators() {
-    if (sidebarHidden) {
+    if (sidebarHidden || compactMode) {
       aboveIndicator.style.display = 'none';
       belowIndicator.style.display = 'none';
       return;
@@ -3146,7 +3320,7 @@
   resizeHandle.addEventListener('mousedown', function (e) {
     e.preventDefault();
     resizeHandle.classList.add('dragging');
-    containerEl.style.transition = 'none';
+    document.body.style.transition = 'none';
 
     function onMove(e) {
       var newWidth = window.innerWidth - e.clientX;
@@ -3154,9 +3328,15 @@
         // Collapse: hide sidebar
         if (!sidebarHidden) {
           sidebarHidden = true;
-          containerEl.classList.add('scholia-sidebar-hidden');
-          clearAllHighlights();
+          if (_sidebarTransitionHandler) {
+            document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
+            _sidebarTransitionHandler = null;
+          }
+          document.body.classList.add('scholia-sidebar-hidden');
+          sidebarEl.style.display = 'none';
+          resizeHandle.style.display = 'none';
           dismissCommentPrompt();
+          updateOffscreenIndicators();
           renderToolbar();
         }
         return;
@@ -3164,18 +3344,20 @@
       // Uncollapse if was hidden
       if (sidebarHidden) {
         sidebarHidden = false;
-        containerEl.classList.remove('scholia-sidebar-hidden');
+        document.body.classList.remove('scholia-sidebar-hidden');
+        sidebarEl.style.display = '';
+        resizeHandle.style.display = '';
         renderToolbar();
-        scheduleRender();
+        scheduleRender(highlights.size > 0);
       }
       var clamped = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, newWidth));
-      containerEl.style.setProperty('--sidebar-width', clamped + 'px');
+      document.body.style.setProperty('--sidebar-width', clamped + 'px');
       positionCards();
     }
 
     function onUp() {
       resizeHandle.classList.remove('dragging');
-      containerEl.style.transition = '';
+      document.body.style.transition = '';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     }
@@ -3186,12 +3368,19 @@
 
   // ── Init ───────────────────────────────────────────
 
-  // Set initial sidenotes CSS state
-  if (!sidenotesEnabled) docEl.classList.add('scholia-no-sidenotes');
+  // Set initial sidenotes CSS state (Pandoc only — Quarto has no sidenotes)
+  if (!isQuarto && !sidenotesEnabled) docEl.classList.add('scholia-no-sidenotes');
 
   // Apply persisted preferences
-  if (darkMode) document.body.classList.add('scholia-dark');
-  if (fontMode !== 'default') document.body.classList.add('scholia-font-' + fontMode);
+  if (darkMode) {
+    document.body.classList.add('scholia-dark');
+    shadowHost.classList.add('scholia-dark');
+  }
+  // Apply persisted font mode (skip if Quarto vanilla theme — no customization)
+  if (!(isQuarto && quartoTheme === 'default') && fontMode !== 'default') {
+    document.body.classList.add('scholia-font-' + fontMode);
+    shadowHost.classList.add('scholia-font-' + fontMode);
+  }
   if (uiZoom !== 100) applyZoom();
 
   // Track system theme changes for 'system' mode
@@ -3199,6 +3388,7 @@
     if (themeMode !== 'system') return;
     darkMode = e.matches;
     document.body.classList.toggle('scholia-dark', darkMode);
+    shadowHost.classList.toggle('scholia-dark', darkMode);
     renderToolbar();
   });
 
@@ -3215,19 +3405,29 @@
 
   // KaTeX and mermaid are loaded with defer, so wait for window load
   window.addEventListener('load', function () {
-    if (window.mermaid) window.mermaid.initialize({ startOnLoad: false });
     buildToc();
-    rerenderMath();
-    renderMermaid();
+    if (!isQuarto) {
+      if (window.mermaid) window.mermaid.initialize({ startOnLoad: false });
+      rerenderMath();
+      renderMermaid();
+      decorateCodeBlocks();
+      setupCitationTooltips();
+    }
     rerenderCommentBodies();
-    decorateCodeBlocks();
-    setupCitationTooltips();
     reanchorAll();
     positionCards();
   });
 
   // Reposition cards on resize (layout may change)
-  window.addEventListener('resize', positionCards);
+  // Debounce positionCards on resize — it's expensive (layout thrashing)
+  var resizeRaf = 0;
+  window.addEventListener('resize', function () {
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(function () {
+      resizeRaf = 0;
+      positionCards();
+    });
+  });
 
   // ── Compact mode: viewport too narrow for sidebar ──
   var COMPACT_ENTER = 754;
@@ -3237,16 +3437,20 @@
     var vw = window.innerWidth;
     if (!compactMode && vw < COMPACT_ENTER) {
       compactMode = true;
-      containerEl.classList.add('scholia-compact');
+      document.body.classList.add('scholia-compact');
+      resizeHandle.style.display = 'none';
+      sidebarEl.style.display = 'none';
       dismissCommentPrompt();
-      if (!sidebarHidden) { reanchorAll(); }
+      updateOffscreenIndicators();
       renderToolbar();
     } else if (compactMode && vw > COMPACT_LEAVE) {
       compactMode = false;
-      containerEl.classList.remove('scholia-compact');
+      document.body.classList.remove('scholia-compact');
+      resizeHandle.style.display = '';
+      if (!sidebarHidden) sidebarEl.style.display = '';
       dismissCompactComment();
       if (!sidebarHidden) {
-        scheduleRender();
+        positionCards();
       }
       renderToolbar();
     }
@@ -3255,9 +3459,10 @@
   window.addEventListener('resize', checkCompact);
   checkCompact();
 
-  // Responsive sidenotes: toggle based on doc pane width, not viewport.
+  // Responsive sidenotes (Pandoc only): toggle based on doc pane width.
   // Hysteresis prevents oscillation at the boundary — content width changes
   // when the class toggles (60% → 100%), so we use separate thresholds.
+  if (!isQuarto) {
   var NARROW_ENTER = 750;
   var NARROW_LEAVE = 820;
   var resizeObs = new ResizeObserver(function (entries) {
@@ -3270,5 +3475,6 @@
     }
   });
   resizeObs.observe(docEl);
+  } // end if (!isQuarto)
 
 })();
