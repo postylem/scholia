@@ -134,11 +134,13 @@ When asked to review comments, "check the scholia," or equivalent:
 - **Parallelism**: for many independent threads, run multiple `scholia reply` calls in parallel with `-q`. Don't parallelize when one reply depends on a document edit from another, or when threads concern overlapping sections.
 - The human sees replies live in the browser sidebar.
 
-## Cross-references (pandoc-crossref)
+## Cross-references
 
-When writing or editing documents, use `pandoc-crossref` identifiers so that section numbers, figure numbers, etc. stay correct automatically — even when content is reordered.
+When writing or editing documents, use cross-reference identifiers so that section numbers, figure numbers, etc. stay correct automatically — even when content is reordered.
 
-### Naming convention
+**Important:** The syntax differs between `.md` files (pandoc-crossref, uses colons) and `.qmd` files (Quarto, uses hyphens). Check the file extension before writing references.
+
+### Naming convention — Markdown (.md, pandoc-crossref)
 
 | Type     | Attribute on definition         | Reference syntax  | Renders as      |
 |----------|---------------------------------|-------------------|-----------------|
@@ -148,12 +150,22 @@ When writing or editing documents, use `pandoc-crossref` identifiers so that sec
 | Equation | `$$ E=mc^2 $$ {#eq:energy}`     | `@eq:energy`      | eq. 1           |
 | Listing  | `` {#lst:main} ``               | `@lst:main`       | lst. 1          |
 
+### Naming convention — Quarto (.qmd)
+
+| Type     | Attribute on definition              | Reference syntax  | Renders as        |
+|----------|--------------------------------------|-------------------|-------------------|
+| Section  | `## Methods {#sec-methods}`          | `@sec-methods`    | Section 2         |
+| Figure   | `![Caption](img.png){#fig-arch}`     | `@fig-arch`       | Figure 1          |
+| Table    | `: Caption {#tbl-results}`           | `@tbl-results`    | Table 1           |
+| Equation | `$$ E=mc^2 $$ {#eq-energy}`          | `@eq-energy`      | Equation 1        |
+
 ### Rules
 
-- Always use the `prefix:label` pattern (`sec:`, `fig:`, `tbl:`, `eq:`, `lst:`) — this is how `pandoc-crossref` dispatches reference types.
-- Never hard-code section/figure numbers (e.g. `[§3](#methods)`). Use `@sec:methods` instead — numbers update automatically when sections are reordered.
-- When creating new headings, always add an explicit id: `## New Section {#sec:new-section}`.
-- When referencing multiple items: `@sec:intro; @sec:methods` renders as "secs. 1, 2".
+- **For `.md` files:** use the `prefix:label` pattern with colons (`sec:`, `fig:`, `tbl:`, `eq:`, `lst:`) — this is how `pandoc-crossref` dispatches reference types.
+- **For `.qmd` files:** use the `prefix-label` pattern with hyphens (`sec-`, `fig-`, `tbl-`, `eq-`) — this is Quarto's native cross-reference syntax.
+- Never hard-code section/figure numbers (e.g. `[§3](#methods)`). Use `@sec:methods` (md) or `@sec-methods` (qmd) instead — numbers update automatically when sections are reordered.
+- When creating new headings, always add an explicit id: `## New Section {#sec:new-section}` (md) or `## New Section {#sec-new-section}` (qmd).
+- When referencing multiple items: `@sec:intro; @sec:methods` (md) or `@sec-intro; @sec-methods` (qmd).
 
 ## Example Session
 
