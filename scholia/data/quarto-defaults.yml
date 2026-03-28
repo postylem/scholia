@@ -1,11 +1,12 @@
 # Quarto render defaults used by scholia.
 #
-# These are passed via `quarto render --defaults <this-file>`.
-# Document YAML frontmatter overrides anything set here, so these
-# act as sensible defaults that authors can customize per-document.
+# Passed via `quarto render --defaults <this-file>`.
+# Document YAML frontmatter overrides anything here, so these
+# act as defaults that authors can customize per-document.
 #
-# Uses Pandoc defaults file format (top-level keys, not nested
-# under format:).  See https://pandoc.org/MANUAL.html#defaults-files
+# Style choices mirror scholia's Pandoc/markdown rendering:
+# Tufte-inspired serif typography, generous line spacing,
+# warm near-white background, muted teal accents.
 #
 # ── Do not change ────────────────────────────────────────────────
 # html-math-method: katex is required — scholia's comment system
@@ -16,5 +17,15 @@
 metadata:
   html-math-method: katex
   number-sections: true
+
+  # Typography — matches scholia's --s-body / --s-mono CSS variables.
+  # et-book isn't available to Quarto, but Palatino (its basis) is.
   mainfont: Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif
   monofont: Consolas, "Liberation Mono", Menlo, Monaco, Courier, monospace
+  fontsize: 1.1rem
+  linestretch: 1.7
+
+  # Colors — matches scholia's CSS custom properties
+  backgroundcolor: "#fefefe"
+  fontcolor: "#111"
+  linkcolor: "#446677"
