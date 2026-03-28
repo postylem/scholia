@@ -1,6 +1,6 @@
 # Quarto render defaults used by scholia.
 #
-# Passed via `quarto render --defaults <this-file>`.
+# Passed via `quarto render --metadata-file <this-file>`.
 # Document YAML frontmatter overrides anything here, so these
 # act as defaults that authors can customize per-document.
 #
@@ -14,16 +14,12 @@
 # must use the same engine to avoid conflicts.
 # ─────────────────────────────────────────────────────────────────
 
-# Processor options (top-level)
 html-math-method: katex
 number-sections: true
-
-# Template variables (fonts, colors, spacing)
-variables:
-  mainfont: Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif
-  monofont: Consolas, "Liberation Mono", Menlo, Monaco, Courier, monospace
-  fontsize: 1.1rem
-  linestretch: 1.7
-  backgroundcolor: "#fefefe"
-  fontcolor: "#111"
-  linkcolor: "#446677"
+mainfont: Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif
+monofont: Consolas, "Liberation Mono", Menlo, Monaco, Courier, monospace
+fontsize: 1.1rem
+linestretch: 1.7
+backgroundcolor: "#fefefe"
+fontcolor: "#111"
+linkcolor: "#446677"
