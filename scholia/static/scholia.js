@@ -56,7 +56,7 @@
       'body { margin-right: calc(var(--sidebar-width, 320px) + 4px) !important;',
       '  transition: margin-right 0.3s ease; }',
       'body.scholia-sidebar-hidden { margin-right: 0 !important; }',
-      'body.scholia-sidebar-hidden scholia-sidebar { display: none; }',
+      'body.scholia-sidebar-hidden scholia-sidebar { width: 0; overflow: hidden; }',
       'body.scholia-compact { margin-right: 0 !important; }',
     ].join('\n');
   } else {
