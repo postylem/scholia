@@ -440,10 +440,12 @@ input.margin-toggle { display: none; }
   text-indent: -1.1em;
 }
 /* Heading sizes */
-.scholia-toc-body .scholia-toc-h1 { font-size: 0.9rem; }
-.scholia-toc-body .scholia-toc-h2 { font-size: 0.82rem; }
-.scholia-toc-body .scholia-toc-h3 { font-size: 0.76rem; }
-.scholia-toc-body .scholia-toc-h4 { font-size: 0.72rem; }
+.scholia-toc-body .scholia-toc-h1 { font-size: 14.4px; }
+.scholia-toc-body .scholia-toc-h2 { font-size: 13.1px; }
+.scholia-toc-body .scholia-toc-h3 { font-size: 12.2px; }
+.scholia-toc-body .scholia-toc-h4 { font-size: 11.5px; }
+
+.scholia-toc-body .katex { font-size: 0.9em; }
 
 .scholia-toc-body a {
   text-indent: 0;
@@ -679,13 +681,13 @@ input.margin-toggle { display: none; }
   gap: 0.3em;
   flex-wrap: wrap;
   font-family: var(--s-sans);
-  font-size: 0.72rem;
+  font-size: 11.5px;
   font-weight: 600;
   margin-bottom: 0.1rem;
 }
 
 .scholia-message-time {
-  font-size: 0.54rem;
+  font-size: 0.68rem;
   color: var(--s-text-dim);
   font-weight: 400;
   margin-left: 0.5em;
@@ -721,13 +723,13 @@ input.margin-toggle { display: none; }
 }
 
 .scholia-model-name {
-  font-size: 0.54rem;
+  font-size: 0.68rem;
   font-weight: 400;
   opacity: 0.7;
 }
 
 .scholia-read-toggle {
-  font-size: 0.58rem;
+  font-size: 0.7rem;
   font-family: var(--s-sans);
   background: none;
   border: none;
@@ -740,7 +742,7 @@ input.margin-toggle { display: none; }
 }
 .scholia-read-toggle:hover { color: var(--s-accent); }
 .scholia-btn-edit {
-  font-size: 0.58rem;
+  font-size: 0.7rem;
   font-family: var(--s-sans);
   background: none;
   border: none;
@@ -921,7 +923,7 @@ input.margin-toggle { display: none; }
   border: 1px solid var(--s-border);
   border-radius: var(--s-radius);
   padding: 0.2rem 0.5rem;
-  font-size: 0.72rem;
+  font-size: 11.5px;
   font-family: var(--s-sans);
   color: var(--s-text-dim);
   cursor: pointer;
@@ -944,7 +946,7 @@ input.margin-toggle { display: none; }
   border: 1px solid var(--s-accent);
   border-radius: var(--s-radius);
   padding: 0.2rem 0.5rem;
-  font-size: 0.72rem;
+  font-size: 11.5px;
   font-family: var(--s-sans);
   font-weight: 600;
   cursor: pointer;
@@ -958,7 +960,7 @@ input.margin-toggle { display: none; }
   border: none;
   border-radius: var(--s-radius);
   padding: 0.2rem 0.5rem;
-  font-size: 0.72rem;
+  font-size: 11.5px;
   font-family: var(--s-sans);
   color: var(--s-text-dim);
   cursor: pointer;
@@ -970,7 +972,7 @@ input.margin-toggle { display: none; }
   padding: 0.2rem 0.5rem;
   border: none;
   border-radius: var(--s-radius);
-  font-size: 0.72rem;
+  font-size: 11.5px;
   cursor: pointer;
   font-family: var(--s-sans);
 }
@@ -1090,7 +1092,7 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   border: 1px solid var(--s-border);
   border-radius: 4px;
   padding: 0.5rem 0.65rem;
-  font-size: 0.72rem;
+  font-size: 11.5px;
   font-weight: 400;
   line-height: 1.4;
   color: var(--s-text);
@@ -1257,12 +1259,12 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   background: var(--s-surface);
   border-bottom: 1px solid var(--s-border);
   font-family: var(--s-sans);
-  font-size: 0.72rem;
+  font-size: 11.5px;
 }
 
 .scholia-toolbar-path {
   margin-right: auto;
-  font-size: 0.72rem;
+  font-size: 11.5px;
   color: var(--s-text-dim);
   opacity: 0.6;
   display: flex;
@@ -1327,7 +1329,7 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   max-height: 60vh;
   overflow-y: auto;
   font-family: var(--s-mono, monospace);
-  font-size: 0.72rem;
+  font-size: 11.5px;
 }
 .scholia-breadcrumb-dropdown-header {
   padding: 0.2rem 0.45rem;
@@ -1923,6 +1925,28 @@ body.scholia-dark .scholia-code-copy {
 :host(.scholia-dark) .scholia-toolbar.scholia-disconnected {
   background: #b45309;
   border-bottom-color: #92400e;
+}
+
+/* Rendering indicator — inline badge like disconnect banner */
+.scholia-rendering-banner {
+  display: none;
+  align-items: center;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  margin-left: 0.4rem;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.15);
+}
+.scholia-rendering-banner.visible {
+  display: inline-flex;
+}
+@keyframes scholia-rendering-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.scholia-rendering-banner.visible {
+  animation: scholia-rendering-pulse 1.5s ease-in-out infinite;
 }
 
 /* Save As modal */

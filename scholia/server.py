@@ -1095,6 +1095,13 @@ class ScholiaServer:
                 by_sidenotes.setdefault(sn, []).append(ws)
 
             closed = set()
+            # Notify clients that rendering has started (for progress indicator)
+            start_payload = json.dumps({"type": "rendering_start"})
+            for ws in clients:
+                try:
+                    await ws.send_str(start_payload)
+                except Exception:
+                    closed.add(ws)
             for sn_val, ws_list in by_sidenotes.items():
                 rendered = await render_doc(doc_path, sidenotes=sn_val)
                 if _is_quarto(doc_path):

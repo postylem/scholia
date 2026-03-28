@@ -53,9 +53,11 @@
       '  position: fixed; top: 0; right: 0; bottom: 0;',
       '  width: calc(var(--sidebar-width, 320px) + 4px);',
       '  z-index: 1050; display: block; }',
-      'html { scroll-padding-top: var(--scholia-toolbar-h, 38px); }',
+      'html { scroll-padding-top: var(--scholia-toolbar-h, 38px);',
+      '  font-size: 16px !important; }',
       'body { margin-right: calc(var(--sidebar-width, 320px) + 4px) !important;',
       '  padding-top: var(--scholia-toolbar-h, 38px);',
+      '  font-size: 1.1rem;',
       '  transition: margin-right 0.3s ease; }',
       'body.scholia-sidebar-hidden { margin-right: 0 !important; }',
       'body.scholia-sidebar-hidden scholia-sidebar { width: 0; overflow: hidden; }',
@@ -120,7 +122,7 @@
   var showResolved = false;
   var showRead = true;
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
-  var sidebarHidden = false;
+  var sidebarHidden = localStorage.getItem('scholia-sidebar-hidden') === 'true';
   var _sidebarTransitionHandler = null;
   var compactMode = false;   // auto-set when viewport too narrow for sidebar
   var themeMode = localStorage.getItem('scholia-theme') || 'system'; // 'light' | 'dark' | 'system'
@@ -324,7 +326,9 @@
   });
 
   function applyZoom() {
-    document.documentElement.style.fontSize = uiZoom + '%';
+    // Zoom only the document content, not the toolbar/sidebar UI.
+    // Use CSS zoom (not font-size) so rem-based children scale too.
+    docEl.style.zoom = uiZoom / 100;
     positionCards();
   }
 
@@ -398,6 +402,21 @@
     toolbarEl.classList.remove('scholia-disconnected');
   }
 
+  // ── Rendering indicator (Quarto re-render can be slow) ──
+  var renderingBanner = document.createElement('span');
+  renderingBanner.className = 'scholia-rendering-banner';
+  renderingBanner.textContent = 'Rendering\u2026';
+  // Show immediately on Quarto pages — hide once window fully loads
+  if (isQuarto) renderingBanner.classList.add('visible');
+
+  function showRenderingBanner() {
+    renderingBanner.classList.add('visible');
+  }
+
+  function hideRenderingBanner() {
+    renderingBanner.classList.remove('visible');
+  }
+
   // ── WebSocket ──────────────────────────────────────
 
   function connectWS() {
@@ -412,14 +431,19 @@
 
     ws.onmessage = function (e) {
       var msg = JSON.parse(e.data);
+      if (msg.type === 'rendering_start') {
+        showRenderingBanner();
+        return;
+      }
       if (msg.type === 'doc_update') {
         if (isQuarto) {
           // Quarto's client-side JS (KaTeX, tippy, popper) only runs once
           // on page load. Replacing innerHTML breaks math and tooltips.
-          // Reload the page to get a fresh full Quarto render.
+          // Keep rendering banner visible through the reload.
           window.location.reload();
           return;
         }
+        hideRenderingBanner();
         if (msg.sidenotes !== undefined) {
           sidenotesEnabled = msg.sidenotes;
           docEl.classList.toggle('scholia-no-sidenotes', !sidenotesEnabled);
@@ -754,6 +778,7 @@
     brandPath.appendChild(crumbWrap);
     toolbarEl.appendChild(brandPath);
     toolbarEl.appendChild(disconnectBanner);
+    toolbarEl.appendChild(renderingBanner);
 
     // Contents (TOC) dropdown — before Options
     tocWrapEl = document.createElement('span');
@@ -845,6 +870,7 @@
           }
           // Re-render: reload with query parameter so server
           // renders with/without --metadata-file and theme CSS
+          showRenderingBanner();
           var url = new URL(window.location.href);
           url.searchParams.set('quarto_theme', mode);
           window.location.href = url.toString();
@@ -1096,6 +1122,7 @@
     cbBtn.addEventListener('click', function () {
       if (sidebarHidden) {
         sidebarHidden = false;
+        localStorage.setItem('scholia-sidebar-hidden', 'false');
         document.body.classList.remove('scholia-sidebar-hidden');
         sidebarEl.style.display = '';
         resizeHandle.style.display = '';
@@ -1114,6 +1141,7 @@
         document.body.addEventListener('transitionend', _sidebarTransitionHandler);
       } else {
         sidebarHidden = true;
+        localStorage.setItem('scholia-sidebar-hidden', 'true');
         // Cancel any pending show-transition handler
         if (_sidebarTransitionHandler) {
           document.body.removeEventListener('transitionend', _sidebarTransitionHandler);
@@ -1225,6 +1253,14 @@
       var cites = tmp.querySelectorAll('.citation');
       for (var i = 0; i < cites.length; i++) {
         cites[i].replaceWith(document.createTextNode(cites[i].textContent));
+      }
+      // Quarto renders math server-side; the span.math already contains full
+      // KaTeX DOM.  Mark these so renderMathIn() won't re-render (which would
+      // extract garbled textContent from the mathml+html subtrees).
+      var preRendered = tmp.querySelectorAll('span.math .katex');
+      for (var i = 0; i < preRendered.length; i++) {
+        var mathSpan = preRendered[i].closest('span.math');
+        if (mathSpan) mathSpan.classList.add('scholia-math-rendered');
       }
       return tmp.innerHTML;
     }
@@ -3305,6 +3341,9 @@
     if (!scrollRaf) {
       scrollRaf = true;
       requestAnimationFrame(function () {
+        // Quarto sidebar is position:fixed, so cards must be repositioned
+        // on scroll to stay aligned with their highlights in the document.
+        if (isQuarto && !sidebarHidden) positionCards();
         updateOffscreenIndicators();
         scrollRaf = false;
       });
@@ -3392,6 +3431,13 @@
     renderToolbar();
   });
 
+  // Apply persisted sidebar-hidden state before first render
+  if (sidebarHidden) {
+    document.body.classList.add('scholia-sidebar-hidden');
+    sidebarEl.style.display = 'none';
+    resizeHandle.style.display = 'none';
+  }
+
   renderToolbar();
   connectWS();
   initMarkdownIt();
@@ -3416,6 +3462,7 @@
     rerenderCommentBodies();
     reanchorAll();
     positionCards();
+    hideRenderingBanner();
   });
 
   // Reposition cards on resize (layout may change)
