@@ -292,6 +292,48 @@ def _render_export_sync(
         return result.stdout
 
 
+def _render_quarto_export_sync(doc_path: Path, fmt: str) -> bytes:
+    """Export a Quarto document to pdf/html/etc. Returns bytes."""
+    import tempfile
+
+    quarto = shutil.which("quarto")
+    if not quarto:
+        raise RuntimeError(
+            "Quarto is not installed. Install from https://quarto.org/docs/get-started/"
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_name = f"output.{fmt}"
+        cmd = [
+            quarto,
+            "render",
+            str(doc_path.resolve()),
+            "--to",
+            fmt,
+            "--output",
+            out_name,
+            "--output-dir",
+            tmp,
+        ]
+        env = {**os.environ}
+        py = _find_quarto_python(doc_path)
+        if py:
+            env["QUARTO_PYTHON"] = py
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(doc_path.parent),
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode, cmd, output=result.stdout, stderr=result.stderr
+            )
+        return Path(tmp, out_name).read_bytes()
+
+
 async def render_export(
     doc_path: Path,
     fmt: str,
@@ -300,6 +342,8 @@ async def render_export(
 ) -> bytes | None:
     """Export document without blocking the event loop."""
     loop = asyncio.get_running_loop()
+    if _is_quarto(doc_path):
+        return await loop.run_in_executor(None, _render_quarto_export_sync, doc_path, fmt)
     return await loop.run_in_executor(
         None, _render_export_sync, doc_path, fmt, output_path, pdf_engine
     )
