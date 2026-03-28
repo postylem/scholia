@@ -1,25 +1,18 @@
-# Quarto render defaults used by scholia.
+# Scholia's default Quarto style ("scholia" theme).
 #
 # Passed via `quarto render --metadata-file <this-file>`.
-# Document YAML frontmatter overrides anything here, so these
-# act as defaults that authors can customize per-document.
+# Document YAML frontmatter overrides anything here.
 #
 # Style choices mirror scholia's Pandoc/markdown rendering:
-# Tufte-inspired serif typography, generous line spacing,
-# warm near-white background, muted teal accents.
+# Tufte-inspired serif typography, warm background, muted accents.
 #
-# ── Do not change ────────────────────────────────────────────────
-# html-math-method: katex is required — scholia's comment system
-# loads KaTeX for rendering math in annotations, and the document
-# must use the same engine to avoid conflicts.
-# ─────────────────────────────────────────────────────────────────
+# Note: html-math-method: katex is set separately via -M flag
+# (always applied, regardless of theme choice).
 
-html-math-method: katex
 number-sections: true
 mainfont: Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif
 monofont: Consolas, "Liberation Mono", Menlo, Monaco, Courier, monospace
-fontsize: 1.1rem
-linestretch: 1.7
+fontsize: 1rem
 backgroundcolor: "#fefefe"
 fontcolor: "#111"
 linkcolor: "#446677"

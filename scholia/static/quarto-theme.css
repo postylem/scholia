@@ -1,6 +1,16 @@
 /* Scholia default Quarto theme — injected into <head>.
    Override by adding your own css: key in document YAML frontmatter,
-   or by adding a _quarto.yml with theme/css settings. */
+   or by adding a _quarto.yml with theme/css settings.
+
+   The toolbar Typeface toggle sets body classes:
+     (no class)          = "scholia" — Palatino, warm backgrounds, Tufte headings
+     .scholia-font-default = "default" — vanilla Quarto, undo all scholia styling
+     .scholia-font-system  = "system"  — system sans-serif
+     .scholia-font-latex   = "latex"   — Computer Modern                          */
+
+/* ══════════════════════════════════════════════════════════════════
+   "scholia" theme (active when no scholia-font-* class on body)
+   ══════════════════════════════════════════════════════════════════ */
 
 /* ── Headings: Tufte-inspired (light weight, italic, left border) ── */
 
@@ -41,24 +51,72 @@ div.sourceCode {
   line-height: 1.45;
 }
 
-/* Inline code: subtle warm background */
 p code, li code, td code {
   background-color: #fbf5e6;
   padding: 0.1em 0.3em;
   border-radius: 3px;
 }
 
-/* ── Font switcher ───────────────────────────────────────────────── */
-/* The Typeface option in the scholia toolbar toggles classes on <body>.
-   "default" = Palatino (set by quarto-defaults.yml mainfont).
-   "system"  = browser default sans-serif.
-   "latex"   = Computer Modern.
-   These override the mainfont metadata value via CSS. */
+/* ══════════════════════════════════════════════════════════════════
+   "default" — vanilla Quarto: revert everything above + metadata
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Undo metadata-injected styles (mainfont, fontsize, colors) */
+body.scholia-font-default {
+  font-family: revert !important;
+  font-size: revert !important;
+  background-color: revert !important;
+  color: revert !important;
+}
+body.scholia-font-default a {
+  color: revert !important;
+}
+
+/* Undo heading styles */
+body.scholia-font-default h1,
+body.scholia-font-default h2,
+body.scholia-font-default h3,
+body.scholia-font-default h4,
+body.scholia-font-default h5,
+body.scholia-font-default h6 {
+  font-weight: revert;
+  font-style: revert;
+  line-height: revert;
+  margin-top: revert;
+  padding-left: revert;
+  border-left: revert;
+}
+
+/* Undo code styles */
+body.scholia-font-default code {
+  font-size: revert;
+}
+body.scholia-font-default pre.sourceCode,
+body.scholia-font-default div.sourceCode {
+  background-color: revert;
+  font-size: revert;
+  line-height: revert;
+}
+body.scholia-font-default p code,
+body.scholia-font-default li code,
+body.scholia-font-default td code {
+  background-color: revert;
+  padding: revert;
+  border-radius: revert;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   "system" — system sans-serif
+   ══════════════════════════════════════════════════════════════════ */
 
 body.scholia-font-system {
   font-family: system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   "latex" — Computer Modern
+   ══════════════════════════════════════════════════════════════════ */
 
 @import url('https://cdn.jsdelivr.net/gh/aaaakshat/cm-web-fonts@latest/fonts.css');
 

@@ -820,6 +820,8 @@
       } // end theme (Pandoc only)
 
       // Typeface row
+      // Pandoc: "default" = et-book/Palatino (scholia.css), "system", "latex"
+      // Quarto: "scholia" = Palatino (metadata), "default" = vanilla Quarto, "system", "latex"
       var fontRow = document.createElement('tr');
       var fontTd1 = document.createElement('td');
       fontTd1.textContent = 'Typeface';
@@ -827,17 +829,22 @@
       var fontTd2 = document.createElement('td');
       var fontGroup = document.createElement('span');
       fontGroup.className = 'scholia-options-toggle';
-      var fontModes = ['default', 'system', 'latex'];
+      var allFontClasses = 'scholia-font-default scholia-font-system scholia-font-latex';
+      var fontModes = isQuarto ? ['scholia', 'default', 'system', 'latex'] : ['default', 'system', 'latex'];
       fontModes.forEach(function (mode) {
         var btn = document.createElement('button');
         btn.textContent = mode;
         btn.className = fontMode === mode ? 'active' : '';
         btn.addEventListener('click', function () {
-          document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
-          shadowHost.classList.remove('scholia-font-system', 'scholia-font-latex');
+          allFontClasses.split(' ').forEach(function (c) {
+            document.body.classList.remove(c);
+            shadowHost.classList.remove(c);
+          });
           fontMode = mode;
           localStorage.setItem('scholia-font', mode);
-          if (mode !== 'default') {
+          // "default" for Pandoc and "scholia" for Quarto = no class (base styles)
+          var needsClass = isQuarto ? (mode !== 'scholia') : (mode !== 'default');
+          if (needsClass) {
             document.body.classList.add('scholia-font-' + mode);
             shadowHost.classList.add('scholia-font-' + mode);
           }
@@ -3336,7 +3343,10 @@
     document.body.classList.add('scholia-dark');
     shadowHost.classList.add('scholia-dark');
   }
-  if (fontMode !== 'default') {
+  // Apply persisted font mode.
+  // Base state (no class needed): "default" for Pandoc, "scholia" for Quarto.
+  var fontBaseMode = isQuarto ? 'scholia' : 'default';
+  if (fontMode !== fontBaseMode) {
     document.body.classList.add('scholia-font-' + fontMode);
     shadowHost.classList.add('scholia-font-' + fontMode);
   }
