@@ -126,6 +126,7 @@
   var themeMode = localStorage.getItem('scholia-theme') || 'system'; // 'light' | 'dark' | 'system'
   var darkMode = themeMode === 'dark' || (themeMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   var fontMode = localStorage.getItem('scholia-font') || 'default';  // 'default' | 'system' | 'latex'
+  var quartoTheme = localStorage.getItem('scholia-quarto-theme') || 'scholia'; // 'scholia' | 'default'
   var uiZoom = parseInt(localStorage.getItem('scholia-zoom'), 10) || 100;
   var sidenotesEnabled = window.__SCHOLIA_SIDENOTES__ || false;
   var readonlyMode = window.__SCHOLIA_READONLY__ || false;
@@ -819,9 +820,43 @@
       tbl.appendChild(themeRow);
       } // end theme (Pandoc only)
 
-      // Typeface row
-      // Pandoc: "default" = et-book/Palatino (scholia.css), "system", "latex"
-      // Quarto: "scholia" = Palatino (metadata), "default" = vanilla Quarto, "system", "latex"
+      // Quarto theme row (Quarto only)
+      if (isQuarto) {
+      var qtRow = document.createElement('tr');
+      var qtTd1 = document.createElement('td');
+      qtTd1.textContent = 'Quarto theme';
+      qtRow.appendChild(qtTd1);
+      var qtTd2 = document.createElement('td');
+      var qtGroup = document.createElement('span');
+      qtGroup.className = 'scholia-options-toggle';
+      ['scholia', 'default'].forEach(function (mode) {
+        var btn = document.createElement('button');
+        btn.textContent = mode;
+        btn.className = quartoTheme === mode ? 'active' : '';
+        btn.addEventListener('click', function () {
+          quartoTheme = mode;
+          localStorage.setItem('scholia-quarto-theme', mode);
+          document.body.classList.toggle('scholia-quarto-vanilla', mode === 'default');
+          // When switching to vanilla, clear font overrides
+          if (mode === 'default') {
+            document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
+            shadowHost.classList.remove('scholia-font-system', 'scholia-font-latex');
+            fontMode = 'default';
+            localStorage.setItem('scholia-font', 'default');
+          }
+          menu.remove();
+          renderToolbar();
+        });
+        qtGroup.appendChild(btn);
+      });
+      qtTd2.appendChild(qtGroup);
+      qtRow.appendChild(qtTd2);
+      tbl.appendChild(qtRow);
+      }
+
+      // Typeface row (disabled when Quarto theme = "default")
+      var fontDisabled = isQuarto && quartoTheme === 'default';
+      if (!fontDisabled) {
       var fontRow = document.createElement('tr');
       var fontTd1 = document.createElement('td');
       fontTd1.textContent = 'Typeface';
@@ -829,22 +864,17 @@
       var fontTd2 = document.createElement('td');
       var fontGroup = document.createElement('span');
       fontGroup.className = 'scholia-options-toggle';
-      var allFontClasses = 'scholia-font-default scholia-font-system scholia-font-latex';
-      var fontModes = isQuarto ? ['scholia', 'default', 'system', 'latex'] : ['default', 'system', 'latex'];
+      var fontModes = ['default', 'system', 'latex'];
       fontModes.forEach(function (mode) {
         var btn = document.createElement('button');
         btn.textContent = mode;
         btn.className = fontMode === mode ? 'active' : '';
         btn.addEventListener('click', function () {
-          allFontClasses.split(' ').forEach(function (c) {
-            document.body.classList.remove(c);
-            shadowHost.classList.remove(c);
-          });
+          document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
+          shadowHost.classList.remove('scholia-font-system', 'scholia-font-latex');
           fontMode = mode;
           localStorage.setItem('scholia-font', mode);
-          // "default" for Pandoc and "scholia" for Quarto = no class (base styles)
-          var needsClass = isQuarto ? (mode !== 'scholia') : (mode !== 'default');
-          if (needsClass) {
+          if (mode !== 'default') {
             document.body.classList.add('scholia-font-' + mode);
             shadowHost.classList.add('scholia-font-' + mode);
           }
@@ -856,6 +886,7 @@
       fontTd2.appendChild(fontGroup);
       fontRow.appendChild(fontTd2);
       tbl.appendChild(fontRow);
+      }
 
       // Footnote display row (Pandoc only)
       if (!isQuarto) {
@@ -3343,10 +3374,12 @@
     document.body.classList.add('scholia-dark');
     shadowHost.classList.add('scholia-dark');
   }
-  // Apply persisted font mode.
-  // Base state (no class needed): "default" for Pandoc, "scholia" for Quarto.
-  var fontBaseMode = isQuarto ? 'scholia' : 'default';
-  if (fontMode !== fontBaseMode) {
+  // Apply persisted Quarto theme
+  if (isQuarto && quartoTheme === 'default') {
+    document.body.classList.add('scholia-quarto-vanilla');
+  }
+  // Apply persisted font mode (skip if Quarto vanilla theme)
+  if (!(isQuarto && quartoTheme === 'default') && fontMode !== 'default') {
     document.body.classList.add('scholia-font-' + fontMode);
     shadowHost.classList.add('scholia-font-' + fontMode);
   }

@@ -2,14 +2,15 @@
    Override by adding your own css: key in document YAML frontmatter,
    or by adding a _quarto.yml with theme/css settings.
 
-   The toolbar Typeface toggle sets body classes:
-     (no class)          = "scholia" — Palatino, warm backgrounds, Tufte headings
-     .scholia-font-default = "default" — vanilla Quarto, undo all scholia styling
-     .scholia-font-system  = "system"  — system sans-serif
-     .scholia-font-latex   = "latex"   — Computer Modern                          */
+   Toolbar toggle:
+     Quarto theme: scholia | default
+       "scholia" = Tufte headings, warm backgrounds, metadata fonts (active)
+       "default" = vanilla Quarto (.scholia-quarto-vanilla reverts everything)
+     Typeface: default | system | latex
+       (hidden when Quarto theme = "default")                              */
 
 /* ══════════════════════════════════════════════════════════════════
-   "scholia" theme (active when no scholia-font-* class on body)
+   "scholia" theme (active when no .scholia-quarto-vanilla on body)
    ══════════════════════════════════════════════════════════════════ */
 
 /* ── Headings: Tufte-inspired (light weight, italic, left border) ── */
@@ -58,27 +59,27 @@ p code, li code, td code {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   "default" — vanilla Quarto: revert everything above + metadata
+   "default" (vanilla Quarto) — revert everything above + metadata
    ══════════════════════════════════════════════════════════════════ */
 
 /* Undo metadata-injected styles (mainfont, fontsize, colors) */
-body.scholia-font-default {
+body.scholia-quarto-vanilla {
   font-family: revert !important;
   font-size: revert !important;
   background-color: revert !important;
   color: revert !important;
 }
-body.scholia-font-default a {
+body.scholia-quarto-vanilla a {
   color: revert !important;
 }
 
 /* Undo heading styles */
-body.scholia-font-default h1,
-body.scholia-font-default h2,
-body.scholia-font-default h3,
-body.scholia-font-default h4,
-body.scholia-font-default h5,
-body.scholia-font-default h6 {
+body.scholia-quarto-vanilla h1,
+body.scholia-quarto-vanilla h2,
+body.scholia-quarto-vanilla h3,
+body.scholia-quarto-vanilla h4,
+body.scholia-quarto-vanilla h5,
+body.scholia-quarto-vanilla h6 {
   font-weight: revert;
   font-style: revert;
   line-height: revert;
@@ -88,36 +89,34 @@ body.scholia-font-default h6 {
 }
 
 /* Undo code styles */
-body.scholia-font-default code {
+body.scholia-quarto-vanilla code {
   font-size: revert;
 }
-body.scholia-font-default pre.sourceCode,
-body.scholia-font-default div.sourceCode {
+body.scholia-quarto-vanilla pre.sourceCode,
+body.scholia-quarto-vanilla div.sourceCode {
   background-color: revert;
   font-size: revert;
   line-height: revert;
 }
-body.scholia-font-default p code,
-body.scholia-font-default li code,
-body.scholia-font-default td code {
+body.scholia-quarto-vanilla p code,
+body.scholia-quarto-vanilla li code,
+body.scholia-quarto-vanilla td code {
   background-color: revert;
   padding: revert;
   border-radius: revert;
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   "system" — system sans-serif
+   Typeface overrides (used when Quarto theme = "scholia")
    ══════════════════════════════════════════════════════════════════ */
 
+/* "system" — system sans-serif */
 body.scholia-font-system {
   font-family: system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   "latex" — Computer Modern
-   ══════════════════════════════════════════════════════════════════ */
-
+/* "latex" — Computer Modern */
 @import url('https://cdn.jsdelivr.net/gh/aaaakshat/cm-web-fonts@latest/fonts.css');
 
 body.scholia-font-latex {
