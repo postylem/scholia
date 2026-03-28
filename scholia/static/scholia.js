@@ -54,6 +54,8 @@
       '  width: calc(var(--sidebar-width, 320px) + 4px);',
       '  z-index: 1050; display: block; }',
       'body { margin-right: calc(var(--sidebar-width, 320px) + 4px) !important;',
+      '  padding-top: var(--scholia-toolbar-h, 38px);',
+      '  scroll-padding-top: var(--scholia-toolbar-h, 38px);',
       '  transition: margin-right 0.3s ease; }',
       'body.scholia-sidebar-hidden { margin-right: 0 !important; }',
       'body.scholia-sidebar-hidden scholia-sidebar { width: 0; overflow: hidden; }',
@@ -1090,6 +1092,14 @@
     btnGroup.appendChild(cbBtn);
 
     toolbarEl.appendChild(btnGroup);
+
+    // Update toolbar height CSS variable for body padding/scroll offset
+    if (isQuarto) {
+      requestAnimationFrame(function () {
+        var h = toolbarEl.offsetHeight;
+        document.documentElement.style.setProperty('--scholia-toolbar-h', h + 'px');
+      });
+    }
   }
 
   function clearAllHighlights() {
