@@ -783,7 +783,8 @@
 
       var tbl = document.createElement('table');
 
-      // Theme row
+      // Theme row (Pandoc only — Quarto has its own theming)
+      if (!isQuarto) {
       var themeRow = document.createElement('tr');
       var themeTd1 = document.createElement('td');
       themeTd1.textContent = 'Theme';
@@ -814,8 +815,10 @@
       themeTd2.appendChild(themeGroup);
       themeRow.appendChild(themeTd2);
       tbl.appendChild(themeRow);
+      } // end theme (Pandoc only)
 
-      // Typeface row
+      // Typeface row (Pandoc only)
+      if (!isQuarto) {
       var fontRow = document.createElement('tr');
       var fontTd1 = document.createElement('td');
       fontTd1.textContent = 'Typeface';
@@ -845,8 +848,10 @@
       fontTd2.appendChild(fontGroup);
       fontRow.appendChild(fontTd2);
       tbl.appendChild(fontRow);
+      } // end typeface (Pandoc only)
 
-      // Footnote display row
+      // Footnote display row (Pandoc only)
+      if (!isQuarto) {
       var fnRow = document.createElement('tr');
       var fnTd1 = document.createElement('td');
       fnTd1.textContent = 'Footnotes';
@@ -883,6 +888,7 @@
       fnTd2.appendChild(fnGroup);
       fnRow.appendChild(fnTd2);
       tbl.appendChild(fnRow);
+      } // end footnotes (Pandoc only)
 
       // Zoom row
       var zoomRow = document.createElement('tr');
@@ -1250,8 +1256,8 @@
       renderMathIn(tocEl);
     }
 
-    // Set up collapsible sections
-    setupCollapsibleSections();
+    // Set up collapsible sections (Pandoc only — Quarto manages its own sections)
+    if (!isQuarto) setupCollapsibleSections();
 
     // Highlight active section on scroll
     window.removeEventListener('scroll', updateTocActive);
@@ -3350,9 +3356,9 @@
 
   // KaTeX and mermaid are loaded with defer, so wait for window load
   window.addEventListener('load', function () {
+    buildToc();
     if (!isQuarto) {
       if (window.mermaid) window.mermaid.initialize({ startOnLoad: false });
-      buildToc();
       rerenderMath();
       renderMermaid();
       decorateCodeBlocks();
