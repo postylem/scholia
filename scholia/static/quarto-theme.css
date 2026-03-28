@@ -176,6 +176,9 @@ body.scholia-font-system {
   font-family: system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
+body.scholia-font-system #scholia-doc .katex {
+  font-size: 1em;
+}
 
 /* "latex" — Computer Modern */
 @import url('https://cdn.jsdelivr.net/gh/aaaakshat/cm-web-fonts@latest/fonts.css');
@@ -185,6 +188,9 @@ body.scholia-font-latex {
     "DejaVu Serif", Georgia, serif !important;
 }
 
+body.scholia-font-latex #scholia-doc .katex {
+  font-size: 1.05em;
+}
 body.scholia-font-latex code,
 body.scholia-font-latex pre {
   font-family: "Computer Modern Typewriter", "Latin Modern Mono",
