@@ -42,7 +42,7 @@
     '  --s-sans:"Gill Sans","Gill Sans MT",Calibri,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;',
     '  --s-comment:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
     '}',
-    'body.scholia-sidebar-hidden mark.scholia-highlight { background: transparent; cursor: default; }',
+    'body.scholia-sidebar-hidden mark.scholia-highlight { all: unset; display: inline; }',
   ].join('\n');
 
   if (isQuarto) {
