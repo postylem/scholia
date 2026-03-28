@@ -1,17 +1,12 @@
-/* Scholia default Quarto theme — injected into <head>.
-   Override by adding your own css: key in document YAML frontmatter,
-   or by adding a _quarto.yml with theme/css settings.
+/* Scholia default Quarto theme — injected into <head> as a <link>.
+   Disabled entirely when Quarto theme = "default" in the toolbar.
 
-   Toolbar toggle:
+   Toolbar toggles:
      Quarto theme: scholia | default
-       "scholia" = Tufte headings, warm backgrounds, metadata fonts (active)
-       "default" = vanilla Quarto (.scholia-quarto-vanilla reverts everything)
+       "scholia" = this stylesheet active
+       "default" = this stylesheet disabled (vanilla Quarto)
      Typeface: default | system | latex
        (hidden when Quarto theme = "default")                              */
-
-/* ══════════════════════════════════════════════════════════════════
-   "scholia" theme (active when no .scholia-quarto-vanilla on body)
-   ══════════════════════════════════════════════════════════════════ */
 
 /* ── Headings: Tufte-inspired (light weight, italic, left border) ── */
 
@@ -58,57 +53,7 @@ p code, li code, td code {
   border-radius: 3px;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   "default" (vanilla Quarto) — revert everything above + metadata
-   ══════════════════════════════════════════════════════════════════ */
-
-/* Undo metadata-injected styles (mainfont, fontsize, colors) */
-body.scholia-quarto-vanilla {
-  font-family: revert !important;
-  font-size: revert !important;
-  background-color: revert !important;
-  color: revert !important;
-}
-body.scholia-quarto-vanilla a {
-  color: revert !important;
-}
-
-/* Undo heading styles */
-body.scholia-quarto-vanilla h1,
-body.scholia-quarto-vanilla h2,
-body.scholia-quarto-vanilla h3,
-body.scholia-quarto-vanilla h4,
-body.scholia-quarto-vanilla h5,
-body.scholia-quarto-vanilla h6 {
-  font-weight: revert;
-  font-style: revert;
-  line-height: revert;
-  margin-top: revert;
-  padding-left: revert;
-  border-left: revert;
-}
-
-/* Undo code styles */
-body.scholia-quarto-vanilla code {
-  font-size: revert;
-}
-body.scholia-quarto-vanilla pre.sourceCode,
-body.scholia-quarto-vanilla div.sourceCode {
-  background-color: revert;
-  font-size: revert;
-  line-height: revert;
-}
-body.scholia-quarto-vanilla p code,
-body.scholia-quarto-vanilla li code,
-body.scholia-quarto-vanilla td code {
-  background-color: revert;
-  padding: revert;
-  border-radius: revert;
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   Typeface overrides (used when Quarto theme = "scholia")
-   ══════════════════════════════════════════════════════════════════ */
+/* ── Typeface overrides ──────────────────────────────────────────── */
 
 /* "system" — system sans-serif */
 body.scholia-font-system {

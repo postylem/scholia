@@ -836,7 +836,9 @@
         btn.addEventListener('click', function () {
           quartoTheme = mode;
           localStorage.setItem('scholia-quarto-theme', mode);
-          document.body.classList.toggle('scholia-quarto-vanilla', mode === 'default');
+          // Enable/disable the theme stylesheet
+          var themeLink = document.getElementById('scholia-quarto-theme');
+          if (themeLink) themeLink.disabled = (mode === 'default');
           // When switching to vanilla, clear font overrides
           if (mode === 'default') {
             document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
@@ -3374,9 +3376,10 @@
     document.body.classList.add('scholia-dark');
     shadowHost.classList.add('scholia-dark');
   }
-  // Apply persisted Quarto theme
+  // Apply persisted Quarto theme — disable the theme stylesheet for vanilla mode
   if (isQuarto && quartoTheme === 'default') {
-    document.body.classList.add('scholia-quarto-vanilla');
+    var themeLink = document.getElementById('scholia-quarto-theme');
+    if (themeLink) themeLink.disabled = true;
   }
   // Apply persisted font mode (skip if Quarto vanilla theme)
   if (!(isQuarto && quartoTheme === 'default') && fontMode !== 'default') {
