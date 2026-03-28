@@ -413,19 +413,24 @@
     ws.onmessage = function (e) {
       var msg = JSON.parse(e.data);
       if (msg.type === 'doc_update') {
+        if (isQuarto) {
+          // Quarto's client-side JS (KaTeX, tippy, popper) only runs once
+          // on page load. Replacing innerHTML breaks math and tooltips.
+          // Reload the page to get a fresh full Quarto render.
+          window.location.reload();
+          return;
+        }
         if (msg.sidenotes !== undefined) {
           sidenotesEnabled = msg.sidenotes;
           docEl.classList.toggle('scholia-no-sidenotes', !sidenotesEnabled);
           renderToolbar();
         }
         docEl.innerHTML = msg.html;
-        if (!isQuarto) {
-          buildToc();
-          rerenderMath();
-          renderMermaid();
-          decorateCodeBlocks();
-          setupCitationTooltips();
-        }
+        buildToc();
+        rerenderMath();
+        renderMermaid();
+        decorateCodeBlocks();
+        setupCitationTooltips();
         if (!sidebarHidden) { reanchorAll(); positionCards(); }
       } else if (msg.type === 'comments_update') {
         comments = msg.comments;
