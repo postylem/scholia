@@ -1,37 +1,118 @@
 /* Scholia default Quarto theme — injected into <head> as a <link>.
-   Disabled entirely when Quarto theme = "default" in the toolbar.
+   Not injected at all when Quarto theme = "default" (vanilla).
 
    Toolbar toggles:
      Quarto theme: scholia | default
        "scholia" = this stylesheet active
-       "default" = this stylesheet disabled (vanilla Quarto)
+       "default" = not loaded at all (vanilla Quarto re-render)
      Typeface: default | system | latex
        (hidden when Quarto theme = "default")                              */
 
-/* ── Headings: Tufte-inspired (light weight, italic, left border) ── */
+/* ── Headings ────────────────────────────────────────────────────── */
+/* Matches scholia's Pandoc heading style:
+   - Light weight (400), flush with body text
+   - Left border in the margin
+   - h1: not italic, thicker accent border
+   - h2, h3: italic
+   - h4, h5, h6: not italic, thinner border                            */
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: 400;
   line-height: 1.2;
 }
 
-h2 {
-  font-style: italic;
-  margin-top: 2em;
+/* Top-level document h1 (title) — no border */
+#scholia-doc > header h1,
+#title-block-header h1 {
+  font-size: 2.2rem;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Section h1 — accent border, not italic */
+section > h1 {
+  font-size: 1.8rem;
+  margin-left: -0.8rem;
   padding-left: calc(0.8rem - 3px);
   border-left: 3px solid #467;
 }
 
+/* h2 — italic, accent border */
+h2 {
+  font-size: 1.5rem;
+  font-style: italic;
+  margin-top: 2em;
+  margin-left: -0.8rem;
+  padding-left: calc(0.8rem - 3px);
+  border-left: 3px solid #467;
+}
+
+/* h3 — italic, subtle border */
 h3 {
+  font-size: 1.2rem;
   font-style: italic;
   margin-top: 1.5em;
+  margin-left: -0.8rem;
   padding-left: calc(0.8rem - 2px);
   border-left: 2px solid #ddd;
 }
 
+/* h4, h5, h6 — not italic, subtle border */
 h4, h5, h6 {
+  margin-left: -0.8rem;
   padding-left: calc(0.8rem - 2px);
   border-left: 2px solid #ddd;
+}
+
+/* ── Collapsible sections ────────────────────────────────────────── */
+/* Click heading to collapse/expand. JS adds .scholia-collapsed class.
+   Caret indicator appears on hover, rotates when collapsed.           */
+
+section > h1,
+section > h2,
+section > h3,
+section > h4 {
+  cursor: pointer;
+  position: relative;
+}
+
+section > h1::after,
+section > h2::after,
+section > h3::after,
+section > h4::after {
+  content: '';
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  border-right: 2px solid #777;
+  border-bottom: 2px solid #777;
+  transform: rotate(45deg);
+  margin-left: 0.5em;
+  vertical-align: middle;
+  transition: transform 0.2s;
+  opacity: 0;
+}
+
+section > h1:hover::after,
+section > h2:hover::after,
+section > h3:hover::after,
+section > h4:hover::after {
+  opacity: 0.5;
+}
+
+section.scholia-collapsed > h1::after,
+section.scholia-collapsed > h2::after,
+section.scholia-collapsed > h3::after,
+section.scholia-collapsed > h4::after {
+  transform: rotate(-45deg);
+  opacity: 0.5;
+}
+
+section.scholia-collapsed > :not(h1):not(h2):not(h3):not(h4):not(h5):not(h6) {
+  display: none;
+}
+section.scholia-collapsed > section {
+  display: none;
 }
 
 /* ── Code: smaller font, warm background ─────────────────────────── */

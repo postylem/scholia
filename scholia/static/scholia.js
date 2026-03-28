@@ -1299,8 +1299,8 @@
       renderMathIn(tocEl);
     }
 
-    // Set up collapsible sections (Pandoc only — Quarto manages its own sections)
-    if (!isQuarto) setupCollapsibleSections();
+    // Set up collapsible sections (skip for Quarto vanilla theme)
+    if (!isQuarto || quartoTheme === 'scholia') setupCollapsibleSections();
 
     // Highlight active section on scroll
     window.removeEventListener('scroll', updateTocActive);
