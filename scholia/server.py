@@ -470,6 +470,7 @@ def _inject_scholia_into_quarto(
         "      0%{box-shadow:0 0 0 0 rgba(255,200,50,.7)}\n"
         "      100%{box-shadow:0 0 0 8px rgba(255,200,50,0)} }\n"
         "  </style>\n"
+        '  <link rel="stylesheet" href="/static/quarto-theme.css">\n'
         '  <script defer src="https://cdn.jsdelivr.net/npm/'
         'markdown-it@14.1.0/dist/markdown-it.min.js"></script>\n'
         '  <script defer src="https://cdn.jsdelivr.net/npm/'

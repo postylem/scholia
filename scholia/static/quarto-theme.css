@@ -1,0 +1,17 @@
+/* Scholia default Quarto theme — injected into <head>.
+   Override by adding your own css: key in document YAML frontmatter,
+   or by adding a _quarto.yml with theme/css settings. */
+
+/* Slightly tighter heading spacing to match scholia's Pandoc look */
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 1.8em;
+  margin-bottom: 0.5em;
+}
+
+/* Warm code block background */
+pre.sourceCode {
+  background-color: #fbf5e6;
+}
+div.sourceCode {
+  background-color: #fbf5e6;
+}
