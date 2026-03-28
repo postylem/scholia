@@ -819,8 +819,7 @@
       tbl.appendChild(themeRow);
       } // end theme (Pandoc only)
 
-      // Typeface row (Pandoc only)
-      if (!isQuarto) {
+      // Typeface row
       var fontRow = document.createElement('tr');
       var fontTd1 = document.createElement('td');
       fontTd1.textContent = 'Typeface';
@@ -850,7 +849,6 @@
       fontTd2.appendChild(fontGroup);
       fontRow.appendChild(fontTd2);
       tbl.appendChild(fontRow);
-      } // end typeface (Pandoc only)
 
       // Footnote display row (Pandoc only)
       if (!isQuarto) {
