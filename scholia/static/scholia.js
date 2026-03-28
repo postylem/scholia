@@ -25,10 +25,7 @@
   katexCssLink.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
   shadow.appendChild(katexCssLink);
 
-  // Inject CSS variables + body grid layout into document head.
-  // CSS custom properties must be on :root in the light DOM so they
-  // inherit into the shadow DOM.  For Pandoc docs scholia.css in <head>
-  // provides these, but Quarto docs don't load scholia.css in <head>.
+  // Inject CSS variables + layout into document head.
   var isQuarto = window.__SCHOLIA_IS_QUARTO__ || false;
   var layoutStyle = document.createElement('style');
   var cssVars = [
@@ -45,26 +42,59 @@
     '  --s-sans:"Gill Sans","Gill Sans MT",Calibri,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;',
     '  --s-comment:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
     '}',
-  ].join('\n');
-  var bodyStyles = isQuarto
-    ? 'body { margin: 0; display: grid; min-height: 100vh;'
-    : 'body { margin: 0; display: grid; min-height: 100vh;'
-    + '  background: var(--s-bg); color: var(--s-text);'
-    + '  font-family: var(--s-body); font-size: 1.1rem; line-height: 1.7;';
-  layoutStyle.textContent = [
-    cssVars,
-    bodyStyles,
-    '  grid-template-columns: 1fr 4px minmax(200px, var(--sidebar-width, 320px));',
-    '  grid-template-rows: auto 1fr;',
-    '  overflow-x: hidden; }',
-    'body { transition: grid-template-columns 0.3s ease; }',
-    'scholia-sidebar { display: contents; }',
-    '#scholia-doc { grid-row: 2; grid-column: 1; }',
-    'body.scholia-sidebar-hidden { grid-template-columns: 1fr 0 0; }',
     'body.scholia-sidebar-hidden mark.scholia-highlight { background: transparent; cursor: default; }',
-    'body.scholia-compact { grid-template-columns: 1fr; }',
   ].join('\n');
+
+  if (isQuarto) {
+    // Quarto: fixed-position overlay — don't touch Quarto's body layout
+    layoutStyle.textContent = [
+      cssVars,
+      'scholia-sidebar {',
+      '  position: fixed; top: 0; right: 0; bottom: 0;',
+      '  width: calc(var(--sidebar-width, 320px) + 4px);',
+      '  z-index: 1050; display: block; }',
+      'body { margin-right: calc(var(--sidebar-width, 320px) + 4px) !important;',
+      '  transition: margin-right 0.3s ease; }',
+      'body.scholia-sidebar-hidden { margin-right: 0 !important; }',
+      'body.scholia-sidebar-hidden scholia-sidebar { display: none; }',
+      'body.scholia-compact { margin-right: 0 !important; }',
+    ].join('\n');
+  } else {
+    // Pandoc: CSS grid layout with sidebar as grid participant
+    layoutStyle.textContent = [
+      cssVars,
+      'body { margin: 0; display: grid; min-height: 100vh;',
+      '  background: var(--s-bg); color: var(--s-text);',
+      '  font-family: var(--s-body); font-size: 1.1rem; line-height: 1.7;',
+      '  grid-template-columns: 1fr 4px minmax(200px, var(--sidebar-width, 320px));',
+      '  grid-template-rows: auto 1fr;',
+      '  overflow-x: hidden; }',
+      'body { transition: grid-template-columns 0.3s ease; }',
+      'scholia-sidebar { display: contents; }',
+      '#scholia-doc { grid-row: 2; grid-column: 1; }',
+      'body.scholia-sidebar-hidden { grid-template-columns: 1fr 0 0; }',
+      'body.scholia-compact { grid-template-columns: 1fr; }',
+    ].join('\n');
+  }
   document.head.appendChild(layoutStyle);
+
+  // For Quarto, inject shadow-internal layout overrides.
+  // The shadow host is position:fixed (not display:contents), so
+  // shadow children need their own layout instead of grid participation.
+  if (isQuarto) {
+    var quartoShadowStyle = document.createElement('style');
+    quartoShadowStyle.textContent = [
+      ':host { display: block; }',
+      '.scholia-toolbar {',
+      '  position: fixed; top: 0; left: 0; right: 0; z-index: 1051; }',
+      '.scholia-resize-handle {',
+      '  position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }',
+      '.scholia-sidebar {',
+      '  position: absolute; left: 4px; top: 0; right: 0; bottom: 0;',
+      '  overflow-y: auto; }',
+    ].join('\n');
+    shadow.appendChild(quartoShadowStyle);
+  }
 
   // Create shadow DOM structure
   var toolbarEl = document.createElement('nav');
@@ -79,7 +109,7 @@
   sidebarEl.className = 'scholia-sidebar';
   shadow.appendChild(sidebarEl);
 
-  if (window.__SCHOLIA_IS_QUARTO__) {
+  if (isQuarto) {
     docEl.classList.add('scholia-quarto');
   }
 
