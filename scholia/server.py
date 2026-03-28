@@ -191,8 +191,8 @@ def _render_quarto_sync(doc_path: Path) -> str:
         str(doc_path.resolve()),
         "--to",
         "html",
-        "-M",
-        "html-math-method:katex",
+        "--defaults",
+        str(Path(__file__).parent / "data" / "quarto-defaults.yml"),
     ]
     env = {**os.environ}
     py = _find_quarto_python(doc_path)

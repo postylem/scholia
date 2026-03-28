@@ -1,0 +1,18 @@
+# Quarto render defaults used by scholia.
+#
+# These are passed via `quarto render --defaults <this-file>`.
+# Document YAML frontmatter overrides anything set here, so these
+# act as sensible defaults that authors can customize per-document.
+#
+# ── Do not change ────────────────────────────────────────────────
+# html-math-method: katex is required — scholia's comment system
+# loads KaTeX for rendering math in annotations, and the document
+# must use the same engine to avoid conflicts.
+# ─────────────────────────────────────────────────────────────────
+
+format:
+  html:
+    html-math-method: katex
+    number-sections: true
+    mainfont: Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif
+    monofont: Consolas, "Liberation Mono", Menlo, Monaco, Courier, monospace
