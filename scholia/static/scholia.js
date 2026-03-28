@@ -834,20 +834,15 @@
         btn.textContent = mode;
         btn.className = quartoTheme === mode ? 'active' : '';
         btn.addEventListener('click', function () {
-          quartoTheme = mode;
           localStorage.setItem('scholia-quarto-theme', mode);
-          // Enable/disable the theme stylesheet
-          var themeLink = document.getElementById('scholia-quarto-theme');
-          if (themeLink) themeLink.disabled = (mode === 'default');
-          // When switching to vanilla, clear font overrides
           if (mode === 'default') {
-            document.body.classList.remove('scholia-font-system', 'scholia-font-latex');
-            shadowHost.classList.remove('scholia-font-system', 'scholia-font-latex');
-            fontMode = 'default';
             localStorage.setItem('scholia-font', 'default');
           }
-          menu.remove();
-          renderToolbar();
+          // Re-render: reload with query parameter so server
+          // renders with/without --metadata-file and theme CSS
+          var url = new URL(window.location.href);
+          url.searchParams.set('quarto_theme', mode);
+          window.location.href = url.toString();
         });
         qtGroup.appendChild(btn);
       });
@@ -3376,12 +3371,7 @@
     document.body.classList.add('scholia-dark');
     shadowHost.classList.add('scholia-dark');
   }
-  // Apply persisted Quarto theme — disable the theme stylesheet for vanilla mode
-  if (isQuarto && quartoTheme === 'default') {
-    var themeLink = document.getElementById('scholia-quarto-theme');
-    if (themeLink) themeLink.disabled = true;
-  }
-  // Apply persisted font mode (skip if Quarto vanilla theme)
+  // Apply persisted font mode (skip if Quarto vanilla theme — no customization)
   if (!(isQuarto && quartoTheme === 'default') && fontMode !== 'default') {
     document.body.classList.add('scholia-font-' + fontMode);
     shadowHost.classList.add('scholia-font-' + fontMode);

@@ -168,7 +168,7 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
-def _render_quarto_sync(doc_path: Path) -> str:
+def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> str:
     """Render a Quarto document and return the full HTML page (blocking).
 
     Runs ``quarto render`` in the document's own directory so that
@@ -193,9 +193,12 @@ def _render_quarto_sync(doc_path: Path) -> str:
         "html",
         "-M",
         "html-math-method:katex",
-        "--metadata-file",
-        str(Path(__file__).parent / "data" / "quarto-defaults.yml"),
     ]
+    if use_defaults:
+        cmd += [
+            "--metadata-file",
+            str(Path(__file__).parent / "data" / "quarto-defaults.yml"),
+        ]
     env = {**os.environ}
     py = _find_quarto_python(doc_path)
     if py:
@@ -220,7 +223,9 @@ def _render_quarto_sync(doc_path: Path) -> str:
     return html
 
 
-async def render_doc(doc_path: Path, sidenotes: bool = False) -> str:
+async def render_doc(
+    doc_path: Path, sidenotes: bool = False, quarto_use_defaults: bool = True
+) -> str:
     """Render a document to HTML, choosing the right pipeline.
 
     For Quarto documents returns a complete HTML page.
@@ -228,7 +233,7 @@ async def render_doc(doc_path: Path, sidenotes: bool = False) -> str:
     """
     loop = asyncio.get_running_loop()
     if _is_quarto(doc_path):
-        return await loop.run_in_executor(None, _render_quarto_sync, doc_path)
+        return await loop.run_in_executor(None, _render_quarto_sync, doc_path, quarto_use_defaults)
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
@@ -433,6 +438,7 @@ def _inject_scholia_into_quarto(
     quarto_html: str,
     doc_path: Path,
     display_path: str = "",
+    include_theme_css: bool = True,
 ) -> str:
     """Inject scholia's sidebar overlay into a complete Quarto HTML page.
 
@@ -472,9 +478,13 @@ def _inject_scholia_into_quarto(
         "      0%{box-shadow:0 0 0 0 rgba(255,200,50,.7)}\n"
         "      100%{box-shadow:0 0 0 8px rgba(255,200,50,0)} }\n"
         "  </style>\n"
-        '  <link id="scholia-quarto-theme" rel="stylesheet"'
-        ' href="/static/quarto-theme.css">\n'
-        '  <script defer src="https://cdn.jsdelivr.net/npm/'
+        + (
+            '  <link id="scholia-quarto-theme" rel="stylesheet"'
+            ' href="/static/quarto-theme.css">\n'
+            if include_theme_css
+            else ""
+        )
+        + '  <script defer src="https://cdn.jsdelivr.net/npm/'
         'markdown-it@14.1.0/dist/markdown-it.min.js"></script>\n'
         '  <script defer src="https://cdn.jsdelivr.net/npm/'
         'markdown-it-texmath@1.0.0/texmath.min.js"></script>\n'
@@ -508,16 +518,22 @@ def _inject_scholia_into_quarto(
 
 
 async def build_page(
-    doc_path: Path, template: str, sidenotes: bool = False, display_path: str = ""
+    doc_path: Path,
+    template: str,
+    sidenotes: bool = False,
+    display_path: str = "",
+    quarto_theme: str = "scholia",
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
-    html = await render_doc(doc_path, sidenotes=sidenotes)
+    use_defaults = quarto_theme != "default"
+    html = await render_doc(doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults)
 
     if _is_quarto(doc_path):
         return _inject_scholia_into_quarto(
             html,
             doc_path,
             display_path=display_path,
+            include_theme_css=use_defaults,
         )
 
     title = _extract_title(doc_path.read_text(encoding="utf-8"))
@@ -739,11 +755,13 @@ class ScholiaServer:
         try:
             if _is_markdown(doc_path):
                 sidenotes = _has_footnotes(doc_path.read_text(encoding="utf-8"))
+                quarto_theme = request.query.get("quarto_theme", "scholia")
                 page = await build_page(
                     doc_path,
                     self.template,
                     sidenotes=sidenotes,
                     display_path=display,
+                    quarto_theme=quarto_theme,
                 )
             else:
                 force_raw = request.query.get("raw") == "1"
