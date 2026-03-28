@@ -8,6 +8,35 @@
      Typeface: default | system | latex
        (hidden when Quarto theme = "default")                              */
 
+/* ── et-book font ────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "et-book";
+  src: url("/static/fonts/et-book-roman-line-figures.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "et-book";
+  src: url("/static/fonts/et-book-display-italic-old-style-figures.woff") format("woff");
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "et-book";
+  src: url("/static/fonts/et-book-bold-line-figures.woff") format("woff");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+body {
+  font-family: et-book, Palatino, "Palatino Linotype", "Palatino LT STD",
+    "Book Antiqua", Georgia, serif;
+}
+
 /* ── Headings ────────────────────────────────────────────────────── */
 /* Matches scholia's Pandoc heading style:
    - Light weight (400), flush with body text

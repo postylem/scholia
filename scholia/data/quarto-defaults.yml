@@ -10,7 +10,7 @@
 # (always applied, regardless of theme choice).
 
 number-sections: true
-mainfont: Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif
+mainfont: et-book, Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif
 monofont: Consolas, "Liberation Mono", Menlo, Monaco, Courier, monospace
 fontsize: 1rem
 backgroundcolor: "#fefefe"
