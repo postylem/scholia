@@ -416,11 +416,13 @@
           renderToolbar();
         }
         docEl.innerHTML = msg.html;
-        buildToc();
-        rerenderMath();
-        renderMermaid();
-        decorateCodeBlocks();
-        setupCitationTooltips();
+        if (!isQuarto) {
+          buildToc();
+          rerenderMath();
+          renderMermaid();
+          decorateCodeBlocks();
+          setupCitationTooltips();
+        }
         if (!sidebarHidden) { reanchorAll(); positionCards(); }
       } else if (msg.type === 'comments_update') {
         comments = msg.comments;
@@ -3312,8 +3314,8 @@
 
   // ── Init ───────────────────────────────────────────
 
-  // Set initial sidenotes CSS state
-  if (!sidenotesEnabled) docEl.classList.add('scholia-no-sidenotes');
+  // Set initial sidenotes CSS state (Pandoc only — Quarto has no sidenotes)
+  if (!isQuarto && !sidenotesEnabled) docEl.classList.add('scholia-no-sidenotes');
 
   // Apply persisted preferences
   if (darkMode) {
@@ -3348,13 +3350,15 @@
 
   // KaTeX and mermaid are loaded with defer, so wait for window load
   window.addEventListener('load', function () {
-    if (window.mermaid) window.mermaid.initialize({ startOnLoad: false });
-    buildToc();
-    rerenderMath();
-    renderMermaid();
+    if (!isQuarto) {
+      if (window.mermaid) window.mermaid.initialize({ startOnLoad: false });
+      buildToc();
+      rerenderMath();
+      renderMermaid();
+      decorateCodeBlocks();
+      setupCitationTooltips();
+    }
     rerenderCommentBodies();
-    decorateCodeBlocks();
-    setupCitationTooltips();
     reanchorAll();
     positionCards();
   });
@@ -3400,9 +3404,10 @@
   window.addEventListener('resize', checkCompact);
   checkCompact();
 
-  // Responsive sidenotes: toggle based on doc pane width, not viewport.
+  // Responsive sidenotes (Pandoc only): toggle based on doc pane width.
   // Hysteresis prevents oscillation at the boundary — content width changes
   // when the class toggles (60% → 100%), so we use separate thresholds.
+  if (!isQuarto) {
   var NARROW_ENTER = 750;
   var NARROW_LEAVE = 820;
   var resizeObs = new ResizeObserver(function (entries) {
@@ -3415,5 +3420,6 @@
     }
   });
   resizeObs.observe(docEl);
+  } // end if (!isQuarto)
 
 })();
