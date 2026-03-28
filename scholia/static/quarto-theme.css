@@ -144,6 +144,12 @@ section.scholia-collapsed > section {
   display: none;
 }
 
+/* ── Math: scale down KaTeX to match body font ───────────────────── */
+
+#scholia-doc .katex {
+  font-size: 0.95em;
+}
+
 /* ── Code: smaller font, warm background ─────────────────────────── */
 
 #scholia-doc code {
