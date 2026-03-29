@@ -20,7 +20,7 @@ from scholia.state import load_state
 
 def test_render_pandoc_sync_basic(tmp_doc):
     """Pandoc renders markdown to HTML fragment with expected structure."""
-    html = _render_pandoc_sync(tmp_doc)
+    html, _stderr = _render_pandoc_sync(tmp_doc)
     assert "<p>Some text to anchor comments to.</p>" in html
     assert "Test Document" in html  # title from frontmatter
 
@@ -29,7 +29,7 @@ def test_render_pandoc_sync_with_math(tmp_path):
     """Math expressions produce KaTeX-compatible markup."""
     doc = tmp_path / "math.md"
     doc.write_text("---\ntitle: Math\n---\n\nInline $x^2$ and display:\n\n$$E = mc^2$$\n")
-    html = _render_pandoc_sync(doc)
+    html, _stderr = _render_pandoc_sync(doc)
     assert "x^2" in html
     assert "E = mc^2" in html
 
@@ -38,7 +38,7 @@ def test_render_pandoc_sync_number_sections(tmp_path):
     """number-sections frontmatter adds section numbers."""
     doc = tmp_path / "numbered.md"
     doc.write_text("---\ntitle: Numbered\nnumber-sections: true\n---\n\n# First\n\n## Sub\n")
-    html = _render_pandoc_sync(doc)
+    html, _stderr = _render_pandoc_sync(doc)
     assert "header-section-number" in html or 'data-number="1"' in html
 
 

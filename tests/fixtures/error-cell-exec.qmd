@@ -1,0 +1,10 @@
+---
+title: Cell Error Test
+author: Test
+---
+
+Good content here.
+
+```{python}
+x = 1 / 0
+```

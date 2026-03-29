@@ -46,6 +46,73 @@ def _is_markdown(path: Path) -> bool:
     return path.suffix.lower() in _MARKDOWN_EXTENSIONS
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+# Standard ANSI color codes → CSS colors
+_ANSI_COLORS = {
+    "30": "#000",
+    "31": "#c0392b",
+    "32": "#27ae60",
+    "33": "#f39c12",
+    "34": "#2980b9",
+    "35": "#8e44ad",
+    "36": "#16a085",
+    "37": "#ccc",
+    "90": "#666",
+    "91": "#e74c3c",
+    "92": "#2ecc71",
+    "93": "#f1c40f",
+    "94": "#3498db",
+    "95": "#9b59b6",
+    "96": "#1abc9c",
+    "97": "#fff",
+}
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI color/style escape sequences."""
+    return _ANSI_RE.sub("", text)
+
+
+def _ansi_to_html(text: str) -> str:
+    """Convert ANSI color codes to HTML spans. HTML-escapes the text."""
+    import html as html_mod
+
+    parts: list[str] = []
+    pos = 0
+    open_span = False
+    for m in _ANSI_RE.finditer(text):
+        # Escape literal text before this code
+        parts.append(html_mod.escape(text[pos : m.start()]))
+        pos = m.end()
+        code = m.group()
+        # Extract the numeric codes
+        nums = code[2:-1]  # strip \x1b[ and m
+        if nums in ("0", "") or nums == "39":
+            if open_span:
+                parts.append("</span>")
+                open_span = False
+        else:
+            if open_span:
+                parts.append("</span>")
+            # Check each code for a color match
+            color = None
+            for n in nums.split(";"):
+                if n in _ANSI_COLORS:
+                    color = _ANSI_COLORS[n]
+                    break
+            if color:
+                parts.append(f'<span style="color:{color}">')
+                open_span = True
+            elif nums == "1":
+                parts.append('<span style="font-weight:bold">')
+                open_span = True
+    parts.append(html_mod.escape(text[pos:]))
+    if open_span:
+        parts.append("</span>")
+    return "".join(parts)
+
+
 def _has_footnotes(md_text: str) -> bool:
     """Check if markdown contains footnote syntax ([^...] or ^[...])."""
     return bool(re.search(r"\[\^|\^\[", md_text))
@@ -107,8 +174,11 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
     return cmd, md_text
 
 
-def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
-    """Render markdown to HTML fragment using Pandoc (blocking)."""
+def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> tuple[str, str]:
+    """Render markdown to HTML fragment using Pandoc (blocking).
+
+    Returns (html, stderr) — stderr may contain warnings even on success.
+    """
     cmd, md_text = _build_pandoc_base_cmd(doc_path)
     cmd += [
         "--katex",
@@ -125,10 +195,11 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         input=md_text,
         capture_output=True,
         text=True,
-        check=True,
         cwd=str(doc_path.parent),
     )
-    return result.stdout
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+    return result.stdout, result.stderr
 
 
 def _find_quarto_python(doc_path: Path) -> str | None:
@@ -168,14 +239,14 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
-def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> str:
+def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str, str]:
     """Render a Quarto document and return the full HTML page (blocking).
 
     Runs ``quarto render`` in the document's own directory so that
     ``<stem>_files/`` persists for the /quarto-assets/ route to serve.
     Asset paths are rewritten from ``<stem>_files/`` to ``/quarto-assets/``.
 
-    Returns the complete Quarto HTML page with asset paths rewritten.
+    Returns (html, stderr) — stderr may contain warnings even on success.
     The caller injects scholia's overlay (sidebar, scripts) into this page.
     """
     quarto = shutil.which("quarto")
@@ -220,16 +291,17 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> str:
     # Rewrite local asset paths to go through /quarto-assets/
     html = html.replace(f"{stem}_files/", "/quarto-assets/")
 
-    return html
+    return html, result.stderr
 
 
 async def render_doc(
     doc_path: Path, sidenotes: bool = False, quarto_use_defaults: bool = True
-) -> str:
+) -> tuple[str, str]:
     """Render a document to HTML, choosing the right pipeline.
 
-    For Quarto documents returns a complete HTML page.
-    For Pandoc documents returns an HTML fragment.
+    Returns (html, stderr).
+    For Quarto documents html is a complete HTML page.
+    For Pandoc documents html is an HTML fragment.
     """
     loop = asyncio.get_running_loop()
     if _is_quarto(doc_path):
@@ -237,7 +309,7 @@ async def render_doc(
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
-async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
+async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> tuple[str, str]:
     """Render markdown to HTML fragment without blocking the event loop."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
@@ -526,7 +598,9 @@ async def build_page(
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     use_defaults = quarto_theme != "default"
-    html = await render_doc(doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults)
+    html, _stderr = await render_doc(
+        doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults
+    )
 
     if _is_quarto(doc_path):
         return _inject_scholia_into_quarto(
@@ -679,6 +753,7 @@ class ScholiaServer:
         self._observer_refcount: dict[Path, int] = {}  # parent_dir -> count
         self._ephemeral = ephemeral
         self._open_browser = open_browser
+        self.render_errors: dict[Path, str] = {}  # doc_path -> last error message
         self._stop_event: asyncio.Event | None = None
 
     def _load_template(self) -> str:
@@ -785,17 +860,24 @@ class ScholiaServer:
                 display_path=display,
                 readonly=True,
             )
-        except subprocess.CalledProcessError as e:
-            import html as html_mod
-
-            error_html = (
-                "<h2>Render error</h2>"
-                f"<p><code>{html_mod.escape(str(e.stderr or str(e)))}</code></p>"
+        except (subprocess.CalledProcessError, RuntimeError) as e:
+            if isinstance(e, subprocess.CalledProcessError):
+                detail = e.stderr or str(e)
+            else:
+                detail = str(e)
+            raw_detail = detail.strip()
+            html_detail = _ansi_to_html(raw_detail)
+            display_for_log = self._display_path(doc_path)
+            print(
+                f"\033[31m[scholia] Render error ({display_for_log}):\033[0m {raw_detail}\n",
+                file=sys.stderr,
             )
+            # Store error so the overlay appears when the WS connects
+            self.render_errors[doc_path] = html_detail
             page = _fill_template(
                 self.template,
                 title="Error — Scholia",
-                html=error_html,
+                html="",
                 doc_path=doc_path,
                 display_path=display,
                 readonly=True,
@@ -975,6 +1057,10 @@ class ScholiaServer:
                 self.ws_clients[file_path].add(ws)
                 if self._loop:
                     self._start_watching(file_path)
+                # Send stored render error if one exists for this document
+                stored_error = self.render_errors.get(file_path)
+                if stored_error:
+                    await ws.send_json({"type": "render_error", "message": stored_error})
                 return
             doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
@@ -1102,26 +1188,57 @@ class ScholiaServer:
                     await ws.send_str(start_payload)
                 except Exception:
                     closed.add(ws)
-            for sn_val, ws_list in by_sidenotes.items():
-                rendered = await render_doc(doc_path, sidenotes=sn_val)
-                if _is_quarto(doc_path):
-                    # For Quarto, extract just <main> inner content for live update
-                    main_match = re.search(
-                        r"<main[^>]*>(.*)</main>", rendered, re.DOTALL | re.IGNORECASE
+            try:
+                for sn_val, ws_list in by_sidenotes.items():
+                    rendered, stderr = await render_doc(doc_path, sidenotes=sn_val)
+                    if stderr.strip():
+                        warn_display = self._display_path(doc_path)
+                        pfx = f"\033[33m[scholia] Render warning ({warn_display}):\033[0m"
+                        print(f"{pfx} {stderr.strip()}\n", file=sys.stderr)
+                    if _is_quarto(doc_path):
+                        # For Quarto, extract just <main> inner content for live update
+                        main_match = re.search(
+                            r"<main[^>]*>(.*)</main>", rendered, re.DOTALL | re.IGNORECASE
+                        )
+                        html = main_match.group(1) if main_match else rendered
+                    else:
+                        html = rendered
+                    payload = json.dumps(
+                        {
+                            "type": "doc_update",
+                            "html": html,
+                            "sidenotes": sn_val,
+                        }
                     )
-                    html = main_match.group(1) if main_match else rendered
+                    for ws in ws_list:
+                        try:
+                            await ws.send_str(payload)
+                        except Exception:
+                            closed.add(ws)
+
+                # Render succeeded — clear any stored error
+                self.render_errors.pop(doc_path, None)
+
+            except (subprocess.CalledProcessError, RuntimeError) as exc:
+                # Extract the useful error message
+                if isinstance(exc, subprocess.CalledProcessError):
+                    err_msg = (exc.stderr or str(exc)).strip()
                 else:
-                    html = rendered
-                payload = json.dumps(
-                    {
-                        "type": "doc_update",
-                        "html": html,
-                        "sidenotes": sn_val,
-                    }
+                    err_msg = str(exc).strip()
+
+                display = self._display_path(doc_path)
+                print(
+                    f"\033[31m[scholia] Render error ({display}):\033[0m {err_msg}\n",
+                    file=sys.stderr,
                 )
-                for ws in ws_list:
+
+                # Convert ANSI to HTML for browser display
+                html_msg = _ansi_to_html(err_msg)
+                self.render_errors[doc_path] = html_msg
+                error_payload = json.dumps({"type": "render_error", "message": html_msg})
+                for ws in clients:
                     try:
-                        await ws.send_str(payload)
+                        await ws.send_str(error_payload)
                     except Exception:
                         closed.add(ws)
 

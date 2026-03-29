@@ -417,6 +417,37 @@
     renderingBanner.classList.remove('visible');
   }
 
+  // ── Render error overlay (persistent, minimizable) ──
+  var renderErrorOverlay = document.createElement('div');
+  renderErrorOverlay.className = 'scholia-render-error';
+  renderErrorOverlay.innerHTML =
+    '<div class="scholia-render-error-header">' +
+      '<span>Render error</span>' +
+      '<span class="scholia-render-error-toggle">\u25BE</span>' +
+    '</div>' +
+    '<div class="scholia-render-error-body"></div>';
+  var renderErrorCollapsed = false;
+
+  renderErrorOverlay.querySelector('.scholia-render-error-header').addEventListener('click', function () {
+    renderErrorCollapsed = !renderErrorCollapsed;
+    renderErrorOverlay.classList.toggle('collapsed', renderErrorCollapsed);
+    renderErrorOverlay.querySelector('.scholia-render-error-toggle').textContent =
+      renderErrorCollapsed ? '\u25B8' : '\u25BE';
+  });
+
+  function showRenderError(message) {
+    renderErrorOverlay.querySelector('.scholia-render-error-body').innerHTML = message;
+    renderErrorOverlay.classList.remove('collapsed');
+    renderErrorOverlay.querySelector('.scholia-render-error-toggle').textContent = '\u25BE';
+    renderErrorCollapsed = false;
+    renderErrorOverlay.classList.add('visible');
+    hideRenderingBanner();
+  }
+
+  function hideRenderError() {
+    renderErrorOverlay.classList.remove('visible');
+  }
+
   // ── WebSocket ──────────────────────────────────────
 
   function connectWS() {
@@ -435,14 +466,20 @@
         showRenderingBanner();
         return;
       }
+      if (msg.type === 'render_error') {
+        showRenderError(msg.message);
+        return;
+      }
       if (msg.type === 'doc_update') {
         if (isQuarto) {
           // Quarto's client-side JS (KaTeX, tippy, popper) only runs once
           // on page load. Replacing innerHTML breaks math and tooltips.
           // Keep rendering banner visible through the reload.
+          hideRenderError();
           window.location.reload();
           return;
         }
+        hideRenderError();
         hideRenderingBanner();
         if (msg.sidenotes !== undefined) {
           sidenotesEnabled = msg.sidenotes;
@@ -499,6 +536,7 @@
     };
 
     ws.onclose = function () {
+      hideRenderingBanner();
       showDisconnectBanner();
       var delay = Math.min(2000 * Math.pow(2, wsAttempt), 30000);
       wsAttempt++;
@@ -779,6 +817,7 @@
     toolbarEl.appendChild(brandPath);
     toolbarEl.appendChild(disconnectBanner);
     toolbarEl.appendChild(renderingBanner);
+    shadow.appendChild(renderErrorOverlay);
 
     // Contents (TOC) dropdown — before Options
     tocWrapEl = document.createElement('span');
