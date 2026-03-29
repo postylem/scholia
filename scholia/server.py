@@ -786,13 +786,16 @@ class ScholiaServer:
                 display_path=display,
                 readonly=True,
             )
-        except subprocess.CalledProcessError as e:
+        except (subprocess.CalledProcessError, RuntimeError) as e:
             import html as html_mod
 
-            error_html = (
-                "<h2>Render error</h2>"
-                f"<p><code>{html_mod.escape(str(e.stderr or str(e)))}</code></p>"
-            )
+            if isinstance(e, subprocess.CalledProcessError):
+                detail = e.stderr or str(e)
+            else:
+                detail = str(e)
+            display_for_log = self._display_path(doc_path)
+            print(f"[scholia] Render error ({display_for_log}): {detail.strip()}", file=sys.stderr)
+            error_html = "<h2>Render error</h2>" f"<p><code>{html_mod.escape(detail)}</code></p>"
             page = _fill_template(
                 self.template,
                 title="Error — Scholia",
