@@ -1935,15 +1935,15 @@ body.scholia-dark .scholia-code-copy {
   padding: 0.15rem 0.5rem;
   border-radius: 3px;
   margin-left: 0.4rem;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.15);
+  color: #fff;
+  background: var(--s-accent);
 }
 .scholia-rendering-banner.visible {
   display: inline-flex;
 }
 @keyframes scholia-rendering-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%, 100% { background: var(--s-accent); opacity: 1; }
+  50% { background: rgba(0, 0, 0, 0.15); opacity: 0.6; }
 }
 .scholia-rendering-banner.visible {
   animation: scholia-rendering-pulse 1.5s ease-in-out infinite;
