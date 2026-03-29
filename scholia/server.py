@@ -69,11 +69,6 @@ _ANSI_COLORS = {
 }
 
 
-def _strip_ansi(text: str) -> str:
-    """Remove ANSI color/style escape sequences."""
-    return _ANSI_RE.sub("", text)
-
-
 def _ansi_to_html(text: str) -> str:
     """Convert ANSI color codes to HTML spans. HTML-escapes the text."""
     import html as html_mod
@@ -95,6 +90,7 @@ def _ansi_to_html(text: str) -> str:
         else:
             if open_span:
                 parts.append("</span>")
+                open_span = False
             # Check each code for a color match
             color = None
             for n in nums.split(";"):
