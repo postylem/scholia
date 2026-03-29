@@ -1882,11 +1882,11 @@ body.scholia-dark .scholia-code-copy {
 .scholia-disconnect-banner {
   display: none;
   align-items: center;
-  color: white;
-  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
   font-family: var(--s-sans);
-  padding: 0.1rem 0.6rem;
-  border-radius: var(--s-radius);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
   white-space: nowrap;
   background: rgba(0, 0, 0, 0.15);
 }
