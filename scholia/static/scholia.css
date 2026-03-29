@@ -1949,6 +1949,68 @@ body.scholia-dark .scholia-code-copy {
   animation: scholia-rendering-pulse 1.5s ease-in-out infinite;
 }
 
+/* Render-error overlay — persistent, minimizable */
+.scholia-render-error {
+  display: none;
+  position: fixed;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 700px;
+  width: 90%;
+  z-index: 9999;
+  font-family: var(--s-sans);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+.scholia-render-error.visible {
+  display: block;
+}
+
+/* Header bar — always visible, even when collapsed */
+.scholia-render-error-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.scholia-render-error-header:hover {
+  background: #a93226;
+}
+
+/* Toggle indicator */
+.scholia-render-error-toggle {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  margin-left: 0.5rem;
+}
+
+/* Body — collapsible, contains the error message */
+.scholia-render-error-body {
+  padding: 0.6rem 0.75rem;
+  background: #1a1a1a;
+  color: #f0f0f0;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Collapsed state: hide body */
+.scholia-render-error.collapsed .scholia-render-error-body {
+  display: none;
+}
+
 /* Save As modal */
 .scholia-save-as-overlay {
   position: fixed;
