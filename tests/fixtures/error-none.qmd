@@ -1,0 +1,13 @@
+---
+title: Good File
+author: Test
+format:
+  html:
+    code-fold: false
+---
+
+This file renders without errors.
+
+```{python}
+print("hello")
+```
