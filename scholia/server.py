@@ -976,6 +976,10 @@ class ScholiaServer:
                 self.ws_clients[file_path].add(ws)
                 if self._loop:
                     self._start_watching(file_path)
+                # Send stored render error if one exists for this document
+                stored_error = self.render_errors.get(file_path)
+                if stored_error:
+                    await ws.send_json({"type": "render_error", "message": stored_error})
                 return
             doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
