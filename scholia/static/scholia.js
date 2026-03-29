@@ -436,7 +436,7 @@
   });
 
   function showRenderError(message) {
-    renderErrorOverlay.querySelector('.scholia-render-error-body').textContent = message;
+    renderErrorOverlay.querySelector('.scholia-render-error-body').innerHTML = message;
     renderErrorOverlay.classList.remove('collapsed');
     renderErrorOverlay.querySelector('.scholia-render-error-toggle').textContent = '\u25BE';
     renderErrorCollapsed = false;

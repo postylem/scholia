@@ -48,10 +48,69 @@ def _is_markdown(path: Path) -> bool:
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
+# Standard ANSI color codes → CSS colors
+_ANSI_COLORS = {
+    "30": "#000",
+    "31": "#c0392b",
+    "32": "#27ae60",
+    "33": "#f39c12",
+    "34": "#2980b9",
+    "35": "#8e44ad",
+    "36": "#16a085",
+    "37": "#ccc",
+    "90": "#666",
+    "91": "#e74c3c",
+    "92": "#2ecc71",
+    "93": "#f1c40f",
+    "94": "#3498db",
+    "95": "#9b59b6",
+    "96": "#1abc9c",
+    "97": "#fff",
+}
+
 
 def _strip_ansi(text: str) -> str:
     """Remove ANSI color/style escape sequences."""
     return _ANSI_RE.sub("", text)
+
+
+def _ansi_to_html(text: str) -> str:
+    """Convert ANSI color codes to HTML spans. HTML-escapes the text."""
+    import html as html_mod
+
+    parts: list[str] = []
+    pos = 0
+    open_span = False
+    for m in _ANSI_RE.finditer(text):
+        # Escape literal text before this code
+        parts.append(html_mod.escape(text[pos : m.start()]))
+        pos = m.end()
+        code = m.group()
+        # Extract the numeric codes
+        nums = code[2:-1]  # strip \x1b[ and m
+        if nums in ("0", "") or nums == "39":
+            if open_span:
+                parts.append("</span>")
+                open_span = False
+        else:
+            if open_span:
+                parts.append("</span>")
+            # Check each code for a color match
+            color = None
+            for n in nums.split(";"):
+                if n in _ANSI_COLORS:
+                    color = _ANSI_COLORS[n]
+                    break
+            if color:
+                parts.append(f'<span style="color:{color}">')
+                open_span = True
+            elif nums == "1":
+                parts.append('<span style="font-weight:bold">')
+                open_span = True
+    parts.append(html_mod.escape(text[pos:]))
+    if open_span:
+        parts.append("</span>")
+    return "".join(parts)
 
 
 def _has_footnotes(md_text: str) -> bool:
@@ -802,26 +861,23 @@ class ScholiaServer:
                 readonly=True,
             )
         except (subprocess.CalledProcessError, RuntimeError) as e:
-            import html as html_mod
-
             if isinstance(e, subprocess.CalledProcessError):
                 detail = e.stderr or str(e)
             else:
                 detail = str(e)
             raw_detail = detail.strip()
-            clean_detail = _strip_ansi(raw_detail)
+            html_detail = _ansi_to_html(raw_detail)
             display_for_log = self._display_path(doc_path)
             print(
                 f"\033[31m[scholia] Render error ({display_for_log}):\033[0m {raw_detail}\n",
                 file=sys.stderr,
             )
-            error_html = (
-                "<h2>Render error</h2>" f"<p><code>{html_mod.escape(clean_detail)}</code></p>"
-            )
+            # Store error so the overlay appears when the WS connects
+            self.render_errors[doc_path] = html_detail
             page = _fill_template(
                 self.template,
                 title="Error — Scholia",
-                html=error_html,
+                html="",
                 doc_path=doc_path,
                 display_path=display,
                 readonly=True,
@@ -1176,10 +1232,10 @@ class ScholiaServer:
                     file=sys.stderr,
                 )
 
-                # Strip ANSI for browser display; store clean version
-                clean_msg = _strip_ansi(err_msg)
-                self.render_errors[doc_path] = clean_msg
-                error_payload = json.dumps({"type": "render_error", "message": clean_msg})
+                # Convert ANSI to HTML for browser display
+                html_msg = _ansi_to_html(err_msg)
+                self.render_errors[doc_path] = html_msg
+                error_payload = json.dumps({"type": "render_error", "message": html_msg})
                 for ws in clients:
                     try:
                         await ws.send_str(error_payload)
