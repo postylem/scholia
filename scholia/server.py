@@ -107,8 +107,11 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
     return cmd, md_text
 
 
-def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
-    """Render markdown to HTML fragment using Pandoc (blocking)."""
+def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> tuple[str, str]:
+    """Render markdown to HTML fragment using Pandoc (blocking).
+
+    Returns (html, stderr) — stderr may contain warnings even on success.
+    """
     cmd, md_text = _build_pandoc_base_cmd(doc_path)
     cmd += [
         "--katex",
@@ -125,10 +128,11 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> str:
         input=md_text,
         capture_output=True,
         text=True,
-        check=True,
         cwd=str(doc_path.parent),
     )
-    return result.stdout
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+    return result.stdout, result.stderr
 
 
 def _find_quarto_python(doc_path: Path) -> str | None:
@@ -168,14 +172,14 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
-def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> str:
+def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str, str]:
     """Render a Quarto document and return the full HTML page (blocking).
 
     Runs ``quarto render`` in the document's own directory so that
     ``<stem>_files/`` persists for the /quarto-assets/ route to serve.
     Asset paths are rewritten from ``<stem>_files/`` to ``/quarto-assets/``.
 
-    Returns the complete Quarto HTML page with asset paths rewritten.
+    Returns (html, stderr) — stderr may contain warnings even on success.
     The caller injects scholia's overlay (sidebar, scripts) into this page.
     """
     quarto = shutil.which("quarto")
@@ -220,16 +224,17 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> str:
     # Rewrite local asset paths to go through /quarto-assets/
     html = html.replace(f"{stem}_files/", "/quarto-assets/")
 
-    return html
+    return html, result.stderr
 
 
 async def render_doc(
     doc_path: Path, sidenotes: bool = False, quarto_use_defaults: bool = True
-) -> str:
+) -> tuple[str, str]:
     """Render a document to HTML, choosing the right pipeline.
 
-    For Quarto documents returns a complete HTML page.
-    For Pandoc documents returns an HTML fragment.
+    Returns (html, stderr).
+    For Quarto documents html is a complete HTML page.
+    For Pandoc documents html is an HTML fragment.
     """
     loop = asyncio.get_running_loop()
     if _is_quarto(doc_path):
@@ -237,7 +242,7 @@ async def render_doc(
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
-async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> str:
+async def render_pandoc(doc_path: Path, sidenotes: bool = False) -> tuple[str, str]:
     """Render markdown to HTML fragment without blocking the event loop."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
@@ -526,7 +531,9 @@ async def build_page(
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     use_defaults = quarto_theme != "default"
-    html = await render_doc(doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults)
+    html, _stderr = await render_doc(
+        doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults
+    )
 
     if _is_quarto(doc_path):
         return _inject_scholia_into_quarto(
@@ -1112,7 +1119,13 @@ class ScholiaServer:
                     closed.add(ws)
             try:
                 for sn_val, ws_list in by_sidenotes.items():
-                    rendered = await render_doc(doc_path, sidenotes=sn_val)
+                    rendered, stderr = await render_doc(doc_path, sidenotes=sn_val)
+                    if stderr.strip():
+                        warn_display = self._display_path(doc_path)
+                        print(
+                            f"[scholia] Render warning ({warn_display}): {stderr.strip()}",
+                            file=sys.stderr,
+                        )
                     if _is_quarto(doc_path):
                         # For Quarto, extract just <main> inner content for live update
                         main_match = re.search(
