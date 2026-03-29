@@ -2000,7 +2000,7 @@ body.scholia-dark .scholia-code-copy {
   font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
   font-size: 0.75rem;
   line-height: 1.5;
-  max-height: 200px;
+  max-height: max(200px, 60vh);
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
