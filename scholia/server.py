@@ -46,6 +46,14 @@ def _is_markdown(path: Path) -> bool:
     return path.suffix.lower() in _MARKDOWN_EXTENSIONS
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI color/style escape sequences."""
+    return _ANSI_RE.sub("", text)
+
+
 def _has_footnotes(md_text: str) -> bool:
     """Check if markdown contains footnote syntax ([^...] or ^[...])."""
     return bool(re.search(r"\[\^|\^\[", md_text))
@@ -800,8 +808,12 @@ class ScholiaServer:
                 detail = e.stderr or str(e)
             else:
                 detail = str(e)
+            detail = _strip_ansi(detail.strip())
             display_for_log = self._display_path(doc_path)
-            print(f"[scholia] Render error ({display_for_log}): {detail.strip()}", file=sys.stderr)
+            print(
+                f"\033[31m[scholia] Render error ({display_for_log}):\033[0m {detail}\n",
+                file=sys.stderr,
+            )
             error_html = "<h2>Render error</h2>" f"<p><code>{html_mod.escape(detail)}</code></p>"
             page = _fill_template(
                 self.template,
@@ -1122,10 +1134,9 @@ class ScholiaServer:
                     rendered, stderr = await render_doc(doc_path, sidenotes=sn_val)
                     if stderr.strip():
                         warn_display = self._display_path(doc_path)
-                        print(
-                            f"[scholia] Render warning ({warn_display}): {stderr.strip()}",
-                            file=sys.stderr,
-                        )
+                        clean_warn = _strip_ansi(stderr.strip())
+                        pfx = f"\033[33m[scholia] Render warning ({warn_display}):\033[0m"
+                        print(f"{pfx} {clean_warn}\n", file=sys.stderr)
                     if _is_quarto(doc_path):
                         # For Quarto, extract just <main> inner content for live update
                         main_match = re.search(
@@ -1158,11 +1169,15 @@ class ScholiaServer:
                     err_msg = str(exc).strip()
 
                 display = self._display_path(doc_path)
-                print(f"[scholia] Render error ({display}): {err_msg}", file=sys.stderr)
+                clean_msg = _strip_ansi(err_msg)
+                print(
+                    f"\033[31m[scholia] Render error ({display}):\033[0m {clean_msg}\n",
+                    file=sys.stderr,
+                )
 
                 # Store and send to all clients
-                self.render_errors[doc_path] = err_msg
-                error_payload = json.dumps({"type": "render_error", "message": err_msg})
+                self.render_errors[doc_path] = clean_msg
+                error_payload = json.dumps({"type": "render_error", "message": clean_msg})
                 for ws in clients:
                     try:
                         await ws.send_str(error_payload)
