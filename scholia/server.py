@@ -808,13 +808,16 @@ class ScholiaServer:
                 detail = e.stderr or str(e)
             else:
                 detail = str(e)
-            detail = _strip_ansi(detail.strip())
+            raw_detail = detail.strip()
+            clean_detail = _strip_ansi(raw_detail)
             display_for_log = self._display_path(doc_path)
             print(
-                f"\033[31m[scholia] Render error ({display_for_log}):\033[0m {detail}\n",
+                f"\033[31m[scholia] Render error ({display_for_log}):\033[0m {raw_detail}\n",
                 file=sys.stderr,
             )
-            error_html = "<h2>Render error</h2>" f"<p><code>{html_mod.escape(detail)}</code></p>"
+            error_html = (
+                "<h2>Render error</h2>" f"<p><code>{html_mod.escape(clean_detail)}</code></p>"
+            )
             page = _fill_template(
                 self.template,
                 title="Error — Scholia",
@@ -1134,9 +1137,8 @@ class ScholiaServer:
                     rendered, stderr = await render_doc(doc_path, sidenotes=sn_val)
                     if stderr.strip():
                         warn_display = self._display_path(doc_path)
-                        clean_warn = _strip_ansi(stderr.strip())
                         pfx = f"\033[33m[scholia] Render warning ({warn_display}):\033[0m"
-                        print(f"{pfx} {clean_warn}\n", file=sys.stderr)
+                        print(f"{pfx} {stderr.strip()}\n", file=sys.stderr)
                     if _is_quarto(doc_path):
                         # For Quarto, extract just <main> inner content for live update
                         main_match = re.search(
@@ -1169,13 +1171,13 @@ class ScholiaServer:
                     err_msg = str(exc).strip()
 
                 display = self._display_path(doc_path)
-                clean_msg = _strip_ansi(err_msg)
                 print(
-                    f"\033[31m[scholia] Render error ({display}):\033[0m {clean_msg}\n",
+                    f"\033[31m[scholia] Render error ({display}):\033[0m {err_msg}\n",
                     file=sys.stderr,
                 )
 
-                # Store and send to all clients
+                # Strip ANSI for browser display; store clean version
+                clean_msg = _strip_ansi(err_msg)
                 self.render_errors[doc_path] = clean_msg
                 error_payload = json.dumps({"type": "render_error", "message": clean_msg})
                 for ws in clients:
