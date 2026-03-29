@@ -679,6 +679,7 @@ class ScholiaServer:
         self._observer_refcount: dict[Path, int] = {}  # parent_dir -> count
         self._ephemeral = ephemeral
         self._open_browser = open_browser
+        self.render_errors: dict[Path, str] = {}  # doc_path -> last error message
         self._stop_event: asyncio.Event | None = None
 
     def _load_template(self) -> str:
@@ -1102,26 +1103,49 @@ class ScholiaServer:
                     await ws.send_str(start_payload)
                 except Exception:
                     closed.add(ws)
-            for sn_val, ws_list in by_sidenotes.items():
-                rendered = await render_doc(doc_path, sidenotes=sn_val)
-                if _is_quarto(doc_path):
-                    # For Quarto, extract just <main> inner content for live update
-                    main_match = re.search(
-                        r"<main[^>]*>(.*)</main>", rendered, re.DOTALL | re.IGNORECASE
+            try:
+                for sn_val, ws_list in by_sidenotes.items():
+                    rendered = await render_doc(doc_path, sidenotes=sn_val)
+                    if _is_quarto(doc_path):
+                        # For Quarto, extract just <main> inner content for live update
+                        main_match = re.search(
+                            r"<main[^>]*>(.*)</main>", rendered, re.DOTALL | re.IGNORECASE
+                        )
+                        html = main_match.group(1) if main_match else rendered
+                    else:
+                        html = rendered
+                    payload = json.dumps(
+                        {
+                            "type": "doc_update",
+                            "html": html,
+                            "sidenotes": sn_val,
+                        }
                     )
-                    html = main_match.group(1) if main_match else rendered
+                    for ws in ws_list:
+                        try:
+                            await ws.send_str(payload)
+                        except Exception:
+                            closed.add(ws)
+
+                # Render succeeded — clear any stored error
+                self.render_errors.pop(doc_path, None)
+
+            except (subprocess.CalledProcessError, RuntimeError) as exc:
+                # Extract the useful error message
+                if isinstance(exc, subprocess.CalledProcessError):
+                    err_msg = (exc.stderr or str(exc)).strip()
                 else:
-                    html = rendered
-                payload = json.dumps(
-                    {
-                        "type": "doc_update",
-                        "html": html,
-                        "sidenotes": sn_val,
-                    }
-                )
-                for ws in ws_list:
+                    err_msg = str(exc).strip()
+
+                display = self._display_path(doc_path)
+                print(f"[scholia] Render error ({display}): {err_msg}", file=sys.stderr)
+
+                # Store and send to all clients
+                self.render_errors[doc_path] = err_msg
+                error_payload = json.dumps({"type": "render_error", "message": err_msg})
+                for ws in clients:
                     try:
-                        await ws.send_str(payload)
+                        await ws.send_str(error_payload)
                     except Exception:
                         closed.add(ws)
 
