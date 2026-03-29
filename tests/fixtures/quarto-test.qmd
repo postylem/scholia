@@ -41,7 +41,6 @@ print(f"Peak density: {y.max():.4f}")
 #| label: fig-density
 #| fig-cap: "Standard normal density curve"
 
-import matplotlib
 import matplotlib.pyplot as plt
 
 fig, ax = plt.subplots(figsize=(6, 3))
@@ -56,7 +55,9 @@ As shown in @fig-density, the density is symmetric about zero.
 
 ## Callout
 
-::: {.callout-note}
+You can also use callouts:
+
+::: {.callout-note collapse="false"}
 This is a Quarto callout block. It should render with special styling
 in Quarto but appears as a plain blockquote in Pandoc.
 :::

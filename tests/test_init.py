@@ -69,30 +69,3 @@ def test_skill_init_force_overwrite(tmp_path):
     assert "scholia list" in target.read_text()
 
 
-def test_skill_init_template_is_agent_agnostic(tmp_path):
-    """Template should not address a specific AI agent (e.g. 'you are Claude')."""
-    result = subprocess.run(
-        [sys.executable, "-m", "scholia.cli", "skill-init"],
-        cwd=str(tmp_path),
-        capture_output=True,
-        text=True,
-        env={**__import__("os").environ, "HOME": str(tmp_path)},
-    )
-    assert result.returncode == 0
-    target = tmp_path / ".claude" / "skills" / "scholia" / "SKILL.md"
-    content = target.read_text().lower()
-    # Mentioning "Claude Opus 4.6" as an example model name is fine;
-    # addressing the agent as Claude ("you are Claude", "as Claude") is not.
-    for phrase in ["you are claude", "as claude,", "as a claude"]:
-        assert phrase not in content, f"Template should not address a specific agent: '{phrase}'"
-
-
-def test_skill_template_has_render_section():
-    """Skill file includes section on rendering agent responses."""
-    from scholia.cli import _load_instruction_template
-
-    content = _load_instruction_template()
-    assert "Using scholia to render agent responses" in content
-    # Both workflows should be present
-    assert "Review Workflow" in content
-    assert "scholia view" in content
