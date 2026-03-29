@@ -536,6 +536,7 @@
     };
 
     ws.onclose = function () {
+      hideRenderingBanner();
       showDisconnectBanner();
       var delay = Math.min(2000 * Math.pow(2, wsAttempt), 30000);
       wsAttempt++;
