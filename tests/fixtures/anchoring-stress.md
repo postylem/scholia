@@ -155,7 +155,7 @@ optimization procedure.
 
 Dense expressions like $\sum_{i=1}^{n}x_i^2+x_i+ x_i x_j$ contain
 many repeated single characters. The variable $x$ appears in $x_i$,
-$x_j$, $x_i^2$, and the product $x_i x_j$. Selecting a single $x$
+$x_j$, $x_i^2$, and the product $x_i x_j$. Adjacent math spans like this $xyz$&ZeroWidthSpace;$abc$ Selecting a single $x$
 within any sub-expression is a degenerate case.
 
 Similarly $\alpha + \alpha\beta + \alpha\beta\gamma$ repeats the symbol

@@ -27,6 +27,11 @@
     mark.scholia-highlight mjx-container {
       background-color: inherit !important;
     }
+    /* Display math: mjx-container is block inside an inline <mark> —
+       promote the mark so its background covers the block child */
+    mark.scholia-highlight:has(mjx-container[display="true"]) {
+      display: block;
+    }
     mark.scholia-highlight.scholia-highlight-active,
     mark.scholia-highlight:hover {
       background: rgba(255, 200, 50, 0.55);
