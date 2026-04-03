@@ -2951,16 +2951,14 @@
 
   // Forward keyboard to textarea when prompt is visible but not focused
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && compactForm) {
-      dismissCompactComment();
-      return;
-    }
-    if (sidebarHidden || !pendingForm) return;
-    var textarea = pendingForm.querySelector('textarea');
+    var activeForm = pendingForm || compactForm;
+    if (!activeForm) return;
+    var textarea = activeForm.querySelector('textarea');
     if (!textarea || shadow.activeElement === textarea) return;
 
     if (e.key === 'Escape') {
-      dismissCommentPrompt();
+      if (compactForm) dismissCompactComment();
+      if (pendingForm) dismissCommentPrompt();
       window.getSelection().removeAllRanges();
       return;
     }
