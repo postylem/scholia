@@ -2830,6 +2830,7 @@
     var cancelBtn = document.createElement('button');
     cancelBtn.className = 'scholia-btn scholia-btn-cancel';
     cancelBtn.textContent = 'Cancel';
+    cancelBtn.title = 'Discard this comment (Esc)';
     cancelBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       dismissCommentPrompt();
@@ -2840,6 +2841,7 @@
     var submitBtn = document.createElement('button');
     submitBtn.className = 'scholia-btn scholia-btn-submit';
     submitBtn.textContent = 'Comment';
+    submitBtn.title = 'Submit comment (\u2318Enter)';
     submitBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       var text = textarea.value.trim();
@@ -2880,6 +2882,7 @@
     var newCommentPreviewBtn = document.createElement('button');
     newCommentPreviewBtn.className = 'scholia-btn scholia-btn-ghost';
     newCommentPreviewBtn.textContent = 'Preview';
+    newCommentPreviewBtn.title = 'Toggle rendered preview of your comment';
     newCommentPreviewBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       if (newCommentPreviewDiv) {
@@ -3027,6 +3030,7 @@
     var cancelBtn = document.createElement('button');
     cancelBtn.className = 'scholia-btn scholia-btn-cancel';
     cancelBtn.textContent = 'Cancel';
+    cancelBtn.title = 'Discard this comment (Esc)';
     cancelBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       dismissCompactComment();
@@ -3036,6 +3040,7 @@
     var submitBtn = document.createElement('button');
     submitBtn.className = 'scholia-btn scholia-btn-submit';
     submitBtn.textContent = 'Comment';
+    submitBtn.title = 'Submit comment (\u2318Enter)';
     submitBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       var text = textarea.value.trim();
@@ -3061,6 +3066,7 @@
     var previewBtn = document.createElement('button');
     previewBtn.className = 'scholia-btn scholia-btn-ghost';
     previewBtn.textContent = 'Preview';
+    previewBtn.title = 'Toggle rendered preview of your comment';
     previewBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       if (compactPreviewDiv) {
