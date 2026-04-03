@@ -1997,6 +1997,7 @@
       var resolveBtn = document.createElement('button');
       resolveBtn.className = 'scholia-btn-ghost';
       resolveBtn.textContent = 'Resolve';
+      resolveBtn.style.marginLeft = 'auto';
       resolveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         wsSend({ type: 'resolve', annotation_id: ann.id });
@@ -2007,6 +2008,7 @@
       var unresolveBtn = document.createElement('button');
       unresolveBtn.className = 'scholia-btn-ghost';
       unresolveBtn.textContent = 'Unresolve';
+      unresolveBtn.style.marginLeft = 'auto';
       unresolveBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         wsSend({ type: 'unresolve', annotation_id: ann.id });
@@ -2284,6 +2286,7 @@
       var resolveBtn = document.createElement('button');
       resolveBtn.className = 'scholia-btn-ghost';
       resolveBtn.textContent = 'Resolve';
+      resolveBtn.style.marginLeft = 'auto';
       resolveBtn.addEventListener('click', function () {
         wsSend({ type: 'resolve', annotation_id: ann.id });
         wsSend({ type: 'mark_read', annotation_id: ann.id });
@@ -2294,6 +2297,7 @@
       var unresolveBtn = document.createElement('button');
       unresolveBtn.className = 'scholia-btn-ghost';
       unresolveBtn.textContent = 'Unresolve';
+      unresolveBtn.style.marginLeft = 'auto';
       unresolveBtn.addEventListener('click', function () {
         wsSend({ type: 'unresolve', annotation_id: ann.id });
       });
