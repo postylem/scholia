@@ -604,7 +604,7 @@ input.margin-toggle { display: none; }
   border-radius: var(--s-radius);
   margin-bottom: 0.5rem;
   border: 1px solid var(--s-border);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, top 0.25s ease;
 }
 
 .scholia-card:hover,
@@ -666,6 +666,14 @@ input.margin-toggle { display: none; }
   padding: 0 0.65rem 0.65rem;
   max-height: 60vh;
   overflow-y: auto;
+  transition: max-height 0.2s ease, padding 0.2s ease, opacity 0.15s ease;
+}
+.scholia-thread.scholia-thread-collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  overflow: hidden;
 }
 
 .scholia-message {
@@ -1156,6 +1164,12 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
 /* New-comment card has no thread padding to cancel, so reset negative margin */
 #scholia-new-comment .scholia-reply-input {
   margin: 0;
+}
+/* Floating new-comment form: overlays existing cards, not yet slotted */
+.scholia-new-comment-floating {
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18), 0 1px 4px rgba(0, 0, 0, 0.1);
+  border-color: var(--s-accent);
 }
 .scholia-reply-input textarea {
   width: 100%;

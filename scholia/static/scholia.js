@@ -1748,8 +1748,7 @@
 
     // Thread (collapsed)
     var thread = document.createElement('div');
-    thread.className = 'scholia-thread';
-    thread.style.display = 'none';
+    thread.className = 'scholia-thread scholia-thread-collapsed';
 
     for (var j = 0; j < bodies.length; j++) {
       var msg = bodies[j];
@@ -2575,13 +2574,8 @@
 
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
 
-    // Reserve space for new-comment form
-    var newCommentEl = sidebarEl.querySelector('#scholia-new-comment');
+    // New-comment form floats above existing cards; don't reserve space for it.
     var minY = parseFloat(getComputedStyle(sidebarEl).paddingTop) || 0;
-    if (newCommentEl) {
-      var ncBottom = newCommentEl.getBoundingClientRect().bottom - sidebarTop;
-      if (ncBottom > minY) minY = ncBottom;
-    }
     minY += 4;
 
     var positioned = [];
@@ -2614,16 +2608,20 @@
     }
 
     // Measure collapsed and expanded heights for each anchored card
+    // (disable transitions during measurement to get instant layout)
     for (var p = 0; p < positioned.length; p++) {
       var entry = positioned[p];
       var thread = entry.card.querySelector('.scholia-thread');
       if (thread) {
-        var prev = thread.style.display;
-        thread.style.display = 'none';
+        var hadCollapsed = thread.classList.contains('scholia-thread-collapsed');
+        thread.style.transition = 'none';
+        thread.classList.add('scholia-thread-collapsed');
         entry.collapsedH = entry.card.offsetHeight;
-        thread.style.display = 'block';
+        thread.classList.remove('scholia-thread-collapsed');
         entry.expandedH = entry.card.offsetHeight;
-        thread.style.display = prev;
+        if (hadCollapsed) thread.classList.add('scholia-thread-collapsed');
+        thread.offsetHeight; // force reflow before restoring transitions
+        thread.style.transition = '';
       } else {
         entry.collapsedH = entry.card.offsetHeight;
         entry.expandedH = entry.card.offsetHeight;
@@ -2647,7 +2645,7 @@
         shouldExpand = (top + entry.expandedH + 4 <= nextAnchorY);
       }
 
-      if (thread) thread.style.display = shouldExpand ? 'block' : 'none';
+      if (thread) thread.classList.toggle('scholia-thread-collapsed', !shouldExpand);
       entry.card.classList.toggle('scholia-expanded', shouldExpand);
 
       if (entry.card !== reanchorCard) {
@@ -2807,13 +2805,12 @@
 
     var form = document.createElement('div');
     form.id = 'scholia-new-comment';
-    form.className = 'scholia-card';
+    form.className = 'scholia-card scholia-new-comment-floating';
     form.style.position = 'absolute';
     form.style.left = '0.75rem';
     form.style.right = '0.75rem';
     form.style.top = initialY + 'px';
     form.style.margin = '0';
-    form.dataset.trueY = trueAnchorY;
 
     // Card header with anchor text (matches existing thread cards)
     var header = document.createElement('div');
@@ -2857,35 +2854,21 @@
       e.stopPropagation();
       var text = textarea.value.trim();
       if (!text) return;
-
-      var doSend = function () {
-        var payload = {
-          type: 'new_comment',
-          exact: pendingSelector.exact,
-          prefix: pendingSelector.prefix,
-          suffix: pendingSelector.suffix,
-          body: text
-        };
-        if (pendingSelector._source) {
-          payload.source_exact = pendingSelector._source.exact;
-          payload.source_prefix = pendingSelector._source.prefix;
-          payload.source_suffix = pendingSelector._source.suffix;
-        }
-        wsSend(payload);
-        dismissCommentPrompt();
-        window.getSelection().removeAllRanges();
+      var payload = {
+        type: 'new_comment',
+        exact: pendingSelector.exact,
+        prefix: pendingSelector.prefix,
+        suffix: pendingSelector.suffix,
+        body: text
       };
-
-      // Animate form to true anchor position if it was offset
-      var trueY = parseFloat(form.dataset.trueY);
-      var currentY = parseFloat(form.style.top);
-      if (Math.abs(trueY - currentY) > 1) {
-        form.style.transition = 'top 0.3s ease';
-        form.style.top = trueY + 'px';
-        setTimeout(doSend, 300);
-      } else {
-        doSend();
+      if (pendingSelector._source) {
+        payload.source_exact = pendingSelector._source.exact;
+        payload.source_prefix = pendingSelector._source.prefix;
+        payload.source_suffix = pendingSelector._source.suffix;
       }
+      wsSend(payload);
+      dismissCommentPrompt();
+      window.getSelection().removeAllRanges();
     });
     actions.appendChild(submitBtn);
 
