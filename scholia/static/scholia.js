@@ -15,15 +15,11 @@
   var shadowHost = document.querySelector('scholia-sidebar');
   var shadow = shadowHost.attachShadow({ mode: 'open' });
 
-  // Load scholia.css and KaTeX CSS inside shadow root
+  // Load scholia.css inside shadow root
   var cssLink = document.createElement('link');
   cssLink.rel = 'stylesheet';
   cssLink.href = '/static/scholia.css';
   shadow.appendChild(cssLink);
-  var katexCssLink = document.createElement('link');
-  katexCssLink.rel = 'stylesheet';
-  katexCssLink.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
-  shadow.appendChild(katexCssLink);
 
   // Inject CSS variables + layout into document head.
   var isQuarto = window.__SCHOLIA_IS_QUARTO__ || false;
@@ -346,13 +342,8 @@
         typographer: false,
         breaks: true,
       });
-      // Add KaTeX math support if texmath plugin loaded
-      if (window.texmath && window.katex) {
-        md.use(window.texmath, {
-          engine: window.katex,
-          delimiters: 'dollars',
-        });
-      }
+      // Math in comment bodies is rendered server-side via Pandoc;
+      // markdown-it is only used as a fast fallback, math passes through as-is.
     }
   }
 
@@ -1221,27 +1212,30 @@
     orphanIds.clear();
   }
 
-  // ── Math rendering ─────────────────────────────────
+  // ── Math rendering (MathJax) ─────────────────────────────────
 
+  /**
+   * Store original LaTeX in data-latex before MathJax processes the element,
+   * then ask MathJax to typeset the container.
+   */
   function renderMathIn(container) {
-    if (!window.katex) return;
-    // Pandoc --katex outputs <span class="math inline"> and <span class="math display">
+    if (!window.MathJax || !window.MathJax.typesetPromise) return;
+    // Pandoc --mathjax outputs <span class="math inline">\(expr\)</span>
+    // and <span class="math display">\[expr\]</span>
     var mathEls = container.querySelectorAll('span.math:not(.scholia-math-rendered)');
     for (var i = 0; i < mathEls.length; i++) {
       var el = mathEls[i];
-      var displayMode = el.classList.contains('display');
-      el.dataset.latex = el.textContent;
-      try {
-        katex.render(el.textContent, el, { displayMode: displayMode, throwOnError: false });
-        el.classList.add('scholia-math-rendered');
-      } catch (e) {
-        // leave raw LaTeX visible on error
-      }
+      // Strip MathJax delimiters to store raw LaTeX
+      var raw = el.textContent;
+      raw = raw.replace(/^\\\(|\\\)$/g, '').replace(/^\\\[|\\\]$/g, '');
+      el.dataset.latex = raw;
+      el.classList.add('scholia-math-rendered');
     }
+    window.MathJax.typesetPromise([container]).catch(function () {});
   }
 
   function rerenderMath() {
-    // Quarto already renders math with KaTeX server-side; skip to avoid double-render
+    // Quarto already renders math server-side; skip to avoid double-render
     if (window.__SCHOLIA_IS_QUARTO__) return;
     renderMathIn(docEl);
   }
@@ -3488,7 +3482,7 @@
   }
   renderSidebar();
 
-  // KaTeX and mermaid are loaded with defer, so wait for window load
+  // MathJax and mermaid are loaded with defer, so wait for window load
   window.addEventListener('load', function () {
     buildToc();
     if (!isQuarto) {

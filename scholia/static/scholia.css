@@ -76,7 +76,7 @@ body.scholia-font-system {
   --s-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
-body.scholia-font-system #scholia-doc .katex {
+body.scholia-font-system #scholia-doc mjx-container {
   font-size: 1em;
 }
 
@@ -89,7 +89,7 @@ body.scholia-font-latex {
   --s-mono: 'Computer Modern Typewriter', 'Latin Modern Mono', 'DejaVu Sans Mono', monospace;
 }
 
-body.scholia-font-latex #scholia-doc .katex {
+body.scholia-font-latex #scholia-doc mjx-container {
   font-size: 1.05em;
 }
 *, *::before, *::after { box-sizing: border-box; }
@@ -445,7 +445,7 @@ input.margin-toggle { display: none; }
 .scholia-toc-body .scholia-toc-h3 { font-size: 12.2px; }
 .scholia-toc-body .scholia-toc-h4 { font-size: 11.5px; }
 
-.scholia-toc-body .katex { font-size: 0.9em; }
+.scholia-toc-body mjx-container { font-size: 0.9em; }
 
 .scholia-toc-body a {
   text-indent: 0;
@@ -506,8 +506,8 @@ input.margin-toggle { display: none; }
 
 #scholia-doc p { margin: 1rem 0; }
 
-/* Scale KaTeX to visually match et-book (Computer Modern runs ~10% larger) */
-#scholia-doc .katex { font-size: 0.95em; }
+/* Scale MathJax to visually match et-book */
+#scholia-doc mjx-container { font-size: 0.95em; }
 
 #scholia-doc code {
   font-family: var(--s-mono);
@@ -866,7 +866,7 @@ input.margin-toggle { display: none; }
   font-family: var(--s-mono);
   font-size: 0.85em;
 }
-.scholia-message-body .katex-display {
+.scholia-message-body mjx-container[display="true"] {
   margin: 0.3em 0;
 }
 

@@ -177,7 +177,7 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> tuple[str, s
     """
     cmd, md_text = _build_pandoc_base_cmd(doc_path)
     cmd += [
-        "--katex",
+        "--mathjax",
         "--section-divs",
         "--syntax-highlighting=pygments",
         "--to=html5",
@@ -259,7 +259,7 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str,
         "--to",
         "html",
         "-M",
-        "html-math-method:katex",
+        "html-math-method:mathjax",
     ]
     if use_defaults:
         cmd += [
@@ -329,7 +329,7 @@ def _render_export_sync(
     elif fmt == "html":
         cmd += [
             "--to=html5",
-            "--katex",
+            "--mathjax",
             "--section-divs",
             "--syntax-highlighting=pygments",
         ]
@@ -454,7 +454,7 @@ def _render_markdown_fragment_sync(
     """Render a markdown fragment to HTML via Pandoc (blocking)."""
     cmd = [
         "pandoc",
-        "--katex",
+        "--mathjax",
         "--citeproc",
         "--metadata=link-citations:true",
         "--from=markdown+tex_math_single_backslash",

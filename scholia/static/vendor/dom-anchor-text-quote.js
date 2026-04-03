@@ -186,14 +186,14 @@
     var text = '';
     var entries = [];
 
-    function isInsideKatex(node) {
+    function isInsideMathJax(node) {
       var el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-      return el && el.closest && el.closest('.katex');
+      return el && el.closest && el.closest('mjx-container');
     }
 
     function walk(node) {
       if (node.nodeType === Node.TEXT_NODE) {
-        if (isInsideKatex(node)) return;
+        if (isInsideMathJax(node)) return;
         entries.push({ node: node, rtStart: text.length, type: 'text' });
         text += node.textContent;
         entries[entries.length - 1].rtEnd = text.length;
@@ -202,7 +202,7 @@
       if (node.nodeType !== Node.ELEMENT_NODE) return;
 
       // Math span (Pandoc outputs <span class="math inline"> or <span class="math display">)
-      // After KaTeX renders, data-latex holds the original LaTeX source
+      // data-latex holds the original LaTeX source (set by scholia before MathJax renders)
       if (node.classList.contains('math') && node.dataset.latex) {
         var d = node.classList.contains('display') ? '$$' : '$';
         entries.push({ node: node, rtStart: text.length, type: 'math' });
@@ -211,20 +211,22 @@
         return;
       }
 
-      // Fallback: .math span with KaTeX annotation element (no data-latex)
-      if (node.classList.contains('math') && node.querySelector('.katex')) {
-        var ann = node.querySelector('annotation[encoding="application/x-tex"]');
-        if (ann) {
+      // Fallback: .math span with MathJax container (no data-latex)
+      if (node.classList.contains('math') && node.querySelector('mjx-container')) {
+        // MathJax stores TeX in aria-label on mjx-container
+        var mjx = node.querySelector('mjx-container');
+        var tex = mjx && mjx.getAttribute('aria-label');
+        if (tex) {
           var d2 = node.classList.contains('display') ? '$$' : '$';
           entries.push({ node: node, rtStart: text.length, type: 'math' });
-          text += d2 + ann.textContent + d2;
+          text += d2 + tex + d2;
           entries[entries.length - 1].rtEnd = text.length;
           return;
         }
       }
 
-      // Skip nodes inside .katex (handled by the .math parent above)
-      if (isInsideKatex(node)) return;
+      // Skip nodes inside mjx-container (handled by the .math parent above)
+      if (isInsideMathJax(node)) return;
 
       // Citation spans: <span class="citation" data-cites="key">(...)</span>
       // Parenthetical citations start with "(" → source is [@key]
