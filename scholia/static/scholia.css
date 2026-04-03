@@ -1162,8 +1162,8 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   padding: 0.3rem;
   font-family: var(--s-comment);
   font-size: 0.78rem;
-  resize: none;
-  min-height: 2em;
+  resize: vertical;
+  min-height: 3em;
 }
 .scholia-reply-input textarea:focus {
   outline: none;
