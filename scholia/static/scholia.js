@@ -2962,6 +2962,14 @@
       return;
     }
 
+    // Cmd+Enter (Mac) / Ctrl+Enter (Linux/Windows) → submit
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      var submitBtn = activeForm.querySelector('.scholia-btn-submit');
+      if (submitBtn) submitBtn.click();
+      return;
+    }
+
     var textarea = activeForm.querySelector('textarea');
     if (!textarea || shadow.activeElement === textarea) return;
 
