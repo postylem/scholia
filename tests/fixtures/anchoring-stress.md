@@ -158,5 +158,5 @@ many repeated single characters. The variable $x$ appears in $x_i$,
 $x_j$, $x_i^2$, and the product $x_i x_j$. Adjacent math spans like this $xyz$&ZeroWidthSpace;$abc$ Selecting a single $x$
 within any sub-expression is a degenerate case.
 
-Similarly $\alpha + \alpha\beta + \alpha\beta\gamma$ repeats the symbol
+Similarly $\alpha + \alpha\beta + \alpha \beta\gamma$ repeats the symbol
 $\alpha$ three times with progressively longer tails.

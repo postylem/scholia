@@ -2949,12 +2949,11 @@
     }
   });
 
-  // Forward keyboard to textarea when prompt is visible but not focused
+  // Forward keyboard to textarea when prompt is visible but not focused;
+  // Escape dismisses even when the textarea IS focused (cancel mid-typing).
   document.addEventListener('keydown', function (e) {
     var activeForm = pendingForm || compactForm;
     if (!activeForm) return;
-    var textarea = activeForm.querySelector('textarea');
-    if (!textarea || shadow.activeElement === textarea) return;
 
     if (e.key === 'Escape') {
       if (compactForm) dismissCompactComment();
@@ -2962,6 +2961,9 @@
       window.getSelection().removeAllRanges();
       return;
     }
+
+    var textarea = activeForm.querySelector('textarea');
+    if (!textarea || shadow.activeElement === textarea) return;
 
     // Printable character → focus textarea and insert the character
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
