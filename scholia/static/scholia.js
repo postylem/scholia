@@ -2806,7 +2806,7 @@
 
     var form = document.createElement('div');
     form.id = 'scholia-new-comment';
-    form.className = 'scholia-new-comment';
+    form.className = 'scholia-card';
     form.style.position = 'absolute';
     form.style.left = '0.75rem';
     form.style.right = '0.75rem';
@@ -2814,36 +2814,42 @@
     form.style.margin = '0';
     form.dataset.trueY = trueAnchorY;
 
-    var anchorDiv = document.createElement('div');
-    anchorDiv.className = 'scholia-new-comment-anchor';
+    // Card header with anchor text (matches existing thread cards)
+    var header = document.createElement('div');
+    header.className = 'scholia-card-header';
+    var anchorSpan = document.createElement('span');
+    anchorSpan.className = 'scholia-anchor-text';
     var displayExact = (selector._source && selector._source.exact) || selector.exact;
-    var excerpt = displayExact.slice(0, 80);
-    anchorDiv.textContent = '\u201c' + excerpt + (displayExact.length > 80 ? '\u2026' : '') + '\u201d';
-    form.appendChild(anchorDiv);
+    var excerpt = displayExact.slice(0, 50);
+    var openQ = document.createElement('span');
+    openQ.className = 'scholia-anchor-quote';
+    openQ.textContent = '\u201c';
+    var closeQ = document.createElement('span');
+    closeQ.className = 'scholia-anchor-quote';
+    closeQ.textContent = (displayExact.length > 50 ? '\u2026' : '') + '\u201d';
+    anchorSpan.appendChild(openQ);
+    anchorSpan.appendChild(document.createTextNode(excerpt));
+    anchorSpan.appendChild(closeQ);
+    if (displayExact.length > 50) anchorSpan.title = displayExact;
+    header.appendChild(anchorSpan);
+    form.appendChild(header);
+
+    // Reply-input area (matches thread reply styling)
+    var replyArea = document.createElement('div');
+    replyArea.className = 'scholia-reply-input';
 
     var textarea = document.createElement('textarea');
     textarea.name = 'new-comment';
     textarea.placeholder = 'Add a comment\u2026';
-    textarea.rows = 3;
+    textarea.rows = 1;
     autoGrow(textarea);
-    form.appendChild(textarea);
+    replyArea.appendChild(textarea);
 
     var actions = document.createElement('div');
-    actions.className = 'scholia-new-comment-actions';
-
-    var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'scholia-btn scholia-btn-cancel';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.title = 'Discard this comment (Esc)';
-    cancelBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      dismissCommentPrompt();
-      window.getSelection().removeAllRanges();
-    });
-    actions.appendChild(cancelBtn);
+    actions.className = 'scholia-reply-buttons';
 
     var submitBtn = document.createElement('button');
-    submitBtn.className = 'scholia-btn scholia-btn-submit';
+    submitBtn.className = 'scholia-btn-primary';
     submitBtn.textContent = 'Comment';
     submitBtn.title = 'Submit comment (\u2318Enter)';
     submitBtn.addEventListener('click', function (e) {
@@ -2884,7 +2890,7 @@
 
     var newCommentPreviewDiv = null;
     var newCommentPreviewBtn = document.createElement('button');
-    newCommentPreviewBtn.className = 'scholia-btn scholia-btn-ghost';
+    newCommentPreviewBtn.className = 'scholia-btn-ghost';
     newCommentPreviewBtn.textContent = 'Preview';
     newCommentPreviewBtn.title = 'Toggle rendered preview of your comment';
     newCommentPreviewBtn.addEventListener('click', function (e) {
@@ -2899,14 +2905,26 @@
         newCommentPreviewDiv.className = 'scholia-message-body scholia-preview-body';
         newCommentPreviewDiv.innerHTML = renderCommentBody(textarea.value);
         textarea.style.display = 'none';
-        // Insert before the actions row
-        form.insertBefore(newCommentPreviewDiv, actions);
+        replyArea.insertBefore(newCommentPreviewDiv, actions);
         newCommentPreviewBtn.textContent = 'Edit';
       }
     });
     actions.appendChild(newCommentPreviewBtn);
 
-    form.appendChild(actions);
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'scholia-btn-ghost';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.title = 'Discard this comment (Esc)';
+    cancelBtn.style.marginLeft = 'auto';
+    cancelBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      dismissCommentPrompt();
+      window.getSelection().removeAllRanges();
+    });
+    actions.appendChild(cancelBtn);
+
+    replyArea.appendChild(actions);
+    form.appendChild(replyArea);
     sidebarEl.appendChild(form);
     pendingForm = form;
 
@@ -2972,7 +2990,7 @@
     // Cmd+Enter (Mac) / Ctrl+Enter (Linux/Windows) → submit
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      var submitBtn = activeForm.querySelector('.scholia-btn-submit');
+      var submitBtn = activeForm.querySelector('.scholia-btn-primary, .scholia-btn-submit');
       if (submitBtn) submitBtn.click();
       return;
     }
