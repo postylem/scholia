@@ -1153,6 +1153,10 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
 .scholia-card.scholia-resolved .scholia-reply-input {
   background: var(--s-header-resolved);
 }
+/* New-comment card has no thread padding to cancel, so reset negative margin */
+#scholia-new-comment .scholia-reply-input {
+  margin: 0;
+}
 .scholia-reply-input textarea {
   width: 100%;
   background: #fff;

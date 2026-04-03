@@ -2589,6 +2589,7 @@
 
     for (var i = 0; i < cards.length; i++) {
       var card = cards[i];
+      if (card.id === 'scholia-new-comment') continue;
       var annId = card.dataset.annotationId;
       var marks = highlights.get(annId);
 
