@@ -2448,6 +2448,25 @@
   function wrapRange(range, annId) {
     var marks = [];
 
+    // If the range is entirely inside a math element, wrap the .math span instead
+    // (MathJax's internal DOM can't be meaningfully wrapped with <mark>)
+    var startEl = range.startContainer.nodeType === Node.TEXT_NODE
+      ? range.startContainer.parentElement : range.startContainer;
+    var mathSpan = startEl && startEl.closest && startEl.closest('span.math');
+    if (mathSpan) {
+      var endEl = range.endContainer.nodeType === Node.TEXT_NODE
+        ? range.endContainer.parentElement : range.endContainer;
+      if (endEl && endEl.closest && endEl.closest('span.math') === mathSpan) {
+        var mark = document.createElement('mark');
+        mark.className = 'scholia-highlight';
+        mark.dataset.annotationId = annId;
+        mathSpan.parentNode.insertBefore(mark, mathSpan);
+        mark.appendChild(mathSpan);
+        marks.push(mark);
+        return marks;
+      }
+    }
+
     // Simple case: range is within a single text node
     try {
       var mark = document.createElement('mark');
