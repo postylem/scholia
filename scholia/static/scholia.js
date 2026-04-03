@@ -2976,11 +2976,15 @@
 
   // Dismiss if native selection is cleared while prompt is idle
   document.addEventListener('selectionchange', function () {
-    if (!pendingForm) return;
-    var textarea = pendingForm.querySelector('textarea');
+    var activeForm = pendingForm || compactForm;
+    if (!activeForm) return;
+    var textarea = activeForm.querySelector('textarea');
     if (textarea && shadow.activeElement === textarea) return;
     var sel = window.getSelection();
-    if (!sel || sel.isCollapsed) dismissCommentPrompt();
+    if (!sel || sel.isCollapsed) {
+      if (pendingForm) dismissCommentPrompt();
+      if (compactForm) dismissCompactComment();
+    }
   });
 
   // ── Compact mode: bottom-sheet new comment form ────
@@ -2991,14 +2995,6 @@
   function showCompactCommentForm(selector) {
     dismissCompactComment();
     compactSelector = selector;
-
-    // Highlight the selected text
-    var r = TextQuoteAnchor.toRange(docEl, selector);
-    if (r) {
-      window.getSelection().removeAllRanges();
-      var marks = wrapRange(r, '__pending__');
-      highlights.set('__pending__', marks);
-    }
 
     var form = document.createElement('div');
     form.className = 'scholia-compact-comment';
@@ -3078,7 +3074,19 @@
     form.appendChild(actions);
     shadow.appendChild(form);
     compactForm = form;
-    textarea.focus();
+
+    // Defer highlighting until user engages (matches sidebar behavior,
+    // preserves native selection so users can still copy text)
+    textarea.addEventListener('focus', function () {
+      if (!compactSelector) return;
+      if (highlights.has('__pending__')) return;
+      var r = TextQuoteAnchor.toRange(docEl, compactSelector);
+      if (r) {
+        window.getSelection().removeAllRanges();
+        var marks = wrapRange(r, '__pending__');
+        highlights.set('__pending__', marks);
+      }
+    });
   }
 
   function dismissCompactComment() {
