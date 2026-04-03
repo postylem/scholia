@@ -2479,15 +2479,32 @@
       // Range spans multiple elements — wrap each text node segment
     }
 
+    // Collect .math spans that intersect the range (wrap as atomic units)
+    var ancestor = range.commonAncestorContainer;
+    var ancestorEl = ancestor.nodeType === Node.ELEMENT_NODE
+      ? ancestor : ancestor.parentElement;
+    var mathInRange = [];
+    if (ancestorEl && ancestorEl.querySelectorAll) {
+      var allMath = ancestorEl.querySelectorAll('span.math');
+      for (var m = 0; m < allMath.length; m++) {
+        if (range.intersectsNode(allMath[m])) mathInRange.push(allMath[m]);
+      }
+    }
+    var mathSet = new Set(mathInRange);
+
     var walker = document.createTreeWalker(
       range.commonAncestorContainer,
       NodeFilter.SHOW_TEXT
     );
     var textNodes = [];
     while (walker.nextNode()) {
-      if (range.intersectsNode(walker.currentNode)) {
-        textNodes.push(walker.currentNode);
-      }
+      var cur = walker.currentNode;
+      if (!range.intersectsNode(cur)) continue;
+      // Skip text nodes inside math — the .math span gets wrapped separately
+      var parentMath = cur.parentElement
+        && cur.parentElement.closest && cur.parentElement.closest('span.math');
+      if (parentMath && mathSet.has(parentMath)) continue;
+      textNodes.push(cur);
     }
 
     for (var i = 0; i < textNodes.length; i++) {
@@ -2513,6 +2530,17 @@
       } catch (e) {
         // skip nodes that can't be wrapped
       }
+    }
+
+    // Wrap intersecting .math spans as atomic highlighted units
+    for (var j = 0; j < mathInRange.length; j++) {
+      var mathEl = mathInRange[j];
+      var mark = document.createElement('mark');
+      mark.className = 'scholia-highlight';
+      mark.dataset.annotationId = annId;
+      mathEl.parentNode.insertBefore(mark, mathEl);
+      mark.appendChild(mathEl);
+      marks.push(mark);
     }
 
     return marks;
