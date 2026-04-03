@@ -23,6 +23,10 @@
       border-radius: 2px;
       cursor: pointer;
     }
+    /* MathJax containers don't inherit <mark> background */
+    mark.scholia-highlight mjx-container {
+      background-color: inherit !important;
+    }
     mark.scholia-highlight.scholia-highlight-active,
     mark.scholia-highlight:hover {
       background: rgba(255, 200, 50, 0.55);
