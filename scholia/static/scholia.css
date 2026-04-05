@@ -548,7 +548,32 @@ input.margin-toggle { display: none; }
 
 #scholia-doc a { color: var(--s-accent); text-decoration: underline; text-underline-offset: 2px; }
 #scholia-doc a:hover { color: #234; }
+#scholia-doc a.scholia-local-link {
+  text-decoration: underline dashed;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
 
+/* ── Local-link hover tooltip ─────────────────────── */
+.scholia-local-link-tooltip {
+  position: fixed;
+  background: #f9f9f6;
+  border: 1px solid #ccc;
+  border-radius: var(--s-radius);
+  padding: 0.35rem 0.6rem;
+  font-family: var(--s-sans);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--s-text);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.1s;
+  white-space: nowrap;
+}
+.scholia-local-link-tooltip .scholia-local-link-path {
+  font-family: var(--s-mono, monospace);
+}
 #scholia-doc table {
   border-collapse: collapse;
   margin: 1em 0;
@@ -604,7 +629,7 @@ input.margin-toggle { display: none; }
   border-radius: var(--s-radius);
   margin-bottom: 0.5rem;
   border: 1px solid var(--s-border);
-  transition: border-color 0.15s, box-shadow 0.15s, top 0.25s ease;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .scholia-card:hover,
@@ -628,7 +653,7 @@ input.margin-toggle { display: none; }
   background: var(--s-header-open);
   border-radius: var(--s-radius) var(--s-radius) 0 0;
 }
-.scholia-card.scholia-resolved .scholia-card-header {
+.scholia-resolved .scholia-card-header {
   background: var(--s-header-resolved);
 }
 
@@ -666,14 +691,6 @@ input.margin-toggle { display: none; }
   padding: 0 0.65rem 0.65rem;
   max-height: 60vh;
   overflow-y: auto;
-  transition: max-height 0.2s ease, padding 0.2s ease, opacity 0.15s ease;
-}
-.scholia-thread.scholia-thread-collapsed {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
-  overflow: hidden;
 }
 
 .scholia-message {
@@ -880,49 +897,6 @@ input.margin-toggle { display: none; }
 
 /* ── New comment form ───────────────────────────────── */
 
-.scholia-new-comment {
-  background: var(--s-card);
-  border-radius: var(--s-radius);
-  padding: 0.65rem;
-  margin-bottom: 0.65rem;
-  border: 1px solid var(--s-accent);
-}
-
-.scholia-new-comment-anchor {
-  font-size: 0.78rem;
-  color: var(--s-text-dim);
-  font-style: italic;
-  margin-bottom: 0.4rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.scholia-new-comment textarea {
-  width: 100%;
-  background: #fff;
-  color: var(--s-text);
-  border: 1px solid var(--s-border);
-  border-radius: 3px;
-  padding: 0.45rem;
-  font-family: var(--s-comment);
-  font-size: 0.82rem;
-  resize: vertical;
-  min-height: 3em;
-}
-.scholia-new-comment textarea:focus {
-  outline: none;
-  border-color: var(--s-accent);
-  box-shadow: 0 0 0 2px var(--s-accent-dim);
-}
-
-.scholia-new-comment-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.4rem;
-  margin-top: 0.4rem;
-}
-
 /* ── Unified button system ──────────────────────────── */
 
 /* Ghost button: outlined, for secondary actions */
@@ -961,35 +935,6 @@ input.margin-toggle { display: none; }
   transition: opacity 0.15s;
 }
 .scholia-btn-primary:hover { opacity: 0.85; }
-
-/* Cancel/text-only button */
-.scholia-btn-cancel {
-  background: transparent;
-  border: none;
-  border-radius: var(--s-radius);
-  padding: 0.2rem 0.5rem;
-  font-size: 11.5px;
-  font-family: var(--s-sans);
-  color: var(--s-text-dim);
-  cursor: pointer;
-}
-.scholia-btn-cancel:hover { color: var(--s-text); }
-
-/* Legacy .scholia-btn base (new-comment form uses this) */
-.scholia-btn {
-  padding: 0.2rem 0.5rem;
-  border: none;
-  border-radius: var(--s-radius);
-  font-size: 11.5px;
-  cursor: pointer;
-  font-family: var(--s-sans);
-}
-.scholia-btn-submit {
-  background: var(--s-accent);
-  color: #fff;
-  font-weight: 600;
-}
-.scholia-btn-submit:hover { opacity: 0.85; }
 
 /* ── Pandoc syntax highlighting (pygments) ─────────── */
 
@@ -1158,7 +1103,7 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
   background: var(--s-header-open);
   border-radius: 0 0 var(--s-radius) var(--s-radius);
 }
-.scholia-card.scholia-resolved .scholia-reply-input {
+.scholia-resolved .scholia-reply-input {
   background: var(--s-header-resolved);
 }
 /* New-comment card has no thread padding to cancel, so reset negative margin */
@@ -1200,11 +1145,11 @@ div.sourceCode:hover .scholia-code-lang { opacity: 0; }
 .scholia-card.scholia-resolved {
   opacity: 0.7;
 }
-.scholia-card.scholia-resolved .scholia-anchor-text {
+.scholia-resolved .scholia-anchor-text {
   color: var(--s-text-dim);
 }
-.scholia-card.scholia-resolved .scholia-anchor-quote {
-  color: var(--s-border);
+.scholia-resolved .scholia-anchor-quote {
+  color: var(--s-text-dim);
 }
 .scholia-resolved-label {
   font-size: 0.6rem;
@@ -1566,40 +1511,20 @@ body.scholia-compact {
 }
 
 /* Compact new-comment overlay */
+/* Compact (narrow) mode: bottom-sheet positioning on top of .scholia-card base */
 .scholia-compact-comment {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 500;
-  background: var(--s-card);
-  border-top: 1px solid var(--s-border);
+  border-radius: var(--s-radius) var(--s-radius) 0 0;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
-  padding: 0.65rem 1rem;
-  font-family: var(--s-sans);
-  font-size: 0.85rem;
+  margin-bottom: 0;
 }
-.scholia-compact-comment textarea {
-  width: 100%;
-  background: #fff;
-  color: var(--s-text);
-  border: 1px solid var(--s-border);
-  border-radius: 3px;
-  padding: 0.45rem;
-  font-family: var(--s-sans);
-  font-size: 0.82rem;
-  resize: vertical;
-  min-height: 3em;
-}
-.scholia-compact-comment textarea:focus {
-  outline: none;
-  border-color: var(--s-accent);
-  box-shadow: 0 0 0 2px var(--s-accent-dim);
-}
-:host(.scholia-dark) .scholia-compact-comment { background: var(--s-surface); }
-:host(.scholia-dark) .scholia-compact-comment textarea {
-  background: var(--s-surface);
-  color: var(--s-text);
+.scholia-compact-comment .scholia-reply-input {
+  margin: 0;
+  border-radius: 0 0 0 0;
 }
 
 /* ── No-sidenotes: widen content ───────────────────── */
@@ -1689,13 +1614,16 @@ body.scholia-compact {
 /* ── Dark mode overrides for hard-coded colors ─────── */
 
 /* Light DOM targets (served from <head> stylesheet) */
+body.scholia-dark .scholia-local-link-tooltip {
+  background: var(--s-surface);
+  border-color: var(--s-border);
+}
 body.scholia-dark #scholia-doc blockquote { color: var(--s-text-dim); }
 body.scholia-dark .scholia-code-copy {
   background: var(--s-surface);
 }
 
 /* Shadow-internal targets (served from shadow root stylesheet) */
-:host(.scholia-dark) .scholia-new-comment textarea,
 :host(.scholia-dark) .scholia-reply-input textarea {
   background: var(--s-surface);
   color: var(--s-text);
@@ -1714,7 +1642,6 @@ body.scholia-dark .scholia-code-copy {
   background: rgba(125, 168, 210, 0.1);
 }
 :host(.scholia-dark) .scholia-overlay-backdrop { background: rgba(0, 0, 0, 0.55); }
-:host(.scholia-dark) .scholia-overlay-message.scholia-ai { background: rgba(125, 168, 210, 0.08); }
 :host(.scholia-dark) .scholia-preview-body { border-color: var(--s-border); }
 :host(.scholia-dark) .scholia-message-body.scholia-raw-view { background: var(--s-code-bg); }
 
@@ -1743,24 +1670,11 @@ body.scholia-dark .scholia-code-copy {
   overflow: hidden;
 }
 
-.scholia-overlay-header {
-  display: flex;
-  align-items: center;
-  padding: 0.75rem 1rem;
+/* Overlay uses shared card/thread/message classes with size overrides */
+.scholia-overlay-panel .scholia-card-header {
   border-bottom: 1px solid var(--s-border);
-  background: var(--s-surface);
+  border-radius: 8px 8px 0 0;
   flex-shrink: 0;
-  gap: 0.5rem;
-}
-
-.scholia-overlay-anchor {
-  font-family: var(--s-body);
-  color: var(--s-text);
-  font-size: 0.85rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
 }
 
 .scholia-overlay-header-right {
@@ -1776,57 +1690,16 @@ body.scholia-dark .scholia-code-copy {
   color: var(--s-text-dim);
 }
 
-/* .scholia-overlay-close inherits from .scholia-btn-ghost via JS class */
-
-.scholia-overlay-thread {
+.scholia-overlay-panel .scholia-thread {
   flex: 1;
-  overflow-y: auto;
-  padding: 1rem 1.5rem;
+  max-height: none;
 }
 
-.scholia-overlay-message {
-  margin-bottom: 1rem;
-  padding: 0.75rem 1rem;
-}
-.scholia-overlay-message.scholia-ai {
-  background: rgba(74, 111, 165, 0.04);
-  border-radius: 6px;
-}
-
-.scholia-overlay-message-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  margin-bottom: 0.4rem;
-  font-family: var(--s-sans);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.scholia-overlay-reply {
-  padding: 0.75rem 1.5rem;
-  border-top: 1px solid var(--s-border);
+.scholia-overlay-panel .scholia-reply-input {
+  margin: 0;
+  border-radius: 0 0 8px 8px;
   flex-shrink: 0;
 }
-
-.scholia-overlay-reply textarea {
-  width: 100%;
-  border: 1px solid var(--s-border);
-  border-radius: 4px;
-  padding: 0.5rem 0.6rem;
-  font-size: 0.85rem;
-  font-family: var(--s-comment);
-  resize: vertical;
-  min-height: 2.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.scholia-overlay-reply-buttons {
-  display: flex;
-  gap: 0.4rem;
-}
-
-/* Overlay reply button inherits from .scholia-btn-primary via JS class */
 
 .scholia-btn-popout {
   background: none;

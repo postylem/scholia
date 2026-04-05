@@ -479,12 +479,21 @@
         }
         docEl.innerHTML = msg.html;
         buildToc();
-        rerenderMath();
-        renderMermaid();
-        decorateCodeBlocks();
-        setupCitationTooltips();
-        if (!sidebarHidden) { reanchorAll(); positionCards(); }
+        rerenderMath().then(function () {
+          renderMermaid();
+          decorateCodeBlocks();
+          setupCitationTooltips();
+          rewriteLocalLinks();
+          if (!sidebarHidden) { reanchorAll(); positionCards(); }
+        });
       } else if (msg.type === 'comments_update') {
+        // Force-expand any newly added annotations
+        var oldIds = new Set(comments.map(function (a) { return a.id; }));
+        for (var ni = 0; ni < msg.comments.length; ni++) {
+          if (!oldIds.has(msg.comments[ni].id)) {
+            expandOverrides[msg.comments[ni].id] = true;
+          }
+        }
         comments = msg.comments;
         scheduleRender();
         // Refresh overlay if open
@@ -1215,29 +1224,20 @@
   // ── Math rendering (MathJax) ─────────────────────────────────
 
   /**
-   * Store original LaTeX in data-latex before MathJax processes the element,
-   * then ask MathJax to typeset the container.
+   * Ask MathJax to typeset unrendered math in a container.
+   * Returns a Promise that resolves when typesetting is complete.
+   * MathJax 4 stores original TeX as data-latex on <mjx-math>,
+   * which buildRecoverableMap reads for anchor detection.
    */
   function renderMathIn(container) {
-    if (!window.MathJax || !window.MathJax.typesetPromise) return;
-    // Pandoc --mathjax outputs <span class="math inline">\(expr\)</span>
-    // and <span class="math display">\[expr\]</span>
-    var mathEls = container.querySelectorAll('span.math:not(.scholia-math-rendered)');
-    for (var i = 0; i < mathEls.length; i++) {
-      var el = mathEls[i];
-      // Strip MathJax delimiters to store raw LaTeX
-      var raw = el.textContent;
-      raw = raw.replace(/^\\\(|\\\)$/g, '').replace(/^\\\[|\\\]$/g, '');
-      el.dataset.latex = raw;
-      el.classList.add('scholia-math-rendered');
-    }
-    window.MathJax.typesetPromise([container]).catch(function () {});
+    if (!window.MathJax || !window.MathJax.typesetPromise) return Promise.resolve();
+    return window.MathJax.typesetPromise([container]).catch(function () {});
   }
 
   function rerenderMath() {
-    // Quarto already renders math server-side; skip to avoid double-render
-    if (window.__SCHOLIA_IS_QUARTO__) return;
-    renderMathIn(docEl);
+    // Quarto already rendered math via its own MathJax; skip to avoid double-render
+    if (window.__SCHOLIA_IS_QUARTO__) return Promise.resolve();
+    return renderMathIn(docEl);
   }
 
   function renderMermaid() {
@@ -1501,6 +1501,109 @@
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // ── Local file link rewriting ───────────────────────
+  // Pandoc emits relative hrefs as-is; rewrite them to /?file= so they
+  // navigate within scholia instead of 404-ing against the dev server.
+
+  var localLinkTooltip = null;
+  var localLinkHideTimer = null;
+
+  function rewriteLocalLinks() {
+    var docFullPath = window.__SCHOLIA_DOC_FULLPATH__ || '';
+    var docDir = docFullPath.replace(/\/[^/]*$/, '');
+    if (!docDir) return;
+
+    var links = docEl.querySelectorAll('a[href]');
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      // Skip already-rewritten links
+      if (a.classList.contains('scholia-local-link')) continue;
+      var href = a.getAttribute('href');
+      if (!href) continue;
+      // Skip anchors and scheme-qualified URLs
+      if (href.charAt(0) === '#') continue;
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) continue;
+
+      var originalHref = href;
+
+      // Separate fragment
+      var fragment = '';
+      var hashIdx = href.indexOf('#');
+      if (hashIdx !== -1) {
+        fragment = href.substring(hashIdx);
+        href = href.substring(0, hashIdx);
+      }
+
+      // Resolve against document directory
+      var resolved = href.charAt(0) === '/' ? href : docDir + '/' + href;
+
+      // Normalize . and .. segments
+      var parts = resolved.split('/');
+      var norm = [];
+      for (var j = 0; j < parts.length; j++) {
+        if (parts[j] === '.' || (parts[j] === '' && j > 0)) continue;
+        if (parts[j] === '..') { if (norm.length > 1) norm.pop(); continue; }
+        norm.push(parts[j]);
+      }
+      resolved = norm.join('/');
+
+      // Skip if resolved path escapes above docDir (e.g. too many ..)
+      if (resolved.indexOf(docDir.split('/').slice(0, 3).join('/')) !== 0) continue;
+
+      a.setAttribute('data-original-href', originalHref);
+      a.href = '/?file=' + encodeURIComponent(resolved).replace(/%2F/g, '/') + fragment;
+      a.classList.add('scholia-local-link');
+      a.addEventListener('mouseenter', showLocalLinkTooltip);
+      a.addEventListener('mouseleave', scheduleLocalLinkHide);
+    }
+  }
+
+  function showLocalLinkTooltip(e) {
+    var link = e.target.closest('.scholia-local-link');
+    if (!link) return;
+    var original = link.getAttribute('data-original-href');
+    if (!original) return;
+
+    clearTimeout(localLinkHideTimer);
+    removeLocalLinkTooltip();
+
+    localLinkTooltip = document.createElement('div');
+    localLinkTooltip.className = 'scholia-local-link-tooltip';
+
+    var label = document.createElement('span');
+    label.textContent = 'Local: ';
+    var pathSpan = document.createElement('span');
+    pathSpan.className = 'scholia-local-link-path';
+    pathSpan.textContent = original;
+    label.appendChild(pathSpan);
+    localLinkTooltip.appendChild(label);
+
+    document.body.appendChild(localLinkTooltip);
+
+    var rect = link.getBoundingClientRect();
+    var tipRect = localLinkTooltip.getBoundingClientRect();
+    var left = rect.left + rect.width / 2 - tipRect.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+    var top = rect.top - tipRect.height - 6;
+    if (top < 8) top = rect.bottom + 6;
+
+    localLinkTooltip.style.left = left + 'px';
+    localLinkTooltip.style.top = top + 'px';
+    localLinkTooltip.style.opacity = '1';
+  }
+
+  function scheduleLocalLinkHide() {
+    clearTimeout(localLinkHideTimer);
+    localLinkHideTimer = setTimeout(removeLocalLinkTooltip, 300);
+  }
+
+  function removeLocalLinkTooltip() {
+    if (localLinkTooltip) {
+      localLinkTooltip.remove();
+      localLinkTooltip = null;
+    }
+  }
+
   function renderCommentBody(text) {
     if (md) {
       return md.render(text);
@@ -1746,9 +1849,10 @@
 
     card.appendChild(header);
 
-    // Thread (collapsed)
+    // Thread (collapsed by default, positionCards decides expand state)
     var thread = document.createElement('div');
-    thread.className = 'scholia-thread scholia-thread-collapsed';
+    thread.className = 'scholia-thread';
+    thread.style.display = 'none';
 
     for (var j = 0; j < bodies.length; j++) {
       var msg = bodies[j];
@@ -2025,14 +2129,12 @@
       var wasExpanded = card.classList.contains('scholia-expanded');
       expandOverrides[ann.id] = !wasExpanded;
 
-      // Reposition all cards (sets expand state via positionCards)
-      positionCards();
+      positionCards(true);
 
       if (!wasExpanded) {
-        // Now expanded: scroll thread to bottom
         thread.scrollTop = thread.scrollHeight;
 
-        // Scroll page so anchor is ~10% from viewport top
+        // Scroll page so anchor is visible
         var marks = highlights.get(ann.id);
         if (marks && marks.length > 0) {
           var markPageY = marks[0].getBoundingClientRect().top + window.scrollY;
@@ -2046,6 +2148,11 @@
             for (var p = 0; p < marks.length; p++) marks[p].classList.remove('scholia-pulse');
           }, 900);
         }
+      }
+
+      // Quarto: smooth scroll changes anchor positions; reposition after settle
+      if (isQuarto && !wasExpanded) {
+        setTimeout(function () { positionCards(); }, ANIMATE_DURATION + 50);
       }
     });
 
@@ -2068,17 +2175,18 @@
     backdrop.addEventListener('click', closeOverlay);
 
     var panel = document.createElement('div');
-    panel.className = 'scholia-overlay-panel';
+    var status = ann['scholia:status'] || 'open';
+    panel.className = 'scholia-overlay-panel' + (status === 'resolved' ? ' scholia-resolved' : '');
     panel.addEventListener('click', function (e) { e.stopPropagation(); });
 
-    // Header
+    // Header (reuses sidebar card-header styling)
     var hdr = document.createElement('div');
-    hdr.className = 'scholia-overlay-header';
+    hdr.className = 'scholia-card-header';
 
     var anchorText = (ann.target && ann.target['scholia:sourceSelector'] && ann.target['scholia:sourceSelector'].exact)
       || (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
     var hdrText = document.createElement('span');
-    hdrText.className = 'scholia-overlay-anchor';
+    hdrText.className = 'scholia-anchor-text';
     var oOpenQ = document.createElement('span');
     oOpenQ.className = 'scholia-anchor-quote';
     oOpenQ.textContent = '\u201c';
@@ -2139,19 +2247,19 @@
     hdr.appendChild(hdrRight);
     panel.appendChild(hdr);
 
-    // Thread body
+    // Thread body (reuses sidebar thread/message styling)
     var threadBody = document.createElement('div');
-    threadBody.className = 'scholia-overlay-thread';
+    threadBody.className = 'scholia-thread scholia-overlay-thread';
 
     for (var j = 0; j < bodies.length; j++) {
       var msg = bodies[j];
       var msgEl = document.createElement('div');
       var isSoftware = msg.creator && msg.creator.type === 'Software';
       var role = isSoftware ? 'ai' : 'human';
-      msgEl.className = 'scholia-overlay-message scholia-' + role;
+      msgEl.className = 'scholia-message scholia-' + role;
 
       var meta = document.createElement('div');
-      meta.className = 'scholia-overlay-message-meta';
+      meta.className = 'scholia-message-meta';
       var msgCreator = (msg.creator && msg.creator.name) || 'unknown';
 
       var authorSpan = document.createElement('span');
@@ -2213,9 +2321,9 @@
     }
     panel.appendChild(threadBody);
 
-    // Reply row
+    // Reply row (reuses sidebar reply-input styling)
     var replyRow = document.createElement('div');
-    replyRow.className = 'scholia-overlay-reply';
+    replyRow.className = 'scholia-reply-input';
 
     var replyTextarea = document.createElement('textarea');
     replyTextarea.name = 'overlay-reply-' + ann.id;
@@ -2225,7 +2333,7 @@
     replyRow.appendChild(replyTextarea);
 
     var btnRow = document.createElement('div');
-    btnRow.className = 'scholia-overlay-reply-buttons';
+    btnRow.className = 'scholia-reply-buttons';
 
     var replyBtn = document.createElement('button');
     replyBtn.className = 'scholia-btn-primary';
@@ -2568,9 +2676,24 @@
   // Auto-expand: threads default to expanded unless that would push the
   // next thread below its anchor. User manual toggles override auto logic.
 
-  function positionCards() {
+  var ANIMATE_DURATION = 250; // ms
+
+  function positionCards(animate) {
     var cards = sidebarEl.querySelectorAll('.scholia-card');
     if (!cards.length) { updateOffscreenIndicators(); return; }
+
+    // FLIP step 1: snapshot old positions & expand states before changes
+    var oldPositions = {};
+    if (animate) {
+      for (var s = 0; s < cards.length; s++) {
+        var c = cards[s];
+        if (c.id === 'scholia-new-comment') continue;
+        oldPositions[c.dataset.annotationId] = {
+          top: parseFloat(c.style.top) || 0,
+          height: c.offsetHeight
+        };
+      }
+    }
 
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
 
@@ -2593,10 +2716,28 @@
       }
 
       var anchorY = marks[0].getBoundingClientRect().top - sidebarTop;
-      positioned.push({ card: card, annId: annId, anchorY: anchorY });
+      var startMark = marks[0];
+      var endMark = marks[marks.length - 1];
+      // Find creation time for tiebreaking
+      var created = '';
+      for (var ci = 0; ci < comments.length; ci++) {
+        if (comments[ci].id === annId) { created = comments[ci].created || ''; break; }
+      }
+      positioned.push({ card: card, annId: annId, anchorY: anchorY, startMark: startMark, endMark: endMark, created: created });
     }
 
-    positioned.sort(function (a, b) { return a.anchorY - b.anchorY; });
+    positioned.sort(function (a, b) {
+      // Primary: document order of anchor start (earlier in text first)
+      var cmp = a.startMark.compareDocumentPosition(b.startMark);
+      if (cmp & Node.DOCUMENT_POSITION_FOLLOWING) return -1;  // a is before b
+      if (cmp & Node.DOCUMENT_POSITION_PRECEDING) return 1;   // a is after b
+      // Same start: shorter selection (earlier endpoint) first
+      var cmpEnd = a.endMark.compareDocumentPosition(b.endMark);
+      if (cmpEnd & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (cmpEnd & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      // Same selection: older annotation first
+      return a.created < b.created ? -1 : a.created > b.created ? 1 : 0;
+    });
 
     // Make all cards absolute so widths compute correctly
     var allCards = positioned.map(function (p) { return p.card; }).concat(orphans);
@@ -2608,28 +2749,27 @@
     }
 
     // Measure collapsed and expanded heights for each anchored card
-    // (disable transitions during measurement to get instant layout)
     for (var p = 0; p < positioned.length; p++) {
       var entry = positioned[p];
       var thread = entry.card.querySelector('.scholia-thread');
       if (thread) {
-        var hadCollapsed = thread.classList.contains('scholia-thread-collapsed');
-        thread.style.transition = 'none';
-        thread.classList.add('scholia-thread-collapsed');
+        var prev = thread.style.display;
+        thread.style.display = 'none';
         entry.collapsedH = entry.card.offsetHeight;
-        thread.classList.remove('scholia-thread-collapsed');
+        thread.style.display = 'block';
         entry.expandedH = entry.card.offsetHeight;
-        if (hadCollapsed) thread.classList.add('scholia-thread-collapsed');
-        thread.offsetHeight; // force reflow before restoring transitions
-        thread.style.transition = '';
+        thread.style.display = prev;
       } else {
         entry.collapsedH = entry.card.offsetHeight;
         entry.expandedH = entry.card.offsetHeight;
       }
     }
 
-    // Forward pass: decide expand state and position
-    var currentY = minY;
+    // Forward pass: decide expand state and position.
+    // For Quarto (fixed sidebar), cards whose anchors scrolled above the
+    // viewport get negative top values (clipped by overflow) rather than
+    // piling up. For Pandoc (grid sidebar), clamp to minY as before.
+    var currentY = isQuarto ? -Infinity : minY;
     for (var p = 0; p < positioned.length; p++) {
       var entry = positioned[p];
       var top = Math.max(entry.anchorY, currentY);
@@ -2645,7 +2785,7 @@
         shouldExpand = (top + entry.expandedH + 4 <= nextAnchorY);
       }
 
-      if (thread) thread.classList.toggle('scholia-thread-collapsed', !shouldExpand);
+      if (thread) thread.style.display = shouldExpand ? 'block' : 'none';
       entry.card.classList.toggle('scholia-expanded', shouldExpand);
 
       if (entry.card !== reanchorCard) {
@@ -2718,6 +2858,46 @@
     }
 
     sidebarEl.style.minHeight = currentY + 'px';
+
+    // Animate: jump each card back to its old position/height, then
+    // transition to the new state so fold/unfold looks like pushing.
+    if (animate) {
+      var allAnimated = positioned.map(function (p) { return p.card; }).concat(orphans);
+      for (var a = 0; a < allAnimated.length; a++) {
+        var card = allAnimated[a];
+        var id = card.dataset.annotationId;
+        var old = oldPositions[id];
+        if (!old) continue;
+        var newTop = parseFloat(card.style.top) || 0;
+        var newHeight = card.offsetHeight;
+        var moved = Math.abs(old.top - newTop) > 1;
+        var resized = Math.abs(old.height - newHeight) > 1;
+        if (!moved && !resized) continue;
+        // Jump to old state
+        card.style.transition = 'none';
+        if (resized) {
+          card.style.height = old.height + 'px';
+          card.style.overflow = 'hidden';
+        }
+        if (moved) card.style.top = old.top + 'px';
+        card.offsetHeight; // force reflow
+        // Animate to new state
+        card.style.transition = 'top ' + ANIMATE_DURATION + 'ms ease, height ' + ANIMATE_DURATION + 'ms ease';
+        card.style.top = newTop + 'px';
+        if (resized) card.style.height = newHeight + 'px';
+        // Clean up after animation
+        (function (el) {
+          var cleanup = function () {
+            el.style.transition = '';
+            el.style.height = '';
+            el.style.overflow = '';
+            el.removeEventListener('transitionend', cleanup);
+          };
+          el.addEventListener('transitionend', cleanup);
+        })(card);
+      }
+    }
+
     updateOffscreenIndicators();
   }
 
@@ -2974,7 +3154,7 @@
     // Cmd+Enter (Mac) / Ctrl+Enter (Linux/Windows) → submit
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      var submitBtn = activeForm.querySelector('.scholia-btn-primary, .scholia-btn-submit');
+      var submitBtn = activeForm.querySelector('.scholia-btn-primary');
       if (submitBtn) submitBtn.click();
       return;
     }
@@ -3014,37 +3194,44 @@
     compactSelector = selector;
 
     var form = document.createElement('div');
-    form.className = 'scholia-compact-comment';
+    form.className = 'scholia-card scholia-compact-comment';
 
-    var anchorDiv = document.createElement('div');
-    anchorDiv.className = 'scholia-new-comment-anchor';
+    // Card header with anchor text (matches sidebar form)
+    var header = document.createElement('div');
+    header.className = 'scholia-card-header';
+    var anchorSpan = document.createElement('span');
+    anchorSpan.className = 'scholia-anchor-text';
     var displayExact = (selector._source && selector._source.exact) || selector.exact;
-    var excerpt = displayExact.slice(0, 80);
-    anchorDiv.textContent = '\u201c' + excerpt + (displayExact.length > 80 ? '\u2026' : '') + '\u201d';
-    form.appendChild(anchorDiv);
+    var excerpt = displayExact.slice(0, 50);
+    var openQ = document.createElement('span');
+    openQ.className = 'scholia-anchor-quote';
+    openQ.textContent = '\u201c';
+    var closeQ = document.createElement('span');
+    closeQ.className = 'scholia-anchor-quote';
+    closeQ.textContent = (displayExact.length > 50 ? '\u2026' : '') + '\u201d';
+    anchorSpan.appendChild(openQ);
+    anchorSpan.appendChild(document.createTextNode(excerpt));
+    anchorSpan.appendChild(closeQ);
+    if (displayExact.length > 50) anchorSpan.title = displayExact;
+    header.appendChild(anchorSpan);
+    form.appendChild(header);
+
+    // Reply-input area (matches sidebar form)
+    var replyArea = document.createElement('div');
+    replyArea.className = 'scholia-reply-input';
 
     var textarea = document.createElement('textarea');
     textarea.name = 'compact-new-comment';
     textarea.placeholder = 'Add a comment\u2026';
-    textarea.rows = 2;
+    textarea.rows = 1;
     autoGrow(textarea);
-    form.appendChild(textarea);
+    replyArea.appendChild(textarea);
 
     var actions = document.createElement('div');
-    actions.className = 'scholia-new-comment-actions';
-
-    var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'scholia-btn scholia-btn-cancel';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.title = 'Discard this comment (Esc)';
-    cancelBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      dismissCompactComment();
-    });
-    actions.appendChild(cancelBtn);
+    actions.className = 'scholia-reply-buttons';
 
     var submitBtn = document.createElement('button');
-    submitBtn.className = 'scholia-btn scholia-btn-submit';
+    submitBtn.className = 'scholia-btn-primary';
     submitBtn.textContent = 'Comment';
     submitBtn.title = 'Submit comment (\u2318Enter)';
     submitBtn.addEventListener('click', function (e) {
@@ -3070,7 +3257,7 @@
 
     var compactPreviewDiv = null;
     var previewBtn = document.createElement('button');
-    previewBtn.className = 'scholia-btn scholia-btn-ghost';
+    previewBtn.className = 'scholia-btn-ghost';
     previewBtn.textContent = 'Preview';
     previewBtn.title = 'Toggle rendered preview of your comment';
     previewBtn.addEventListener('click', function (e) {
@@ -3085,13 +3272,25 @@
         compactPreviewDiv.className = 'scholia-message-body scholia-preview-body';
         compactPreviewDiv.innerHTML = renderCommentBody(textarea.value);
         textarea.style.display = 'none';
-        form.insertBefore(compactPreviewDiv, actions);
+        replyArea.insertBefore(compactPreviewDiv, actions);
         previewBtn.textContent = 'Edit';
       }
     });
     actions.appendChild(previewBtn);
 
-    form.appendChild(actions);
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'scholia-btn-ghost';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.title = 'Discard this comment (Esc)';
+    cancelBtn.style.marginLeft = 'auto';
+    cancelBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      dismissCompactComment();
+    });
+    actions.appendChild(cancelBtn);
+
+    replyArea.appendChild(actions);
+    form.appendChild(replyArea);
     shadow.appendChild(form);
     compactForm = form;
 
@@ -3160,7 +3359,7 @@
     reanchorPrompt = document.createElement('div');
     reanchorPrompt.className = 'scholia-reanchor-prompt';
     reanchorPrompt.innerHTML = 'Select text in the document to re-anchor\u2026 '
-      + '<button class="scholia-btn scholia-btn-cancel">Cancel</button>';
+      + '<button class="scholia-btn-ghost">Cancel</button>';
     reanchorPrompt.querySelector('button').addEventListener('click', function (e) {
       e.stopPropagation();
       cancelReanchor();
@@ -3449,8 +3648,6 @@
     if (!scrollRaf) {
       scrollRaf = true;
       requestAnimationFrame(function () {
-        // Quarto sidebar is position:fixed, so cards must be repositioned
-        // on scroll to stay aligned with their highlights in the document.
         if (isQuarto && !sidebarHidden) positionCards();
         updateOffscreenIndicators();
         scrollRaf = false;
@@ -3560,17 +3757,22 @@
   // MathJax and mermaid are loaded with defer, so wait for window load
   window.addEventListener('load', function () {
     buildToc();
+    var mathReady = Promise.resolve();
     if (!isQuarto) {
       if (window.mermaid) window.mermaid.initialize({ startOnLoad: false });
-      rerenderMath();
+      mathReady = rerenderMath();
       renderMermaid();
       decorateCodeBlocks();
       setupCitationTooltips();
     }
+    rewriteLocalLinks();
     rerenderCommentBodies();
-    reanchorAll();
-    positionCards();
-    hideRenderingBanner();
+    // Wait for MathJax to finish so buildRecoverableMap can read data-latex
+    mathReady.then(function () {
+      reanchorAll();
+      positionCards();
+      hideRenderingBanner();
+    });
   });
 
   // Reposition cards on resize (layout may change)

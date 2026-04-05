@@ -258,14 +258,15 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str,
         str(doc_path.resolve()),
         "--to",
         "html",
-        "-M",
-        "html-math-method:mathjax",
     ]
     if use_defaults:
         cmd += [
             "--metadata-file",
             str(Path(__file__).parent / "data" / "quarto-defaults.yml"),
         ]
+    else:
+        # Ensure MathJax even without scholia defaults
+        cmd += ["-M", "html-math-method:mathjax"]
     env = {**os.environ}
     py = _find_quarto_python(doc_path)
     if py:
@@ -545,6 +546,10 @@ def _inject_scholia_into_quarto(
         "    @keyframes scholia-pulse {\n"
         "      0%{box-shadow:0 0 0 0 rgba(255,200,50,.7)}\n"
         "      100%{box-shadow:0 0 0 8px rgba(255,200,50,0)} }\n"
+        "    mark.scholia-highlight mjx-container {"
+        " background-color:inherit !important }\n"
+        "    mark.scholia-highlight:has(mjx-container[display=\"true\"]) {"
+        " display:block }\n"
         "  </style>\n"
         + (
             '  <link id="scholia-quarto-theme" rel="stylesheet"'

@@ -202,24 +202,18 @@
       if (node.nodeType !== Node.ELEMENT_NODE) return;
 
       // Math span (Pandoc outputs <span class="math inline"> or <span class="math display">)
-      // data-latex holds the original LaTeX source (set by scholia before MathJax renders)
-      if (node.classList.contains('math') && node.dataset.latex) {
-        var d = node.classList.contains('display') ? '$$' : '$';
-        entries.push({ node: node, rtStart: text.length, type: 'math' });
-        text += d + node.dataset.latex + d;
-        entries[entries.length - 1].rtEnd = text.length;
-        return;
-      }
-
-      // Fallback: .math span with MathJax container (no data-latex)
-      if (node.classList.contains('math') && node.querySelector('mjx-container')) {
-        // MathJax stores TeX in aria-label on mjx-container
-        var mjx = node.querySelector('mjx-container');
-        var tex = mjx && mjx.getAttribute('aria-label');
-        if (tex) {
-          var d2 = node.classList.contains('display') ? '$$' : '$';
+      // MathJax 4 stores original TeX as data-latex on the <mjx-math> element.
+      if (node.classList && node.classList.contains('math')) {
+        var mjxMath = node.querySelector('mjx-math[data-latex]');
+        if (mjxMath) {
+          var tex = mjxMath.getAttribute('data-latex');
+          // Normalize: collapse whitespace (Pandoc may line-wrap TeX),
+          // strip equation numbers added by pandoc-crossref (\qquad{(1)})
+          // or Quarto (\tag{1})
+          tex = tex.replace(/\s+/g, ' ').replace(/\s*\\(?:qquad\{?\(\d+\)\}?|tag\{[^}]*\})\s*$/, '');
+          var d = node.classList.contains('display') ? '$$' : '$';
           entries.push({ node: node, rtStart: text.length, type: 'math' });
-          text += d2 + tex + d2;
+          text += d + tex + d;
           entries[entries.length - 1].rtEnd = text.length;
           return;
         }
