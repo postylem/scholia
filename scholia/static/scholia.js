@@ -744,6 +744,7 @@
     renderRaf = requestAnimationFrame(function () {
       renderRaf = 0;
       renderSidebar();
+      typesetMathIn(sidebarEl);
       if (!skipAnchoring) reanchorAll();
       positionCards();
     });
@@ -1612,6 +1613,97 @@
     return '<p>' + escapeHtml(text) + '</p>';
   }
 
+  /**
+   * Convert $...$ and $$...$$ to \(...\) and \[...\] in a container's HTML
+   * so MathJax finds them regardless of its delimiter config.
+   */
+  function _convertDollarDelimiters(el) {
+    var html = el.innerHTML;
+    if (html.indexOf('$') === -1) return;
+    // $$...$$ → \[...\] first (display), then $...$ → \(...\) (inline)
+    html = html.replace(/\$\$([\s\S]+?)\$\$/g, '\\[$1\\]');
+    html = html.replace(/\$([^\$<>]+?)\$/g, '\\($1\\)');
+    el.innerHTML = html;
+  }
+
+  /** Typeset math in comment bodies within a container. */
+  function typesetMathIn(container) {
+    if (!window.MathJax || !window.MathJax.typesetPromise) return;
+    // Preprocess $...$ → \(...\) so MathJax finds them
+    var bodies = container.querySelectorAll
+      ? container.querySelectorAll('.scholia-message-body, .scholia-preview-body')
+      : [];
+    if (bodies.length) {
+      for (var i = 0; i < bodies.length; i++) _convertDollarDelimiters(bodies[i]);
+    } else {
+      _convertDollarDelimiters(container);
+    }
+    window.MathJax.typesetPromise([container]).then(function () {
+      _injectMathJaxStyles();
+    }).catch(function () {});
+  }
+
+  /**
+   * MathJax injects font/layout CSS into document.head, but the shadow
+   * DOM can't see those styles. Mirror them into the shadow root and
+   * keep them in sync via MutationObserver (MathJax 4 loads font data
+   * dynamically, adding new <style> elements over time).
+   */
+  var _mjStyleMap = new Map(); // original <style> → shadow clone
+  function _syncMathJaxStyle(original) {
+    // Check both static text and dynamic rules for MathJax content
+    var hasMjx = original.textContent && original.textContent.indexOf('mjx-') !== -1;
+    if (!hasMjx && original.sheet) {
+      try {
+        var rules = original.sheet.cssRules;
+        for (var r = 0; r < rules.length && !hasMjx; r++) {
+          if (rules[r].cssText.indexOf('mjx-') !== -1 ||
+              rules[r].cssText.indexOf('MJX') !== -1) hasMjx = true;
+        }
+      } catch (e) { /* cross-origin sheet */ }
+    }
+    if (!hasMjx) return;
+
+    // Serialize all computed CSS rules (captures dynamic insertRule() additions
+    // that don't appear in textContent — e.g. MathJax 4 font chunks)
+    var cssText = '';
+    if (original.sheet) {
+      try {
+        var rules = original.sheet.cssRules;
+        for (var i = 0; i < rules.length; i++) cssText += rules[i].cssText + '\n';
+      } catch (e) { cssText = original.textContent || ''; }
+    } else {
+      cssText = original.textContent || '';
+    }
+
+    var clone = _mjStyleMap.get(original);
+    if (clone) {
+      if (clone.textContent !== cssText) clone.textContent = cssText;
+    } else {
+      clone = document.createElement('style');
+      clone.textContent = cssText;
+      shadow.appendChild(clone);
+      _mjStyleMap.set(original, clone);
+    }
+  }
+
+  function _injectMathJaxStyles() {
+    var headStyles = document.querySelectorAll('style');
+    for (var i = 0; i < headStyles.length; i++) {
+      _syncMathJaxStyle(headStyles[i]);
+    }
+  }
+
+  // Watch for MathJax adding new <style> elements (font chunks)
+  new MutationObserver(function (mutations) {
+    for (var m = 0; m < mutations.length; m++) {
+      for (var n = 0; n < mutations[m].addedNodes.length; n++) {
+        var node = mutations[m].addedNodes[n];
+        if (node.tagName === 'STYLE') _syncMathJaxStyle(node);
+      }
+    }
+  }).observe(document.head, { childList: true });
+
   function rerenderCommentBodies() {
     if (!md) return;
     var bodies = sidebarEl.querySelectorAll('.scholia-message-body');
@@ -1619,6 +1711,7 @@
       var raw = bodies[i].dataset.raw;
       if (raw !== undefined) bodies[i].innerHTML = renderCommentBody(raw);
     }
+    typesetMathIn(sidebarEl);
   }
 
   // ── Per-user color ───────────────────────────────────
@@ -1905,6 +1998,7 @@
             // Switch back to rendered
             theBody.classList.remove('scholia-raw-view');
             theBody.innerHTML = renderCommentBody(theBody.dataset.raw);
+            typesetMathIn(theBody);
             theBtn.classList.remove('active');
           } else {
             // Switch to raw
@@ -1940,6 +2034,7 @@
 
             var saveBtn = document.createElement('button');
             saveBtn.textContent = 'Save';
+            saveBtn.title = 'Save edit (\u2318Enter)';
             saveBtn.addEventListener('click', function (ev) {
               ev.stopPropagation();
               var newText = ta.value.trim();
@@ -1959,9 +2054,11 @@
 
             var cancelBtn = document.createElement('button');
             cancelBtn.textContent = 'Cancel';
+            cancelBtn.title = 'Discard edit (Esc)';
             cancelBtn.addEventListener('click', function (ev) {
               ev.stopPropagation();
               theBody.innerHTML = renderCommentBody(raw);
+              typesetMathIn(theBody);
               theBody.dataset.raw = raw;
             });
             btnRow.appendChild(cancelBtn);
@@ -1981,6 +2078,7 @@
                 editPreviewDiv = document.createElement('div');
                 editPreviewDiv.className = 'scholia-message-body scholia-preview-body';
                 editPreviewDiv.innerHTML = renderCommentBody(ta.value);
+                typesetMathIn(editPreviewDiv);
                 ta.style.display = 'none';
                 theBody.insertBefore(editPreviewDiv, btnRow);
                 editPreviewBtn.textContent = 'Edit';
@@ -2055,6 +2153,7 @@
     var replyBtn = document.createElement('button');
     replyBtn.className = 'scholia-btn-primary';
     replyBtn.textContent = 'Reply';
+    replyBtn.title = 'Submit reply (\u2318Enter)';
     replyBtn.addEventListener('click', function () {
       var text = replyTextarea.value.trim();
       if (!text) return;
@@ -2084,6 +2183,7 @@
           sidebarPreviewDiv = document.createElement('div');
           sidebarPreviewDiv.className = 'scholia-message-body scholia-preview-body';
           sidebarPreviewDiv.innerHTML = renderCommentBody(ta.value);
+          typesetMathIn(sidebarPreviewDiv);
           ta.style.display = 'none';
           row.insertBefore(sidebarPreviewDiv, replyBtnRow);
           sidebarPreviewBtn.textContent = 'Edit';
@@ -2233,6 +2333,7 @@
           // else already requested or will be requested
         } else {
           b.innerHTML = renderCommentBody(raw);
+          typesetMathIn(b);
         }
       }
     });
@@ -2304,6 +2405,7 @@
               postProcessPandocHtml(theBody);
             } else {
               theBody.innerHTML = renderCommentBody(raw);
+              typesetMathIn(theBody);
             }
             theBtn.classList.remove('active');
           } else {
@@ -2320,6 +2422,7 @@
       threadBody.appendChild(msgEl);
     }
     panel.appendChild(threadBody);
+    typesetMathIn(threadBody);
 
     // Reply row (reuses sidebar reply-input styling)
     var replyRow = document.createElement('div');
@@ -2338,6 +2441,7 @@
     var replyBtn = document.createElement('button');
     replyBtn.className = 'scholia-btn-primary';
     replyBtn.textContent = 'Reply';
+    replyBtn.title = 'Submit reply (\u2318Enter)';
     replyBtn.addEventListener('click', function () {
       var text = replyTextarea.value.trim();
       if (!text) return;
@@ -2363,6 +2467,7 @@
         previewDiv = document.createElement('div');
         previewDiv.className = 'scholia-message-body scholia-preview-body';
         previewDiv.innerHTML = renderCommentBody(replyTextarea.value);
+        typesetMathIn(previewDiv);
         replyTextarea.style.display = 'none';
         replyRow.insertBefore(previewDiv, btnRow);
         previewBtn.textContent = 'Edit';
@@ -3068,6 +3173,7 @@
         newCommentPreviewDiv = document.createElement('div');
         newCommentPreviewDiv.className = 'scholia-message-body scholia-preview-body';
         newCommentPreviewDiv.innerHTML = renderCommentBody(textarea.value);
+        typesetMathIn(newCommentPreviewDiv);
         textarea.style.display = 'none';
         replyArea.insertBefore(newCommentPreviewDiv, actions);
         newCommentPreviewBtn.textContent = 'Edit';
@@ -3138,8 +3244,56 @@
     }
   });
 
-  // Forward keyboard to textarea when prompt is visible but not focused;
-  // Escape dismisses even when the textarea IS focused (cancel mid-typing).
+  // Global keyboard shortcuts for ALL textareas in the shadow DOM:
+  // Cmd/Ctrl+Enter → click nearest submit/save/reply button
+  // Escape → click nearest cancel button, or dismiss new-comment form
+  shadow.addEventListener('keydown', function (e) {
+    var ta = shadow.activeElement;
+    if (ta && ta.tagName === 'TEXTAREA') {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        // Find the submit/save/reply button near this textarea
+        var container = ta.closest('.scholia-reply-input, .scholia-edit-buttons, .scholia-overlay-panel');
+        if (!container) container = ta.parentElement;
+        var btn = container && container.querySelector('.scholia-btn-primary, button[class*="save" i]');
+        // For edit mode, Save is a plain button — find it by text
+        if (!btn && container) {
+          var btns = container.querySelectorAll('button');
+          for (var i = 0; i < btns.length; i++) {
+            if (btns[i].textContent === 'Save' || btns[i].textContent === 'Reply') {
+              btn = btns[i]; break;
+            }
+          }
+        }
+        if (btn) btn.click();
+        return;
+      }
+      if (e.key === 'Escape') {
+        // For edit textareas, click Cancel
+        var editBtns = ta.parentElement && ta.parentElement.querySelector('.scholia-edit-buttons');
+        if (editBtns) {
+          var cancelBtns = editBtns.querySelectorAll('button');
+          for (var j = 0; j < cancelBtns.length; j++) {
+            if (cancelBtns[j].textContent === 'Cancel') { cancelBtns[j].click(); return; }
+          }
+        }
+        // For sidebar reply textareas, clear and defocus
+        if (ta.closest('.scholia-reply-input') && !ta.closest('#scholia-new-comment')) {
+          ta.value = '';
+          ta.blur();
+          return;
+        }
+        // For new-comment / compact forms, dismiss
+        if (compactForm) { dismissCompactComment(); return; }
+        if (pendingForm) { dismissCommentPrompt(); window.getSelection().removeAllRanges(); return; }
+        // For overlay, close it
+        if (activeOverlay) { closeOverlay(); return; }
+        return;
+      }
+    }
+  });
+
+  // Forward keyboard to new-comment textarea when prompt is visible but not focused
   document.addEventListener('keydown', function (e) {
     var activeForm = pendingForm || compactForm;
     if (!activeForm) return;
@@ -3148,14 +3302,6 @@
       if (compactForm) dismissCompactComment();
       if (pendingForm) dismissCommentPrompt();
       window.getSelection().removeAllRanges();
-      return;
-    }
-
-    // Cmd+Enter (Mac) / Ctrl+Enter (Linux/Windows) → submit
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      var submitBtn = activeForm.querySelector('.scholia-btn-primary');
-      if (submitBtn) submitBtn.click();
       return;
     }
 
@@ -3271,6 +3417,7 @@
         compactPreviewDiv = document.createElement('div');
         compactPreviewDiv.className = 'scholia-message-body scholia-preview-body';
         compactPreviewDiv.innerHTML = renderCommentBody(textarea.value);
+        typesetMathIn(compactPreviewDiv);
         textarea.style.display = 'none';
         replyArea.insertBefore(compactPreviewDiv, actions);
         previewBtn.textContent = 'Edit';

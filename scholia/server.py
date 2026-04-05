@@ -560,8 +560,6 @@ def _inject_scholia_into_quarto(
         + '  <script defer src="https://cdn.jsdelivr.net/npm/'
         'markdown-it@14.1.0/dist/markdown-it.min.js"></script>\n'
         '  <script defer src="https://cdn.jsdelivr.net/npm/'
-        'markdown-it-texmath@1.0.0/texmath.min.js"></script>\n'
-        '  <script defer src="https://cdn.jsdelivr.net/npm/'
         'mermaid@11/dist/mermaid.min.js"></script>\n'
     )
     # fmt: on
