@@ -57,6 +57,23 @@ Pandoc handles BibTeX citations automatically. For example: @turing1936 introduc
 
 Footnotes also work[^1], and can be rendered as sidenotes using the toggle in the Options menu.
 
+Footnotes can contain block-level content like lists[^2] or code blocks[^3].
+
 [^1]: This is a footnote. Toggle "Footnotes" in the Options menu to see it rendered as a sidenote in the margin.
+
+[^2]: Things to note about sidenotes:
+
+    - They float in the margin
+    - They collapse on narrow screens
+    - They support rich content
+
+[^3]: Here is an example function:
+
+    ```python
+    def greet(name):
+        return f"Hello, {name}!"
+    ```
+
+    Pretty handy for annotating code discussions.
 
 ## References
