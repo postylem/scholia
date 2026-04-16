@@ -35,7 +35,7 @@ def _check_pandoc():
 
 
 _MERMAID_FILTER = str(Path(__file__).parent / "filters" / "mermaid.lua")
-_SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "sidenote.lua")
+_SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "pandoc-sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
 _FRAGMENT_TEMPLATE = str(Path(__file__).parent / "pandoc-fragment.html")
 _HAS_CROSSREF = shutil.which("pandoc-crossref") is not None
@@ -125,7 +125,7 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
     - --section-divs (HTML-only)
     - --syntax-highlighting (caller decides)
     - --template / --standalone (format-specific)
-    - --lua-filter sidenote.lua (HTML live-preview only)
+    - --lua-filter pandoc-sidenote.lua (HTML live-preview only)
     - --to (caller decides output format)
     """
     md_text = doc_path.read_text(encoding="utf-8")
@@ -185,6 +185,14 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> tuple[str, s
     ]
     if sidenotes:
         cmd.extend(["--lua-filter", _SIDENOTE_FILTER])
+    else:
+        # Strip pandoc-sidenote markers ({^}, {^-}, {-}, {.}) from footnote
+        # content so they don't appear as literal text in standard footnotes.
+        md_text = re.sub(
+            r"(\[\^[\w-]+\]:[ \t]*\n?[ \t]*)\{(?:\^-?|-|\.)\}\s",
+            r"\1",
+            md_text,
+        )
 
     result = subprocess.run(
         cmd,

@@ -1,6 +1,5 @@
 """Integration tests for the scholia server."""
 
-
 import pytest
 import pytest_asyncio
 
@@ -38,6 +37,85 @@ def test_render_pandoc_sync_number_sections(tmp_path):
     doc.write_text("---\ntitle: Numbered\nnumber-sections: true\n---\n\n# First\n\n## Sub\n")
     html, _stderr = _render_pandoc_sync(doc)
     assert "header-section-number" in html or 'data-number="1"' in html
+
+
+def test_render_pandoc_sync_sidenotes(tmp_path):
+    """Sidenote filter converts footnotes to Tufte-style sidenotes."""
+    doc = tmp_path / "notes.md"
+    doc.write_text(
+        "---\ntitle: Notes\n---\n\n" "Some text with a note.[^1]\n\n" "[^1]: This is a sidenote.\n"
+    )
+    html, _stderr = _render_pandoc_sync(doc, sidenotes=True)
+    assert "sidenote-wrapper" in html
+    assert "sidenote-number" in html
+    assert "margin-toggle" in html
+    assert "This is a sidenote." in html
+
+
+def test_render_pandoc_sync_margin_note(tmp_path):
+    """Margin notes use {-} prefix and produce marginnote class."""
+    doc = tmp_path / "margin.md"
+    doc.write_text(
+        "---\ntitle: Margin\n---\n\n"
+        "Text with margin note.[^1]\n\n"
+        "[^1]: {-} This is a margin note.\n"
+    )
+    html, _stderr = _render_pandoc_sync(doc, sidenotes=True)
+    assert "marginnote" in html
+    assert "This is a margin note." in html
+
+
+def test_render_pandoc_sync_block_sidenote(tmp_path):
+    """Block sidenotes {^} preserve block content in a div."""
+    doc = tmp_path / "block.md"
+    doc.write_text(
+        "---\ntitle: Block\n---\n\n"
+        "Text with block note.[^1]\n\n"
+        "[^1]:\n    {^} Block note with a list:\n\n"
+        "    - Item one\n    - Item two\n"
+    )
+    html, _stderr = _render_pandoc_sync(doc, sidenotes=True)
+    assert '<div class="sidenote-wrapper">' in html
+    assert "Item one" in html
+    assert "Item two" in html
+
+
+def test_render_pandoc_sync_footnote_passthrough(tmp_path):
+    """Footnotes with {.} prefix remain as standard footnotes."""
+    doc = tmp_path / "passthrough.md"
+    doc.write_text(
+        "---\ntitle: Passthrough\n---\n\n"
+        "Text with real footnote.[^1]\n\n"
+        "[^1]: {.} This stays a footnote.\n"
+    )
+    html, _stderr = _render_pandoc_sync(doc, sidenotes=True)
+    # {.} footnotes are NOT converted to sidenotes
+    assert "sidenote-wrapper" not in html
+    # Content appears as a regular Pandoc footnote
+    assert "This stays a footnote." in html
+
+
+def test_render_pandoc_sync_strips_markers_in_endnote_mode(tmp_path):
+    """Sidenote markers are stripped when rendering without the filter."""
+    doc = tmp_path / "markers.md"
+    doc.write_text(
+        "---\ntitle: Markers\n---\n\n"
+        "A[^1] B[^2] C[^3] D[^4]\n\n"
+        "[^1]: {^} Block sidenote text.\n\n"
+        "[^2]: {-} Margin note text.\n\n"
+        "[^3]: {.} Footnote text.\n\n"
+        "[^4]: {^-} Block margin text.\n"
+    )
+    html, _stderr = _render_pandoc_sync(doc, sidenotes=False)
+    assert "Block sidenote text." in html
+    assert "Margin note text." in html
+    assert "Footnote text." in html
+    assert "Block margin text." in html
+    # Markers should NOT appear as literal text
+    assert "{^}" not in html
+    assert "{-}" not in html
+    assert "{.}" not in html
+    assert "{^-}" not in html
 
 
 # ── _build_pandoc_base_cmd tests ──────────────────────
