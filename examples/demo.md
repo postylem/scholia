@@ -55,25 +55,27 @@ graph LR
 
 Pandoc handles BibTeX citations automatically. For example: @turing1936 introduced the notion of computability, @knuth1997 wrote the definitive reference on algorithms, and @lamport1978 formalized event ordering in distributed systems.
 
-Footnotes also work[^1], and can be rendered as sidenotes using the toggle in the Options menu.
+Footnotes also work,[^1] and can be rendered as sidenotes using the toggle in the Options menu. There is also such a thing as marginnotes[^m] which look a little different.
 
-Footnotes can contain block-level content like lists[^2] or code blocks[^3].
+Math also works in footnotes[^2]. Margin notes[^m] have no number. Block sidenotes[^b1] and block margin notes[^b2] can contain rich content like lists and code, but note that in narrow/responsive mode they expand above their reference point rather than inline.
 
 [^1]: This is a footnote. Toggle "Footnotes" in the Options menu to see it rendered as a sidenote in the margin.
 
-[^2]: Things to note about sidenotes:
+[^2]: Inline math: $e^{i\pi}+1=0$. And display math: $$\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}$$ too
 
+[^m]: {-} This is a margin note — like a sidenote but without a number. Use `{-}` at the start of the footnote text.
+
+[^b1]: {^} A block sidenote like this can contain lists (margin notes too):
+
+    - They preserve block structure
     - They float in the margin
-    - They collapse on narrow screens
-    - They support rich content
+    - Caveat: in narrow mode, they expand above the reference
 
-[^3]: Here is an example function:
+[^b2]: {^-} A block margin note can contain code (sidenotes too):
 
     ```python
     def greet(name):
         return f"Hello, {name}!"
     ```
-
-    Pretty handy for annotating code discussions.
 
 ## References

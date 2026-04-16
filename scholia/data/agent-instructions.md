@@ -134,6 +134,45 @@ When asked to review comments, "check the scholia," or equivalent:
 - **Parallelism**: for many independent threads, run multiple `scholia reply` calls in parallel with `-q`. Don't parallelize when one reply depends on a document edit from another, or when threads concern overlapping sections.
 - The human sees replies live in the browser sidebar.
 
+## Footnotes and sidenotes
+
+When scholia renders a document, Pandoc footnotes can be displayed as margin sidenotes (Tufte-style). The user toggles between "side" and "end" modes in the Options menu. The filter is [pandoc-sidenote](https://github.com/jez/pandoc-sidenote).
+
+### Syntax
+
+| Marker | Type | Use for |
+|--------|------|---------|
+| *(none)* | Sidenote (numbered) | Short prose annotations — the default |
+| `{-}` | Margin note (unnumbered) | Asides that don't need a reference number |
+| `{^}` | Block sidenote (numbered) | Notes with lists, code blocks, or other block content |
+| `{^-}` | Block margin note (unnumbered) | Same, without a number |
+| `{.}` | Footnote (passthrough) | Keep as a standard endnote even in sidenote mode |
+
+### Examples
+
+```markdown
+A regular sidenote.[^1]
+
+A margin note.[^2]
+
+A block sidenote with a list.[^3]
+
+[^1]: This becomes a numbered sidenote in the margin.
+
+[^2]: {-} This appears in the margin without a number.
+
+[^3]: {^} Block notes preserve structure:
+
+    - Item one
+    - Item two
+```
+
+### When to use block notes
+
+Use `{^}` or `{^-}` only when the footnote content contains block elements (lists, code blocks, tables). For simple prose, use a regular footnote — it renders more cleanly.
+
+**Caveat:** Block notes are hoisted before their containing paragraph in the DOM. In wide/desktop mode they float correctly in the margin. In narrow/responsive mode they expand above the reference point rather than inline. Use them sparingly.
+
 ## Cross-references
 
 When writing or editing documents, use cross-reference identifiers so that section numbers, figure numbers, etc. stay correct automatically — even when content is reordered.
