@@ -478,6 +478,7 @@
           renderToolbar();
         }
         docEl.innerHTML = msg.html;
+        numberSidenotes();
         buildToc();
         rerenderMath().then(function () {
           renderMermaid();
@@ -1258,6 +1259,41 @@
   var tocEl = null;
   var tocWrapEl = null;
   var tocOpen = false;
+
+  // ── Sidenote numbering ──────────────────────────────
+  // CSS counters can't handle block sidenotes (div appears before label
+  // in DOM, so counter reads stale value).  JS assigns numbers based on
+  // label document-order, then sets data-number on both the label and its
+  // corresponding sidenote content element.
+  function numberSidenotes() {
+    var labels = docEl.querySelectorAll('.sidenote-number');
+    for (var i = 0; i < labels.length; i++) {
+      var num = i + 1;
+      labels[i].setAttribute('data-number', num);
+      var inputId = labels[i].getAttribute('for');
+      if (inputId) {
+        var input = document.getElementById(inputId);
+        if (input && input.nextElementSibling) {
+          input.nextElementSibling.setAttribute('data-number', num);
+        }
+      }
+    }
+    // Strip trailing <br> from inline sidenotes (upstream coerceToInline
+    // adds LineBreak+LineBreak after each paragraph).
+    var inlines = docEl.querySelectorAll('span.sidenote, span.marginnote');
+    for (var j = 0; j < inlines.length; j++) {
+      var el = inlines[j];
+      while (el.lastChild) {
+        if (el.lastChild.nodeType === 3 && el.lastChild.textContent.trim() === '') {
+          el.removeChild(el.lastChild);
+        } else if (el.lastChild.nodeName === 'BR') {
+          el.removeChild(el.lastChild);
+        } else {
+          break;
+        }
+      }
+    }
+  }
 
   function buildToc() {
     // Remove old TOC dropdown content
@@ -3903,6 +3939,7 @@
 
   // MathJax and mermaid are loaded with defer, so wait for window load
   window.addEventListener('load', function () {
+    numberSidenotes();
     buildToc();
     var mathReady = Promise.resolve();
     if (!isQuarto) {

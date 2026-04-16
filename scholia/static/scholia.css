@@ -156,6 +156,7 @@ body {
 #scholia-doc section > pre, #scholia-doc section > figure,
 #scholia-doc section > table,
 #scholia-doc section > div.sourceCode,
+#scholia-doc .references,
 #scholia-doc h1, #scholia-doc h2, #scholia-doc h3,
 #scholia-doc h4, #scholia-doc h5, #scholia-doc h6 {
   width: 60%;
@@ -200,25 +201,58 @@ body {
   width: 55%;
   margin-top: 0.3rem;
   margin-bottom: 1rem;
+  padding-top: 0.1rem;
+  padding-left: 1em;
   font-size: 0.85rem;
   line-height: 1.4;
   color: #555;
 }
+/* Collapse margins of first/last children in block sidenotes (the <p> and
+   <ul> inside div.sidenote have browser-default margins that create gaps).
+   Needs #scholia-doc to beat #scholia-doc p { margin: 1rem 0 } (1-0-1). */
+#scholia-doc .sidenote > :first-child,
+#scholia-doc .marginnote > :first-child { margin-top: 0; }
+#scholia-doc .sidenote > :last-child,
+#scholia-doc .marginnote > :last-child { margin-bottom: 0; }
 
-.sidenote {
-  padding-top: 0.1rem;
-  text-indent: -0.8em;
-  padding-left: 0.8em;
+/* Sidenote numbers: JS sets data-number on labels and sidenote elements
+   (CSS counters can't handle block sidenotes where div precedes label). */
+.sidenote-number {
+  cursor: default;
 }
-
-/* Sidenote numbers (in main text and in margin) */
-.sidenote-number,
-.sidenote > sup {
+.sidenote-number::after {
+  content: attr(data-number);
   font-size: 0.75rem;
   vertical-align: super;
   line-height: 0;
-  cursor: default;
   color: #aaa;
+}
+/* Number in margin: sits in the padding-left area, right-aligned flush
+   with the sidenote body text, without pushing the first line. */
+.sidenote[data-number]::before {
+  content: attr(data-number);
+  font-size: 0.75rem;
+  vertical-align: super;
+  line-height: 0;
+  color: #aaa;
+  display: inline-block;
+  width: 1em;
+  margin-left: -1em;
+  text-align: right;
+  padding-right: 0.2em;
+}
+/* Margin notes have no number */
+.marginnote::before {
+  content: none;
+}
+/* Lists inside block sidenotes need their own padding for bullet spacing */
+.sidenote ul, .sidenote ol,
+.marginnote ul, .marginnote ol {
+  padding-left: 1.2em;
+  margin: 0.3em 0;
+}
+.sidenote li, .marginnote li {
+  margin-bottom: 0.2em;
 }
 
 /* Margin note toggle symbol (⊕) */
@@ -233,6 +267,18 @@ label.margin-toggle:not(.sidenote-number) {
 /* Always hide the checkbox */
 input.margin-toggle { display: none; }
 
+/* Block sidenotes ({^} / {^-}): hoisted before paragraph as div.
+   The wrapper matches content width so inner .sidenote float math
+   (margin-right: -62%, width: 55%) works the same as inline sidenotes. */
+div.sidenote-wrapper {
+  width: 60%;
+}
+/* In block sidenotes the inline-block ::before would create its own line
+   box above the first <p>.  Float it instead — sits in the padding-left
+   area and aligns naturally with the first line of text. */
+div.sidenote-wrapper .sidenote[data-number]::before {
+  float: left;
+}
 /* Responsive: collapse sidenotes when doc pane is narrow */
 #scholia-doc.scholia-narrow-doc {
   padding: 2rem 25px 4rem 25px;
@@ -247,6 +293,7 @@ input.margin-toggle { display: none; }
 #scholia-doc.scholia-narrow-doc section > blockquote, #scholia-doc.scholia-narrow-doc section > pre,
 #scholia-doc.scholia-narrow-doc section > figure, #scholia-doc.scholia-narrow-doc section > table,
 #scholia-doc.scholia-narrow-doc section > div.sourceCode,
+#scholia-doc.scholia-narrow-doc .references,
 #scholia-doc.scholia-narrow-doc h1, #scholia-doc.scholia-narrow-doc h2, #scholia-doc.scholia-narrow-doc h3,
 #scholia-doc.scholia-narrow-doc h4, #scholia-doc.scholia-narrow-doc h5, #scholia-doc.scholia-narrow-doc h6 {
   width: 100%;
@@ -286,14 +333,11 @@ input.margin-toggle { display: none; }
   width: 100%;
   margin: 0.5rem 0;
   padding: 0.5rem 0.75rem;
-  text-indent: 0;
-  padding-left: 0.75rem;
   border-left: 2px solid var(--s-border);
   font-size: 0.9rem;
 }
-#scholia-doc.scholia-narrow-doc .sidenote > sup {
-  display: none;
-}
+/* Hide margin number in narrow mode — the in-text label is right there */
+#scholia-doc.scholia-narrow-doc .sidenote::before { content: none; }
 #scholia-doc.scholia-narrow-doc label.margin-toggle:not(.sidenote-number) {
   display: inline;
   cursor: pointer;
@@ -303,6 +347,9 @@ input.margin-toggle { display: none; }
   line-height: 0;
 }
 #scholia-doc.scholia-narrow-doc .sidenote-number { cursor: pointer; color: var(--s-accent); }
+#scholia-doc.scholia-narrow-doc div.sidenote-wrapper {
+  width: 100%;
+}
 
 /* ── Document typography ────────────────────────────── */
 
@@ -1547,7 +1594,8 @@ body.scholia-compact {
 #scholia-doc.scholia-no-sidenotes section > pre,
 #scholia-doc.scholia-no-sidenotes section > figure,
 #scholia-doc.scholia-no-sidenotes section > table,
-#scholia-doc.scholia-no-sidenotes section > div.sourceCode {
+#scholia-doc.scholia-no-sidenotes section > div.sourceCode,
+#scholia-doc.scholia-no-sidenotes .references {
   width: 90%;
 }
 #scholia-doc.scholia-no-sidenotes h1,
