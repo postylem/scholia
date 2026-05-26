@@ -138,6 +138,9 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
         macros_path = doc_path.parent / macros_match.group(1).strip()
         if macros_path.is_file():
             macros_content = macros_path.read_text(encoding="utf-8")
+            # Strip LaTeX line comments: pandoc-markdown has no % comment
+            # syntax, so otherwise they render as literal text.
+            macros_content = re.sub(r"(?<!\\)%.*", "", macros_content)
             fm_end = re.search(
                 r"\A---\s*\n.*?^(---|\.\.\.)\s*$", md_text, re.MULTILINE | re.DOTALL
             )

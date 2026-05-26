@@ -152,6 +152,31 @@ def test_build_pandoc_base_cmd_macros(tmp_path):
     assert r"\newcommand{\foo}{bar}" in md_text
 
 
+def test_build_pandoc_base_cmd_macros_strips_latex_comments(tmp_path):
+    """macros: LaTeX % comments in macros file must not leak into markdown body."""
+    macros = tmp_path / "macros.tex"
+    macros.write_text(
+        "% --- General probability macros ---\n"
+        r"\newcommand{\statespace}{\mathcal{X}}"
+        "\n"
+        "% --- Language-model-specific ---\n"
+        r"\newcommand{\vocab}{\Sigma}"
+        "  % inline trailing comment\n"
+        r"\newcommand{\pct}{10\%}"
+        "\n"
+    )
+    doc = tmp_path / "doc.md"
+    doc.write_text("---\ntitle: T\nmacros: macros.tex\n---\n\nHello\n")
+    _, md_text = _build_pandoc_base_cmd(doc)
+    assert "General probability macros" not in md_text
+    assert "Language-model-specific" not in md_text
+    assert "inline trailing comment" not in md_text
+    assert r"\newcommand{\statespace}{\mathcal{X}}" in md_text
+    assert r"\newcommand{\vocab}{\Sigma}" in md_text
+    # Escaped percent (\%) must be preserved as a literal, not treated as comment.
+    assert r"\newcommand{\pct}{10\%}" in md_text
+
+
 @pytest.fixture
 def server_app(tmp_doc):
     """Create a ScholiaServer app for testing."""
