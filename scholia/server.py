@@ -270,6 +270,23 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
+def _rewrite_quarto_assets(html: str, stem: str, base_dir: Path) -> str:
+    """Rewrite asset URLs in a rendered Quarto page for scholia's server.
+
+    Two kinds of local references need fixing because the page is served
+    at ``/`` rather than from the document's directory:
+
+    - ``<stem>_files/`` — Quarto's own bundled libs and code-cell figure
+      outputs — go through the /quarto-assets/ route.
+    - Static markdown images (e.g. ``![](images/x.png)``) stay relative
+      in Quarto's output; route them through /doc-assets/ like the Pandoc
+      path does. (Already-absolute ``/quarto-assets/…`` URLs are left
+      alone by :func:`_rewrite_local_asset_urls`.)
+    """
+    html = html.replace(f"{stem}_files/", "/quarto-assets/")
+    return _rewrite_local_asset_urls(html, base_dir)
+
+
 def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str, str]:
     """Render a Quarto document and return the full HTML page (blocking).
 
@@ -318,10 +335,7 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str,
         raise RuntimeError(f"quarto render failed: {result.stderr}")
 
     html = out_file.read_text(encoding="utf-8")
-    stem = doc_path.stem
-
-    # Rewrite local asset paths to go through /quarto-assets/
-    html = html.replace(f"{stem}_files/", "/quarto-assets/")
+    html = _rewrite_quarto_assets(html, doc_path.stem, doc_path.parent.resolve())
 
     return html, result.stderr
 

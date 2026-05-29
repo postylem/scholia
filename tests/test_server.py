@@ -1,5 +1,7 @@
 """Integration tests for the scholia server."""
 
+import shutil
+
 import pytest
 import pytest_asyncio
 
@@ -141,6 +143,48 @@ def test_render_pandoc_sync_keeps_remote_and_absolute_src(tmp_path):
     assert 'src="https://example.com/x.png"' in html
     assert 'src="/already/absolute.png"' in html
     assert "/doc-assets/" not in html
+
+
+# ── Quarto asset rewriting ────────────────────────────
+
+
+def test_rewrite_quarto_assets(tmp_path):
+    """Quarto rewrite: <stem>_files/ → /quarto-assets/, static relative
+    images → /doc-assets/, while CDN/absolute URLs and links stay put."""
+    from scholia.server import _rewrite_quarto_assets
+
+    html = (
+        '<link href="report_files/libs/bootstrap.css">'
+        '<script src="report_files/libs/quarto.js"></script>'
+        '<script src="https://cdn.example.com/mathjax.js"></script>'
+        '<img src="images/pipeline.png" alt="x" />'
+        '<a href="notes.md">link</a>'
+    )
+    out = _rewrite_quarto_assets(html, "report", tmp_path)
+    # Quarto's own _files/ assets go through /quarto-assets/.
+    assert "report_files/" not in out
+    assert 'href="/quarto-assets/libs/bootstrap.css"' in out
+    assert 'src="/quarto-assets/libs/quarto.js"' in out
+    # Static markdown images go through /doc-assets/.
+    assert "/doc-assets/images/pipeline.png?base=" in out
+    assert 'src="images/pipeline.png"' not in out
+    # CDN scripts and local links are left untouched.
+    assert 'src="https://cdn.example.com/mathjax.js"' in out
+    assert 'href="notes.md"' in out
+
+
+@pytest.mark.skipif(not shutil.which("quarto"), reason="quarto not installed")
+def test_render_quarto_sync_rewrites_static_image(tmp_path):
+    """A real Quarto render rewrites static markdown images to /doc-assets/."""
+    from scholia.server import _render_quarto_sync
+
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "pic.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    doc = tmp_path / "doc.qmd"
+    doc.write_text("---\ntitle: Q\nformat: html\n---\n\n![cap](images/pic.png)\n")
+    html, _stderr = _render_quarto_sync(doc, use_defaults=False)
+    assert "/doc-assets/images/pic.png?base=" in html
+    assert 'src="images/pic.png"' not in html
 
 
 # ── _build_pandoc_base_cmd tests ──────────────────────
