@@ -43,7 +43,7 @@ def test_render_pandoc_sync_sidenotes(tmp_path):
     """Sidenote filter converts footnotes to Tufte-style sidenotes."""
     doc = tmp_path / "notes.md"
     doc.write_text(
-        "---\ntitle: Notes\n---\n\n" "Some text with a note.[^1]\n\n" "[^1]: This is a sidenote.\n"
+        "---\ntitle: Notes\n---\n\nSome text with a note.[^1]\n\n[^1]: This is a sidenote.\n"
     )
     html, _stderr = _render_pandoc_sync(doc, sidenotes=True)
     assert "sidenote-wrapper" in html
@@ -116,6 +116,31 @@ def test_render_pandoc_sync_strips_markers_in_endnote_mode(tmp_path):
     assert "{-}" not in html
     assert "{.}" not in html
     assert "{^-}" not in html
+
+
+def test_render_pandoc_sync_rewrites_image_src(tmp_path):
+    """Relative image src is rewritten to the /doc-assets/ route.
+
+    The page is served at ``/``, so a bare relative ``src="image.png"``
+    resolves to ``/image.png`` and 404s. Rewriting to ``/doc-assets/``
+    (which knows the document's directory) lets the browser fetch it.
+    """
+    (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    doc = tmp_path / "doc.md"
+    doc.write_text("# Title\n\n![cap](image.png)\n")
+    html, _stderr = _render_pandoc_sync(doc)
+    assert 'src="image.png"' not in html
+    assert "/doc-assets/image.png?base=" in html
+
+
+def test_render_pandoc_sync_keeps_remote_and_absolute_src(tmp_path):
+    """Remote URLs, data URIs, and absolute/anchor paths are left untouched."""
+    doc = tmp_path / "doc.md"
+    doc.write_text("# T\n\n![a](https://example.com/x.png)\n\n![b](/already/absolute.png)\n")
+    html, _stderr = _render_pandoc_sync(doc)
+    assert 'src="https://example.com/x.png"' in html
+    assert 'src="/already/absolute.png"' in html
+    assert "/doc-assets/" not in html
 
 
 # ── _build_pandoc_base_cmd tests ──────────────────────
@@ -211,6 +236,42 @@ async def test_index_uses_yaml_title(client):
 async def test_static_files(client):
     resp = await client.get("/static/scholia.js")
     assert resp.status == 200
+
+
+@pytest.mark.asyncio
+async def test_doc_assets_serves_local_file(client, tmp_doc):
+    """/doc-assets/ serves files from the document's directory."""
+    from urllib.parse import quote
+
+    img = tmp_doc.parent / "pic.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\nDATA")
+    base = quote(str(tmp_doc.parent.resolve()), safe="")
+    resp = await client.get(f"/doc-assets/pic.png?base={base}")
+    assert resp.status == 200
+    assert await resp.read() == b"\x89PNG\r\n\x1a\nDATA"
+
+
+@pytest.mark.asyncio
+async def test_doc_assets_missing_file_404(client, tmp_doc):
+    from urllib.parse import quote
+
+    base = quote(str(tmp_doc.parent.resolve()), safe="")
+    resp = await client.get(f"/doc-assets/nope.png?base={base}")
+    assert resp.status == 404
+
+
+@pytest.mark.asyncio
+async def test_doc_assets_blocks_traversal(client, tmp_doc):
+    """A path escaping the base directory is rejected (no path traversal)."""
+    from urllib.parse import quote
+
+    # Secret outside the document directory.
+    secret = tmp_doc.parent.parent / "secret.txt"
+    secret.write_text("top secret")
+    base = quote(str(tmp_doc.parent.resolve()), safe="")
+    # %2e%2e%2f == "../" — encoded so the test client doesn't normalise it away.
+    resp = await client.get(f"/doc-assets/%2e%2e%2fsecret.txt?base={base}")
+    assert resp.status in (403, 404)
 
 
 @pytest.mark.asyncio

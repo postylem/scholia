@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 from aiohttp import web
 from watchdog.events import FileSystemEventHandler
@@ -173,6 +174,28 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
     return cmd, md_text
 
 
+def _rewrite_local_asset_urls(html: str, base_dir: Path) -> str:
+    """Rewrite relative ``src``/``poster`` URLs to the /doc-assets/ route.
+
+    The rendered fragment is served at ``/``, so a relative URL such as
+    ``image.png`` would resolve to ``/image.png`` and 404. Point those at
+    /doc-assets/, which resolves them against the document's directory.
+    Remote URLs, data URIs, absolute paths (``/…``) and anchors (``#…``)
+    are left untouched.
+    """
+    base = quote(str(base_dir), safe="")
+
+    def repl(m: "re.Match[str]") -> str:
+        attr, url = m.group(1), m.group(2)
+        if not url or url.startswith(("/", "#", "//")):
+            return m.group(0)
+        if re.match(r"[a-zA-Z][a-zA-Z0-9+.\-]*:", url):  # scheme: http:, data:, …
+            return m.group(0)
+        return f'{attr}="/doc-assets/{url}?base={base}"'
+
+    return re.sub(r'\b(src|poster)="([^"]*)"', repl, html)
+
+
 def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> tuple[str, str]:
     """Render markdown to HTML fragment using Pandoc (blocking).
 
@@ -206,7 +229,8 @@ def _render_pandoc_sync(doc_path: Path, sidenotes: bool = False) -> tuple[str, s
     )
     if result.returncode != 0:
         raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
-    return result.stdout, result.stderr
+    html = _rewrite_local_asset_urls(result.stdout, doc_path.parent.resolve())
+    return html, result.stderr
 
 
 def _find_quarto_python(doc_path: Path) -> str | None:
@@ -781,6 +805,7 @@ class ScholiaServer:
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ws", self._handle_ws)
         self.app.router.add_get("/quarto-assets/{path:.+}", self._handle_quarto_assets)
+        self.app.router.add_get("/doc-assets/{path:.+}", self._handle_doc_assets)
         self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
         self.app.router.add_post("/api/relocate", self._handle_relocate)
@@ -794,6 +819,26 @@ class ScholiaServer:
         assets_dir = self.doc_path.parent / (self.doc_path.stem + "_files")
         file_path = (assets_dir / rel_path).resolve()
         if not file_path.is_relative_to(assets_dir.resolve()):
+            return web.Response(status=403)
+        if not file_path.is_file():
+            return web.Response(status=404)
+        return web.FileResponse(file_path)
+
+    async def _handle_doc_assets(self, request):
+        """Serve document-relative resources (images, etc.) referenced by
+        relative paths in the rendered markdown.
+
+        ``base`` (query param) is the document's directory, encoded by
+        :func:`_rewrite_local_asset_urls`. The resolved file must stay
+        within it — no path traversal outside the document's directory.
+        """
+        rel_path = request.match_info["path"]
+        base = request.query.get("base")
+        if not base:
+            return web.Response(status=400)
+        base_dir = Path(base).resolve()
+        file_path = (base_dir / rel_path).resolve()
+        if not file_path.is_relative_to(base_dir):
             return web.Response(status=403)
         if not file_path.is_file():
             return web.Response(status=404)
@@ -860,7 +905,7 @@ class ScholiaServer:
             import html as html_mod
 
             error_html = (
-                "<h2>File not found</h2>" f"<p><code>{html_mod.escape(str(doc_path))}</code></p>"
+                f"<h2>File not found</h2><p><code>{html_mod.escape(str(doc_path))}</code></p>"
             )
             page = _fill_template(
                 self.template,
