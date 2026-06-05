@@ -35,6 +35,30 @@ def _check_pandoc():
         raise RuntimeError("Pandoc not found. Install it from https://pandoc.org/installing.html")
 
 
+# PDF engines in preference order. xelatex/lualatex/tectonic handle arbitrary
+# Unicode (e.g. math symbols like ⇒); pdflatex does not, so it is the last
+# resort. pandoc defaults to pdflatex when no engine is specified, which is why
+# documents containing Unicode fail unless we pick a capable engine explicitly.
+_PDF_ENGINES = ("xelatex", "lualatex", "tectonic", "pdflatex")
+
+
+def _default_pdf_engine() -> str | None:
+    """Return the best available PDF engine, preferring Unicode-capable ones.
+
+    Returns None if only pdflatex (or nothing) is available, letting pandoc use
+    its own default rather than forcing a possibly-missing engine.
+    """
+    for engine in ("xelatex", "lualatex", "tectonic"):
+        if shutil.which(engine):
+            return engine
+    return None
+
+
+def _has_latex_engine() -> bool:
+    """True if any LaTeX/PDF engine is installed on PATH."""
+    return any(shutil.which(engine) for engine in _PDF_ENGINES)
+
+
 _MERMAID_FILTER = str(Path(__file__).parent / "filters" / "mermaid.lua")
 _SIDENOTE_FILTER = str(Path(__file__).parent / "filters" / "pandoc-sidenote.lua")
 _DEFAULT_CSL = str(Path(__file__).parent / "static" / "apa.csl")
@@ -374,8 +398,9 @@ def _render_export_sync(
 
     if fmt == "pdf":
         cmd.append("--to=pdf")
-        if pdf_engine:
-            cmd.append("--pdf-engine=" + pdf_engine)
+        engine = pdf_engine or _default_pdf_engine()
+        if engine:
+            cmd.append("--pdf-engine=" + engine)
     elif fmt == "html":
         cmd += [
             "--to=html5",
@@ -1001,12 +1026,12 @@ class ScholiaServer:
             pdf_bytes = await render_export(doc_path, "pdf")
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")
-            if (
-                "pdf" in stderr.lower()
-                or "latex" in stderr.lower()
-                or "xelatex" in stderr.lower()
-                or "tectonic" in stderr.lower()
-            ):
+            # Only offer the browser-print fallback when no LaTeX engine is
+            # installed at all. If an engine exists but the document failed to
+            # compile, that is a real error the user should see — not a reason
+            # to silently downgrade to print (which would also bake scholia's
+            # UI into the printed page).
+            if not _has_latex_engine():
                 return web.json_response(
                     {
                         "error": "PDF export requires a LaTeX engine (xelatex, tectonic, etc.).",

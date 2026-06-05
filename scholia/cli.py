@@ -631,7 +631,7 @@ def cmd_unresolve(args):
 
 
 def cmd_export(args):
-    from scholia.server import _render_export_sync
+    from scholia.server import _has_latex_engine, _render_export_sync
     import subprocess
 
     doc = Path(args.doc)
@@ -652,7 +652,10 @@ def cmd_export(args):
         _render_export_sync(doc, fmt, output, pdf_engine=args.pdf_engine)
     except subprocess.CalledProcessError as e:
         stderr_text = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or str(e))
-        if fmt == "pdf" and ("latex" in stderr_text.lower() or "pdf" in stderr_text.lower()):
+        # "No LaTeX engine" is a distinct, actionable case from a compile error
+        # that happens to mention latex/pdf — only show the install hint when
+        # an engine is genuinely missing.
+        if fmt == "pdf" and not _has_latex_engine():
             print(
                 "Error: PDF export requires a LaTeX engine (xelatex, tectonic, etc.).\n"
                 "Install one, or use --to html or --to latex instead.",

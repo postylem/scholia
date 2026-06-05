@@ -9,6 +9,8 @@ from scholia.comments import append_comment, load_comments
 from scholia.server import (
     ScholiaServer,
     _build_pandoc_base_cmd,
+    _default_pdf_engine,
+    _has_latex_engine,
     _render_export_sync,
     _render_pandoc_sync,
 )
@@ -695,6 +697,49 @@ async def test_export_pdf_endpoint_missing_file(client):
     """Export of nonexistent file returns 404."""
     resp = await client.get("/api/export-pdf", params={"file": "/nonexistent/doc.md"})
     assert resp.status == 404
+
+
+@pytest.mark.skipif(not _has_latex_engine(), reason="needs a LaTeX engine")
+@pytest.mark.asyncio
+async def test_export_pdf_compile_error_is_not_print_fallback(aiohttp_client, tmp_path):
+    """A genuine LaTeX compile failure (engine present) must surface the real
+    error, NOT silently downgrade to the browser-print fallback.
+
+    Regression: the fallback used to fire for any stderr containing
+    'latex'/'pdf', which matches every compile error.
+    """
+    doc = tmp_path / "broken.md"
+    # Raw LaTeX that any engine rejects: undefined control sequence.
+    doc.write_text(
+        "---\ntitle: Broken\n---\n\n" "```{=latex}\n\\thiscommanddoesnotexistxyz\n```\n"
+    )
+    server = ScholiaServer(str(doc))
+    client = await aiohttp_client(server.app)
+    resp = await client.get("/api/export-pdf", params={"file": str(doc)})
+    assert resp.status == 500
+    data = await resp.json()
+    assert "fallback" not in data
+    assert "error" in data
+
+
+@pytest.mark.skipif(not shutil.which("xelatex"), reason="needs xelatex")
+def test_render_export_pdf_unicode(tmp_path):
+    """A document with non-ASCII characters (e.g. ⇒) must export to PDF.
+
+    Regression: pandoc defaulted to pdflatex, which errors on Unicode like
+    ⇒ (U+21D2). scholia should select a Unicode-capable engine by default.
+    """
+    doc = tmp_path / "unicode.md"
+    doc.write_text("---\ntitle: Unicode\n---\n\nMore samples ⇒ better estimate.\n")
+    data = _render_export_sync(doc, "pdf")
+    assert isinstance(data, bytes)
+    assert data[:4] == b"%PDF"
+
+
+@pytest.mark.skipif(not shutil.which("xelatex"), reason="needs xelatex")
+def test_default_pdf_engine_prefers_unicode_capable():
+    """When xelatex is installed it is preferred over pdflatex."""
+    assert _default_pdf_engine() in ("xelatex", "lualatex", "tectonic")
 
 
 # ── _render_export_sync tests ─────────────────────────
