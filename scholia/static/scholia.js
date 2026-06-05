@@ -39,6 +39,16 @@
     '  --s-comment:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;',
     '}',
     'body.scholia-sidebar-hidden mark.scholia-highlight { all: unset; display: inline; }',
+    // When printing (incl. the browser print-to-PDF fallback used when no
+    // LaTeX engine is available), hide all scholia chrome — the toolbar,
+    // sidebar, and any transient overlays/banners all live inside the
+    // <scholia-sidebar> shadow host — and let the document reflow to full
+    // width with its highlight marks neutralized.
+    '@media print {',
+    '  scholia-sidebar { display: none !important; }',
+    '  body { display: block !important; margin: 0 !important; padding-top: 0 !important; }',
+    '  mark.scholia-highlight { all: unset !important; display: inline !important; }',
+    '}',
   ].join('\n');
 
   if (isQuarto) {
