@@ -17,4 +17,5 @@ Run `scholia skill-init` to install those instructions as a 'skill' globally or 
 ## Configuration
 
 - `SCHOLIA_USERNAME` env var sets creator name in comments (falls back to system username)
+- `SCHOLIA_PDF_ENGINE` env var sets the Pandoc PDF engine for export (defaults to `xelatex`, falling back to `lualatex`/`tectonic` if it isn't installed). A Unicode-capable engine is used by default because `pdflatex` errors on common Unicode (e.g. `⇒`). The CLI `--pdf-engine` flag overrides this.
 - `pandoc-crossref` (recommended): if installed, scholia automatically uses it as a Pandoc filter, enabling `{#sec:id}` attributes and `@sec:id` cross-references

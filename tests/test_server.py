@@ -737,9 +737,83 @@ def test_render_export_pdf_unicode(tmp_path):
 
 
 @pytest.mark.skipif(not shutil.which("xelatex"), reason="needs xelatex")
-def test_default_pdf_engine_prefers_unicode_capable():
+def test_default_pdf_engine_prefers_unicode_capable(monkeypatch):
     """When xelatex is installed it is preferred over pdflatex."""
+    monkeypatch.delenv("SCHOLIA_PDF_ENGINE", raising=False)
     assert _default_pdf_engine() in ("xelatex", "lualatex", "tectonic")
+
+
+def test_default_pdf_engine_env_override(monkeypatch):
+    """SCHOLIA_PDF_ENGINE overrides auto-detection."""
+    monkeypatch.setenv("SCHOLIA_PDF_ENGINE", "tectonic")
+    assert _default_pdf_engine() == "tectonic"
+    monkeypatch.setenv("SCHOLIA_PDF_ENGINE", "  ")  # blank is ignored
+    assert _default_pdf_engine() != ""
+
+
+def test_export_pdf_command_honors_env_engine_and_colorlinks(tmp_doc, monkeypatch):
+    """The pdf export command uses SCHOLIA_PDF_ENGINE and enables colorlinks
+    (without running a real LaTeX engine)."""
+
+    class FakeResult:
+        returncode = 0
+        stdout = b"%PDF-1.5 fake"
+        stderr = b""
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeResult()
+
+    monkeypatch.setenv("SCHOLIA_PDF_ENGINE", "lualatex")
+    monkeypatch.setattr("scholia.server.subprocess.run", fake_run)
+    out = _render_export_sync(tmp_doc, "pdf")
+    assert out == b"%PDF-1.5 fake"
+    cmd = captured["cmd"]
+    assert "--pdf-engine=lualatex" in cmd
+    assert "-V" in cmd
+    assert "colorlinks=true" in cmd
+
+
+def test_export_explicit_engine_beats_env(tmp_doc, monkeypatch):
+    """An explicit pdf_engine argument takes precedence over the env var."""
+
+    class FakeResult:
+        returncode = 0
+        stdout = b"%PDF"
+        stderr = b""
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeResult()
+
+    monkeypatch.setenv("SCHOLIA_PDF_ENGINE", "lualatex")
+    monkeypatch.setattr("scholia.server.subprocess.run", fake_run)
+    _render_export_sync(tmp_doc, "pdf", pdf_engine="tectonic")
+    assert "--pdf-engine=tectonic" in captured["cmd"]
+
+
+def test_render_export_latex_enables_colorlinks(tmp_doc, tmp_path):
+    """LaTeX/PDF export enables colorlinks so citation/link text is visible.
+
+    Without it, pandoc's default hyperref setup uses `hidelinks`, leaving
+    citations clickable but rendered as plain black text.
+    """
+    out = tmp_path / "out.tex"
+    _render_export_sync(tmp_doc, "latex", out)
+    assert "colorlinks=true" in out.read_text()
+
+
+def test_render_export_latex_respects_own_colorlinks(tmp_path):
+    """A document that sets colorlinks itself is not overridden."""
+    doc = tmp_path / "cl.md"
+    doc.write_text("---\ntitle: T\ncolorlinks: false\n---\n\nhi\n")
+    out = tmp_path / "out.tex"
+    _render_export_sync(doc, "latex", out)
+    assert "colorlinks=true" not in out.read_text()
 
 
 # ── _render_export_sync tests ─────────────────────────

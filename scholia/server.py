@@ -43,11 +43,18 @@ _PDF_ENGINES = ("xelatex", "lualatex", "tectonic", "pdflatex")
 
 
 def _default_pdf_engine() -> str | None:
-    """Return the best available PDF engine, preferring Unicode-capable ones.
+    """Return the PDF engine to use for export.
 
-    Returns None if only pdflatex (or nothing) is available, letting pandoc use
-    its own default rather than forcing a possibly-missing engine.
+    The ``SCHOLIA_PDF_ENGINE`` env var, if set, wins (so users can force e.g.
+    ``lualatex`` or ``pdflatex``). Otherwise prefer a Unicode-capable engine
+    that is actually installed — effectively defaulting to xelatex, falling
+    back to lualatex then tectonic. Returns None if none of those are present,
+    letting pandoc use its own default (pdflatex) rather than forcing a
+    possibly-missing engine.
     """
+    override = os.environ.get("SCHOLIA_PDF_ENGINE", "").strip()
+    if override:
+        return override
     for engine in ("xelatex", "lualatex", "tectonic"):
         if shutil.which(engine):
             return engine
@@ -412,6 +419,19 @@ def _render_export_sync(
         cmd.append("--to=latex")
     else:
         raise ValueError(f"Unsupported export format: {fmt}")
+
+    if fmt in ("pdf", "latex"):
+        # citeproc + hyperref already make citations and cross-references
+        # clickable, but pandoc's default hyperref setup uses `hidelinks`, so
+        # they render as plain black text and look un-linked. Enable colorlinks
+        # so links are visibly clickable — unless the document configures its
+        # own link colors in frontmatter.
+        if not re.search(
+            r"^(colorlinks|linkcolor|citecolor|urlcolor|toccolor|filecolor)\s*:",
+            md_text,
+            re.MULTILINE,
+        ):
+            cmd += ["-V", "colorlinks=true"]
 
     if output_path:
         cmd.extend(["-o", str(output_path)])

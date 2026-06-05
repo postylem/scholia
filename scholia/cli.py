@@ -1002,7 +1002,8 @@ def main():
         "--pdf-engine",
         default=None,
         metavar="ENGINE",
-        help="LaTeX engine for PDF output (e.g. xelatex, tectonic)",
+        help="LaTeX engine for PDF output (e.g. xelatex, tectonic). "
+        "Overrides $SCHOLIA_PDF_ENGINE; default is xelatex.",
     )
 
     # mv

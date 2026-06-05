@@ -39,6 +39,8 @@ Notes:
 
 - Your name in comment threads is detected from your system username. To override it, set the `SCHOLIA_USERNAME` environment variable.
 
+- PDF export (Options → Export PDF, or `scholia export --to pdf`) uses `xelatex` by default, falling back to `lualatex`/`tectonic` if it isn't installed. Set the `SCHOLIA_PDF_ENGINE` environment variable to choose a different engine (e.g. `pdflatex`). If no LaTeX engine is found, export falls back to the browser's print-to-PDF.
+
 - If you've already installed, and want to update to the latest version:
   ```bash
   uv tool upgrade scholia
