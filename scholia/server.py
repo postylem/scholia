@@ -146,6 +146,71 @@ def _has_footnotes(md_text: str) -> bool:
     return bool(re.search(r"\[\^|\^\[", md_text))
 
 
+def _inject_macros(md_text: str, doc_path: Path) -> str:
+    """Splice an external LaTeX macros file into the document body.
+
+    If the frontmatter declares ``macros: <file>``, read that file (resolved
+    relative to the document) and insert its contents just after the YAML
+    frontmatter so the renderer expands the macros in math. This is a
+    scholia-specific convention shared by both render paths — the Pandoc path
+    (``.md``) and the Quarto path (``.qmd``/``.rmd``), where the same body
+    injection lets Quarto's Pandoc pick the definitions up too.
+
+    LaTeX ``%`` line comments are stripped because pandoc-markdown has no
+    comment syntax and would otherwise render them as literal text. Returns
+    the text unchanged if the key is absent, the file is missing, or the
+    document has no frontmatter.
+    """
+    macros_match = re.search(r"^macros:\s*['\"]?(.+?)['\"]?\s*$", md_text, re.MULTILINE)
+    if not macros_match:
+        return md_text
+    macros_path = doc_path.parent / macros_match.group(1).strip()
+    if not macros_path.is_file():
+        return md_text
+    macros_content = macros_path.read_text(encoding="utf-8")
+    macros_content = re.sub(r"(?<!\\)%.*", "", macros_content)
+    fm_end = re.search(r"\A---\s*\n.*?^(---|\.\.\.)\s*$", md_text, re.MULTILINE | re.DOTALL)
+    if not fm_end:
+        return md_text
+    pos = fm_end.end()
+    return md_text[:pos] + "\n" + macros_content + "\n" + md_text[pos:]
+
+
+def _write_macro_injected_source(doc_path: Path) -> Path | None:
+    """Write a sibling temp copy of *doc_path* with external macros spliced in.
+
+    The Quarto path can't pipe markdown through stdin the way Pandoc does, and
+    Quarto resolves relative paths, ``{{< include >}}`` shortcodes and
+    bibliographies against the source file's own directory — so the temp file
+    is written alongside the original (hidden, ``.``-prefixed) rather than in a
+    scratch directory. Returns the temp path, or ``None`` when the document
+    declares no ``macros:`` key (caller renders the original directly). Pair
+    every non-None return with :func:`_cleanup_quarto_temp`.
+    """
+    text = doc_path.read_text(encoding="utf-8")
+    injected = _inject_macros(text, doc_path)
+    if injected == text:
+        return None
+    tmp = doc_path.with_name(f".{doc_path.stem}.scholia-macros{doc_path.suffix}")
+    tmp.write_text(injected, encoding="utf-8")
+    return tmp
+
+
+def _cleanup_quarto_temp(tmp: Path, keep_files_dir: bool = False) -> None:
+    """Remove a temp render source and Quarto's byproducts of rendering it.
+
+    ``keep_files_dir`` leaves ``<tmp-stem>_files/`` alone — the live HTML
+    render relocates it to the canonical ``<doc-stem>_files/`` the
+    /quarto-assets/ route serves, so cleanup must not delete it.
+    """
+    tmp.unlink(missing_ok=True)
+    tmp.with_suffix(".html").unlink(missing_ok=True)
+    if not keep_files_dir:
+        files_dir = tmp.with_name(tmp.stem + "_files")
+        if files_dir.is_dir():
+            shutil.rmtree(files_dir)
+
+
 def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
     """Build format-agnostic Pandoc args and return (cmd, processed_md_text).
 
@@ -165,20 +230,7 @@ def _build_pandoc_base_cmd(doc_path: Path) -> tuple[list[str], str]:
     number_sections = re.search(r"^number-sections:\s*true", md_text, re.MULTILINE) is not None
 
     # Load external LaTeX macros file if specified in frontmatter
-    macros_match = re.search(r"^macros:\s*['\"]?(.+?)['\"]?\s*$", md_text, re.MULTILINE)
-    if macros_match:
-        macros_path = doc_path.parent / macros_match.group(1).strip()
-        if macros_path.is_file():
-            macros_content = macros_path.read_text(encoding="utf-8")
-            # Strip LaTeX line comments: pandoc-markdown has no % comment
-            # syntax, so otherwise they render as literal text.
-            macros_content = re.sub(r"(?<!\\)%.*", "", macros_content)
-            fm_end = re.search(
-                r"\A---\s*\n.*?^(---|\.\.\.)\s*$", md_text, re.MULTILINE | re.DOTALL
-            )
-            if fm_end:
-                pos = fm_end.end()
-                md_text = md_text[:pos] + "\n" + macros_content + "\n" + md_text[pos:]
+    md_text = _inject_macros(md_text, doc_path)
 
     cmd = ["pandoc"]
     if _HAS_CROSSREF:
@@ -334,41 +386,59 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str,
             "Quarto is not installed. Install from https://quarto.org/docs/get-started/"
         )
 
-    out_file = doc_path.with_suffix(".html")
-    cmd = [
-        quarto,
-        "render",
-        str(doc_path.resolve()),
-        "--to",
-        "html",
-    ]
-    if use_defaults:
-        cmd += [
-            "--metadata-file",
-            str(Path(__file__).parent / "data" / "quarto-defaults.yml"),
+    # If frontmatter declares `macros:`, render a temp copy with the macro
+    # definitions spliced into the body (Quarto's Pandoc expands them in math).
+    tmp_src = _write_macro_injected_source(doc_path)
+    render_path = tmp_src or doc_path
+    try:
+        out_file = render_path.with_suffix(".html")
+        cmd = [
+            quarto,
+            "render",
+            str(render_path.resolve()),
+            "--to",
+            "html",
         ]
-    else:
-        # Ensure MathJax even without scholia defaults
-        cmd += ["-M", "html-math-method:mathjax"]
-    env = {**os.environ}
-    py = _find_quarto_python(doc_path)
-    if py:
-        env["QUARTO_PYTHON"] = py
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=str(doc_path.parent),
-        timeout=120,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"quarto render failed: {result.stderr}")
+        if use_defaults:
+            cmd += [
+                "--metadata-file",
+                str(Path(__file__).parent / "data" / "quarto-defaults.yml"),
+            ]
+        else:
+            # Ensure MathJax even without scholia defaults
+            cmd += ["-M", "html-math-method:mathjax"]
+        env = {**os.environ}
+        py = _find_quarto_python(doc_path)
+        if py:
+            env["QUARTO_PYTHON"] = py
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(doc_path.parent),
+            timeout=120,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"quarto render failed: {result.stderr}")
 
-    html = out_file.read_text(encoding="utf-8")
-    html = _rewrite_quarto_assets(html, doc_path.stem, doc_path.parent.resolve())
+        html = out_file.read_text(encoding="utf-8")
+        html = _rewrite_quarto_assets(html, render_path.stem, doc_path.parent.resolve())
 
-    return html, result.stderr
+        if tmp_src is not None:
+            # Quarto names supporting files after the (temp) input stem; move
+            # them to the canonical <doc-stem>_files/ the assets route serves.
+            src_files = render_path.with_name(render_path.stem + "_files")
+            dst_files = doc_path.with_name(doc_path.stem + "_files")
+            if src_files.is_dir():
+                if dst_files.exists():
+                    shutil.rmtree(dst_files)
+                src_files.rename(dst_files)
+
+        return html, result.stderr
+    finally:
+        if tmp_src is not None:
+            _cleanup_quarto_temp(tmp_src, keep_files_dir=True)
 
 
 async def render_doc(
@@ -472,36 +542,44 @@ def _render_quarto_export_sync(doc_path: Path, fmt: str) -> bytes:
             "Quarto is not installed. Install from https://quarto.org/docs/get-started/"
         )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out_name = f"output.{fmt}"
-        cmd = [
-            quarto,
-            "render",
-            str(doc_path.resolve()),
-            "--to",
-            fmt,
-            "--output",
-            out_name,
-            "--output-dir",
-            tmp,
-        ]
-        env = {**os.environ}
-        py = _find_quarto_python(doc_path)
-        if py:
-            env["QUARTO_PYTHON"] = py
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=str(doc_path.parent),
-            timeout=120,
-        )
-        if result.returncode != 0:
-            raise subprocess.CalledProcessError(
-                result.returncode, cmd, output=result.stdout, stderr=result.stderr
+    # Honour `macros:` frontmatter by rendering a temp copy with the macro
+    # definitions spliced into the body (parity with the Pandoc export path).
+    tmp_src = _write_macro_injected_source(doc_path)
+    render_path = tmp_src or doc_path
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_name = f"output.{fmt}"
+            cmd = [
+                quarto,
+                "render",
+                str(render_path.resolve()),
+                "--to",
+                fmt,
+                "--output",
+                out_name,
+                "--output-dir",
+                tmp,
+            ]
+            env = {**os.environ}
+            py = _find_quarto_python(doc_path)
+            if py:
+                env["QUARTO_PYTHON"] = py
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                env=env,
+                cwd=str(doc_path.parent),
+                timeout=120,
             )
-        return Path(tmp, out_name).read_bytes()
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    result.returncode, cmd, output=result.stdout, stderr=result.stderr
+                )
+            return Path(tmp, out_name).read_bytes()
+    finally:
+        if tmp_src is not None:
+            _cleanup_quarto_temp(tmp_src)
 
 
 async def render_export(

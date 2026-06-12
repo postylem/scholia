@@ -189,6 +189,57 @@ def test_render_quarto_sync_rewrites_static_image(tmp_path):
     assert 'src="images/pic.png"' not in html
 
 
+@pytest.mark.skipif(not shutil.which("quarto"), reason="quarto not installed")
+def test_render_quarto_sync_applies_macros(tmp_path):
+    """macros: frontmatter expands LaTeX macros in a Quarto document's math.
+
+    Pandoc (used under the hood by Quarto) expands ``\\newcommand`` definitions
+    placed in the body at parse time, so the macro must resolve in the math —
+    the unexpanded command must not survive, and the temp file/_files
+    byproducts of the macro injection must be cleaned up."""
+    from scholia.server import _render_quarto_sync
+
+    (tmp_path / "macros.tex").write_text(
+        r"\newcommand{\KL}[2]{D_{\mathrm{KL}}\!\left(#1 \,\|\, #2\right)}" + "\n"
+    )
+    doc = tmp_path / "doc.qmd"
+    doc.write_text(
+        "---\ntitle: Q\nformat: html\nmacros: macros.tex\n---\n\n"
+        "The divergence $\\KL{p}{q}$ appears here.\n"
+    )
+    html, _stderr = _render_quarto_sync(doc, use_defaults=False)
+    # Macro expanded server-side; the undefined command must not survive.
+    assert "D_{\\mathrm{KL}}" in html
+    assert "\\KL{p}{q}" not in html
+    # No literal definition leaked into the body.
+    assert "newcommand" not in html
+    # Temp render byproducts cleaned up (iterdir, not glob — temp is a dotfile);
+    # original source untouched.
+    assert not [p for p in tmp_path.iterdir() if "scholia-macros" in p.name]
+    assert "macros: macros.tex" in doc.read_text()
+
+
+@pytest.mark.skipif(not shutil.which("quarto"), reason="quarto not installed")
+def test_render_quarto_export_sync_applies_macros(tmp_path):
+    """macros: frontmatter expands LaTeX macros when exporting a Quarto doc."""
+    from scholia.server import _render_quarto_export_sync
+
+    (tmp_path / "macros.tex").write_text(
+        r"\newcommand{\KL}[2]{D_{\mathrm{KL}}\!\left(#1 \,\|\, #2\right)}" + "\n"
+    )
+    doc = tmp_path / "doc.qmd"
+    doc.write_text(
+        "---\ntitle: Q\nformat: html\nmacros: macros.tex\n---\n\n"
+        "The divergence $\\KL{p}{q}$ appears here.\n"
+    )
+    out = _render_quarto_export_sync(doc, "html").decode()
+    assert "D_{\\mathrm{KL}}" in out
+    assert "\\KL{p}{q}" not in out
+    # Temp render byproducts cleaned up; original source untouched.
+    assert not [p for p in tmp_path.iterdir() if "scholia-macros" in p.name]
+    assert "macros: macros.tex" in doc.read_text()
+
+
 # ── _build_pandoc_base_cmd tests ──────────────────────
 
 
@@ -246,6 +297,34 @@ def test_build_pandoc_base_cmd_macros_strips_latex_comments(tmp_path):
     assert r"\newcommand{\vocab}{\Sigma}" in md_text
     # Escaped percent (\%) must be preserved as a literal, not treated as comment.
     assert r"\newcommand{\pct}{10\%}" in md_text
+
+
+# ── _inject_macros (shared by Pandoc + Quarto paths) ──
+
+
+def test_inject_macros_splices_into_body_after_frontmatter(tmp_path):
+    """macros: frontmatter splices macro content into the body, right after
+    the YAML frontmatter — works regardless of file extension (.md or .qmd)."""
+    from scholia.server import _inject_macros
+
+    macros = tmp_path / "macros.tex"
+    macros.write_text(r"\newcommand{\foo}{bar}")
+    doc = tmp_path / "doc.qmd"
+    doc.write_text("---\ntitle: T\nmacros: macros.tex\n---\n\nHello\n")
+    out = _inject_macros(doc.read_text(), doc)
+    assert r"\newcommand{\foo}{bar}" in out
+    # spliced after the frontmatter and before the body text
+    assert out.index("title: T") < out.index(r"\newcommand{\foo}{bar}") < out.index("Hello")
+
+
+def test_inject_macros_noop_without_macros_key(tmp_path):
+    """No macros: key → text returned unchanged."""
+    from scholia.server import _inject_macros
+
+    doc = tmp_path / "doc.qmd"
+    text = "---\ntitle: T\n---\n\nHello\n"
+    doc.write_text(text)
+    assert _inject_macros(text, doc) == text
 
 
 @pytest.fixture

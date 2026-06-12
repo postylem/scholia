@@ -142,11 +142,13 @@ where `macros.sty` contains standard `\newcommand` definitions:
 \newcommand{\KL}[2]{D_{\mathrm{KL}}\!\left(#1 \,\|\, #2\right)}
 ```
 
-Pandoc expands these at parse time, so the same `.sty` file can be shared with a LaTeX/PDF workflow. To render the same document with plain Pandoc (outside scholia), pass the macros file as an additional input:
+This works the same way for plain markdown (`.md`) and Quarto (`.qmd`/`.rmd`) documents, in both the live preview and exports — Pandoc expands the macros at parse time, so the same `.sty` file can be shared with a LaTeX/PDF workflow. To render the same document with plain Pandoc (outside scholia), pass the macros file as an additional input:
 
 ```bash
 pandoc macros.sty document.md --katex -o output.html
 ```
+
+(In Quarto you can alternatively `{{< include macros.sty >}}` in the body, but the `macros:` key above is preferred — it keeps the definitions out of the rendered text and works identically across formats.)
 
 ## For agents
 
