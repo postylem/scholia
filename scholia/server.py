@@ -182,29 +182,39 @@ def _write_macro_injected_source(doc_path: Path) -> Path | None:
     The Quarto path can't pipe markdown through stdin the way Pandoc does, and
     Quarto resolves relative paths, ``{{< include >}}`` shortcodes and
     bibliographies against the source file's own directory — so the temp file
-    is written alongside the original (hidden, ``.``-prefixed) rather than in a
-    scratch directory. Returns the temp path, or ``None`` when the document
-    declares no ``macros:`` key (caller renders the original directly). Pair
-    every non-None return with :func:`_cleanup_quarto_temp`.
+    is written alongside the original rather than in a scratch directory.
+    Returns the temp path, or ``None`` when the document declares no ``macros:``
+    key (caller renders the original directly). Pair every non-None return with
+    :func:`_cleanup_quarto_temp`.
+
+    The name is deliberately *not* dot-prefixed: PDF export drives LaTeX with
+    ``openout_any=p``, which refuses to write .log/.aux/.pdf for a hidden
+    basename. The directory watcher only re-renders on an exact doc-path match,
+    so a visible (but short-lived) sibling causes no spurious reloads.
     """
     text = doc_path.read_text(encoding="utf-8")
     injected = _inject_macros(text, doc_path)
     if injected == text:
         return None
-    tmp = doc_path.with_name(f".{doc_path.stem}.scholia-macros{doc_path.suffix}")
+    tmp = doc_path.with_name(f"{doc_path.stem}.scholia-macros{doc_path.suffix}")
     tmp.write_text(injected, encoding="utf-8")
     return tmp
 
 
 def _cleanup_quarto_temp(tmp: Path, keep_files_dir: bool = False) -> None:
-    """Remove a temp render source and Quarto's byproducts of rendering it.
+    """Remove a temp render source and everything Quarto/LaTeX wrote beside it.
+
+    Quarto leaves byproducts next to the source — the intermediate ``.tex`` for
+    PDF, plus LaTeX's ``.aux``/``.log`` and the rendered ``.html`` — so remove
+    every ``<tmp-stem>.*`` sibling, not just the source itself.
 
     ``keep_files_dir`` leaves ``<tmp-stem>_files/`` alone — the live HTML
     render relocates it to the canonical ``<doc-stem>_files/`` the
     /quarto-assets/ route serves, so cleanup must not delete it.
     """
-    tmp.unlink(missing_ok=True)
-    tmp.with_suffix(".html").unlink(missing_ok=True)
+    for sibling in tmp.parent.glob(tmp.stem + ".*"):
+        if sibling.is_file():
+            sibling.unlink(missing_ok=True)
     if not keep_files_dir:
         files_dir = tmp.with_name(tmp.stem + "_files")
         if files_dir.is_dir():

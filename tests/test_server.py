@@ -213,8 +213,7 @@ def test_render_quarto_sync_applies_macros(tmp_path):
     assert "\\KL{p}{q}" not in html
     # No literal definition leaked into the body.
     assert "newcommand" not in html
-    # Temp render byproducts cleaned up (iterdir, not glob — temp is a dotfile);
-    # original source untouched.
+    # Temp render byproducts cleaned up; original source untouched.
     assert not [p for p in tmp_path.iterdir() if "scholia-macros" in p.name]
     assert "macros: macros.tex" in doc.read_text()
 
@@ -325,6 +324,24 @@ def test_inject_macros_noop_without_macros_key(tmp_path):
     text = "---\ntitle: T\n---\n\nHello\n"
     doc.write_text(text)
     assert _inject_macros(text, doc) == text
+
+
+def test_macro_injected_source_is_not_a_dotfile(tmp_path):
+    """The temp render source must not be hidden: LaTeX runs with
+    ``openout_any=p`` and refuses to write .log/.aux/.pdf for a dot-prefixed
+    basename, which breaks Quarto PDF export."""
+    from scholia.server import _write_macro_injected_source
+
+    (tmp_path / "macros.tex").write_text(r"\newcommand{\foo}{bar}")
+    doc = tmp_path / "doc.qmd"
+    doc.write_text("---\ntitle: T\nmacros: macros.tex\n---\n\nHello\n")
+    tmp = _write_macro_injected_source(doc)
+    try:
+        assert tmp is not None
+        assert not tmp.name.startswith("."), f"temp source is hidden: {tmp.name}"
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 @pytest.fixture
