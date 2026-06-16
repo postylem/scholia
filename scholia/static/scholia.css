@@ -2082,3 +2082,11 @@ body.scholia-dark .scholia-code-copy {
 .scholia-send-ai {
   color: var(--s-ai);
 }
+/* Sent / unavailable state: muted and non-interactive, so it's obvious the
+   click registered and the comment was already handed off. */
+.scholia-send-ai.scholia-sent-ai,
+.scholia-review-banner-actions button:disabled {
+  color: var(--s-text-dim);
+  opacity: 0.7;
+  cursor: default;
+}

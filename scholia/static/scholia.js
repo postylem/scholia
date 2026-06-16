@@ -128,6 +128,7 @@
   var showResolved = false;
   var showRead = true;
   var activeReviews = [];       // [{session_id,status,instruction}] — AI "send to review" sessions
+  var aiSentIds = new Set();    // comment ids already sent to the AI this review (durable across re-renders)
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
   var sidebarHidden = localStorage.getItem('scholia-sidebar-hidden') === 'true';
   var _sidebarTransitionHandler = null;
@@ -521,6 +522,7 @@
         }
       } else if (msg.type === 'review_state') {
         activeReviews = msg.sessions || [];
+        if (!activeReviews.length) aiSentIds.clear();  // reset sent marks when the review ends
         // When the assistant starts waiting, make sure the sidebar is visible
         // so the human sees the banner and the per-comment Send buttons.
         if (activeReviews.length && sidebarHidden) {
@@ -1873,12 +1875,17 @@
   function submitReview(commentIds, final) {
     var sid = primaryReviewSession();
     if (!sid) return;
+    (commentIds || []).forEach(function (id) { aiSentIds.add(id); });
     wsSend({
       type: 'review_submit',
       session_id: sid,
       comment_ids: commentIds || [],
       final: !!final
     });
+  }
+
+  function unsentOpenIds() {
+    return openCommentIds().filter(function (id) { return !aiSentIds.has(id); });
   }
 
   function buildReviewBanner() {
@@ -1913,21 +1920,23 @@
       var actions = document.createElement('div');
       actions.className = 'scholia-review-banner-actions';
 
-      var openIds = openCommentIds();
+      var unsent = unsentOpenIds();
 
       var sendBtn = document.createElement('button');
       sendBtn.className = 'scholia-btn-primary';
-      sendBtn.textContent = 'Send open comments';
-      sendBtn.title = 'Ask the assistant to address all open comments';
-      sendBtn.disabled = openIds.length === 0;
-      sendBtn.addEventListener('click', function () { submitReview(openCommentIds(), false); });
+      sendBtn.textContent = unsent.length
+        ? ('Send ' + unsent.length + ' comment' + (unsent.length === 1 ? '' : 's') + ' to AI')
+        : '✓ All sent';
+      sendBtn.title = 'Send open comments not yet sent to the assistant';
+      sendBtn.disabled = unsent.length === 0;
+      sendBtn.addEventListener('click', function () { submitReview(unsentOpenIds(), false); });
       actions.appendChild(sendBtn);
 
       var finishBtn = document.createElement('button');
       finishBtn.className = 'scholia-btn-ghost';
       finishBtn.textContent = 'Send & finish';
-      finishBtn.title = 'Send open comments and end the review (the assistant stops waiting)';
-      finishBtn.addEventListener('click', function () { submitReview(openCommentIds(), true); });
+      finishBtn.title = 'Send any remaining open comments and end the review (the assistant stops waiting)';
+      finishBtn.addEventListener('click', function () { submitReview(unsentOpenIds(), true); });
       actions.appendChild(finishBtn);
 
       var cancelBtn = document.createElement('button');
@@ -2392,18 +2401,27 @@
     // "Send to AI": ask the waiting assistant to address just this comment.
     // Only shown while a review session is active and this thread is open.
     if (reviewIsActive() && status === 'open') {
+      var alreadySent = aiSentIds.has(ann.id);
       var sendAiBtn = document.createElement('button');
-      sendAiBtn.className = 'scholia-btn-ghost scholia-send-ai';
-      sendAiBtn.textContent = 'Send to AI';
-      sendAiBtn.title = 'Ask the waiting AI assistant to address this comment';
-      sendAiBtn.addEventListener('click', (function (theAnnId, theBtn) {
-        return function (e) {
-          e.stopPropagation();
-          submitReview([theAnnId], false);
-          theBtn.textContent = 'Sent ✓';
-          theBtn.disabled = true;
-        };
-      })(ann.id, sendAiBtn));
+      sendAiBtn.className = 'scholia-btn-ghost scholia-send-ai' + (alreadySent ? ' scholia-sent-ai' : '');
+      sendAiBtn.textContent = alreadySent ? '✓ Sent to AI' : 'Send to AI';
+      sendAiBtn.disabled = alreadySent;
+      sendAiBtn.title = alreadySent
+        ? 'Already sent to the assistant this round'
+        : 'Ask the waiting AI assistant to address this comment';
+      if (!alreadySent) {
+        sendAiBtn.addEventListener('click', (function (theAnnId, theBtn) {
+          return function (e) {
+            e.stopPropagation();
+            // Instant feedback now; the durable aiSentIds keeps it through the
+            // re-render that the server's review_state broadcast triggers.
+            theBtn.textContent = '✓ Sent to AI';
+            theBtn.disabled = true;
+            theBtn.classList.add('scholia-sent-ai');
+            submitReview([theAnnId], false);
+          };
+        })(ann.id, sendAiBtn));
+      }
       replyBtnRow.appendChild(sendAiBtn);
     }
 
