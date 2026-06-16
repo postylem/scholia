@@ -1906,7 +1906,10 @@
       bar.appendChild(note);
     }
 
-    if (isWaiting) {
+    // Always render the actions (incl. Cancel) whenever a session is active —
+    // even while "working" — so the human is never stuck without an escape
+    // hatch if the assistant is slow to re-poll or has stopped.
+    if (activeReviews.length) {
       var actions = document.createElement('div');
       actions.className = 'scholia-review-banner-actions';
 
