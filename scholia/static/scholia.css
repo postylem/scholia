@@ -2103,3 +2103,30 @@ body.scholia-dark .scholia-code-copy {
   white-space: nowrap;
   font-family: var(--s-comment);
 }
+/* Always-visible toolbar pill: assistant connection / awaiting state. */
+.scholia-review-pill {
+  display: none;
+  align-items: center;
+  font-family: var(--s-comment);
+  font-size: 0.72em;
+  line-height: 1;
+  padding: 0.25em 0.65em;
+  margin: 0 0.4em;
+  border-radius: 999px;
+  border: 1px solid var(--s-ai);
+  color: var(--s-ai);
+  background: var(--s-accent-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scholia-review-pill.visible {
+  display: inline-flex;
+}
+/* Pulsing glow while we're actively waiting on the assistant. */
+.scholia-review-pill.awaiting {
+  animation: scholia-review-pulse 1.6s ease-in-out infinite;
+}
+@keyframes scholia-review-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 111, 165, 0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(74, 111, 165, 0); }
+}

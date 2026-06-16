@@ -420,6 +420,38 @@
     renderingBanner.classList.remove('visible');
   }
 
+  // ── Review status pill (always-visible in the sticky toolbar) ──
+  var reviewPill = document.createElement('span');
+  reviewPill.className = 'scholia-review-pill';
+  reviewPill.addEventListener('click', function () {
+    // Reveal the sidebar and scroll to the banner if it's hidden/scrolled away.
+    if (sidebarHidden) {
+      sidebarHidden = false;
+      localStorage.setItem('scholia-sidebar-hidden', 'false');
+      document.body.classList.remove('scholia-sidebar-hidden');
+      sidebarEl.style.display = '';
+      resizeHandle.style.display = '';
+      renderToolbar();
+      scheduleRender(true);
+    }
+    sidebarEl.scrollTop = 0;
+  });
+
+  function updateReviewPill() {
+    if (!activeReviews.length) {
+      reviewPill.classList.remove('visible', 'awaiting');
+      return;
+    }
+    reviewPill.classList.add('visible');
+    // "awaiting" = comment(s) sent but not yet answered by the assistant.
+    var awaiting = aiSentIds.size > 0;
+    reviewPill.classList.toggle('awaiting', awaiting);
+    reviewPill.textContent = awaiting ? '🤖 AI working…' : '🤖 AI connected';
+    reviewPill.title = awaiting
+      ? aiSentIds.size + ' comment(s) sent — waiting for the assistant to respond'
+      : 'An AI assistant is connected and waiting for your review';
+  }
+
   // ── Render error overlay (persistent, minimizable) ──
   var renderErrorOverlay = document.createElement('div');
   renderErrorOverlay.className = 'scholia-render-error';
@@ -509,6 +541,7 @@
         }
         comments = msg.comments;
         pruneAiSent();  // clear "awaiting AI" marks for threads the assistant just answered
+        updateReviewPill();
         scheduleRender();
         // Refresh overlay if open
         if (activeOverlay) {
@@ -524,6 +557,7 @@
       } else if (msg.type === 'review_state') {
         activeReviews = msg.sessions || [];
         if (!activeReviews.length) aiSentIds.clear();  // reset sent marks when the review ends
+        updateReviewPill();
         // When the assistant starts waiting, make sure the sidebar is visible
         // so the human sees the banner and the per-comment Send buttons.
         if (activeReviews.length && sidebarHidden) {
@@ -846,6 +880,8 @@
     toolbarEl.appendChild(brandPath);
     toolbarEl.appendChild(disconnectBanner);
     toolbarEl.appendChild(renderingBanner);
+    toolbarEl.appendChild(reviewPill);
+    updateReviewPill();
     shadow.appendChild(renderErrorOverlay);
 
     // Contents (TOC) dropdown — before Options
@@ -1877,6 +1913,7 @@
     var sid = primaryReviewSession();
     if (!sid) return;
     (commentIds || []).forEach(function (id) { aiSentIds.add(id); });
+    updateReviewPill();
     wsSend({
       type: 'review_submit',
       session_id: sid,
@@ -1906,21 +1943,19 @@
   }
 
   function buildReviewBanner() {
-    var waiting = [];
-    for (var i = 0; i < activeReviews.length; i++) {
-      if (activeReviews[i].status === 'waiting') waiting.push(activeReviews[i]);
-    }
-    var isWaiting = waiting.length > 0;
-    var primary = waiting[0] || activeReviews[0];
+    // "awaiting" = you've sent comment(s) the assistant hasn't answered yet.
+    // Otherwise it's simply connected and ready — not "working".
+    var awaiting = aiSentIds.size > 0;
+    var primary = activeReviews[0];
 
     var bar = document.createElement('div');
-    bar.className = 'scholia-review-banner' + (isWaiting ? ' waiting' : ' working');
+    bar.className = 'scholia-review-banner' + (awaiting ? ' awaiting' : ' connected');
 
     var title = document.createElement('div');
     title.className = 'scholia-review-banner-title';
-    title.textContent = isWaiting
-      ? '🤖 AI assistant is waiting for your review'
-      : '🤖 Assistant is working…';
+    title.textContent = awaiting
+      ? '🤖 Awaiting the assistant…'
+      : '🤖 Assistant connected — ready for your review';
     bar.appendChild(title);
 
     if (primary && primary.instruction) {
