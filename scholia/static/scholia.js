@@ -127,6 +127,7 @@
   var orphanIds = new Set();
   var showResolved = false;
   var showRead = true;
+  var activeReviews = [];       // [{session_id,status,instruction}] — AI "send to review" sessions
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
   var sidebarHidden = localStorage.getItem('scholia-sidebar-hidden') === 'true';
   var _sidebarTransitionHandler = null;
@@ -518,6 +519,19 @@
             }
           }
         }
+      } else if (msg.type === 'review_state') {
+        activeReviews = msg.sessions || [];
+        // When the assistant starts waiting, make sure the sidebar is visible
+        // so the human sees the banner and the per-comment Send buttons.
+        if (activeReviews.length && sidebarHidden) {
+          sidebarHidden = false;
+          localStorage.setItem('scholia-sidebar-hidden', 'false');
+          document.body.classList.remove('scholia-sidebar-hidden');
+          sidebarEl.style.display = '';
+          resizeHandle.style.display = '';
+          renderToolbar();
+        }
+        scheduleRender(true);  // re-render sidebar; no doc change so skip re-anchoring
       } else if (msg.type === 'rendered_markdown') {
         var cb = pandocCallbacks.get(msg.request_id);
         if (cb) {
@@ -1833,6 +1847,108 @@
     positionCards();
   }
 
+  // ── Review handshake ("Send to AI") ─────────────────
+
+  function reviewIsActive() {
+    return activeReviews.length > 0;
+  }
+
+  // The session to target for a submit: prefer one that is waiting (the agent
+  // is parked, ready), else the most recent active one.
+  function primaryReviewSession() {
+    for (var i = 0; i < activeReviews.length; i++) {
+      if (activeReviews[i].status === 'waiting') return activeReviews[i].session_id;
+    }
+    return activeReviews.length ? activeReviews[activeReviews.length - 1].session_id : null;
+  }
+
+  function openCommentIds() {
+    var ids = [];
+    for (var i = 0; i < comments.length; i++) {
+      if ((comments[i]['scholia:status'] || 'open') === 'open') ids.push(comments[i].id);
+    }
+    return ids;
+  }
+
+  function submitReview(commentIds, final) {
+    var sid = primaryReviewSession();
+    if (!sid) return;
+    wsSend({
+      type: 'review_submit',
+      session_id: sid,
+      comment_ids: commentIds || [],
+      final: !!final
+    });
+  }
+
+  function buildReviewBanner() {
+    var waiting = [];
+    for (var i = 0; i < activeReviews.length; i++) {
+      if (activeReviews[i].status === 'waiting') waiting.push(activeReviews[i]);
+    }
+    var isWaiting = waiting.length > 0;
+    var primary = waiting[0] || activeReviews[0];
+
+    var bar = document.createElement('div');
+    bar.className = 'scholia-review-banner' + (isWaiting ? ' waiting' : ' working');
+
+    var title = document.createElement('div');
+    title.className = 'scholia-review-banner-title';
+    title.textContent = isWaiting
+      ? '🤖 AI assistant is waiting for your review'
+      : '🤖 Assistant is working…';
+    bar.appendChild(title);
+
+    if (primary && primary.instruction) {
+      var note = document.createElement('div');
+      note.className = 'scholia-review-banner-note';
+      note.textContent = 'Asked: ' + primary.instruction;
+      bar.appendChild(note);
+    }
+
+    if (isWaiting) {
+      var actions = document.createElement('div');
+      actions.className = 'scholia-review-banner-actions';
+
+      var openIds = openCommentIds();
+
+      var sendBtn = document.createElement('button');
+      sendBtn.className = 'scholia-btn-primary';
+      sendBtn.textContent = 'Send open comments';
+      sendBtn.title = 'Ask the assistant to address all open comments';
+      sendBtn.disabled = openIds.length === 0;
+      sendBtn.addEventListener('click', function () { submitReview(openCommentIds(), false); });
+      actions.appendChild(sendBtn);
+
+      var finishBtn = document.createElement('button');
+      finishBtn.className = 'scholia-btn-ghost';
+      finishBtn.textContent = 'Send & finish';
+      finishBtn.title = 'Send open comments and end the review (the assistant stops waiting)';
+      finishBtn.addEventListener('click', function () { submitReview(openCommentIds(), true); });
+      actions.appendChild(finishBtn);
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'scholia-btn-ghost';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.title = 'Stop the assistant waiting without sending anything';
+      cancelBtn.style.marginLeft = 'auto';
+      cancelBtn.addEventListener('click', function () {
+        var sid = primaryReviewSession();
+        if (sid) wsSend({ type: 'review_cancel', session_id: sid });
+      });
+      actions.appendChild(cancelBtn);
+
+      bar.appendChild(actions);
+
+      var hint = document.createElement('div');
+      hint.className = 'scholia-review-banner-hint';
+      hint.textContent = 'Or use “Send to AI” on an individual comment below.';
+      bar.appendChild(hint);
+    }
+
+    return bar;
+  }
+
   // ── Sidebar ────────────────────────────────────────
 
   function renderSidebar() {
@@ -1844,6 +1960,11 @@
 
     if (existingForm) {
       sidebarEl.appendChild(existingForm);
+    }
+
+    // "AI is waiting for your review" banner (only when a session is active)
+    if (reviewIsActive()) {
+      sidebarEl.appendChild(buildReviewBanner());
     }
 
     // Filter comments
@@ -2263,6 +2384,24 @@
         wsSend({ type: 'unresolve', annotation_id: ann.id });
       });
       replyBtnRow.appendChild(unresolveBtn);
+    }
+
+    // "Send to AI": ask the waiting assistant to address just this comment.
+    // Only shown while a review session is active and this thread is open.
+    if (reviewIsActive() && status === 'open') {
+      var sendAiBtn = document.createElement('button');
+      sendAiBtn.className = 'scholia-btn-ghost scholia-send-ai';
+      sendAiBtn.textContent = 'Send to AI';
+      sendAiBtn.title = 'Ask the waiting AI assistant to address this comment';
+      sendAiBtn.addEventListener('click', (function (theAnnId, theBtn) {
+        return function (e) {
+          e.stopPropagation();
+          submitReview([theAnnId], false);
+          theBtn.textContent = 'Sent ✓';
+          theBtn.disabled = true;
+        };
+      })(ann.id, sendAiBtn));
+      replyBtnRow.appendChild(sendAiBtn);
     }
 
     replyRow.appendChild(replyBtnRow);

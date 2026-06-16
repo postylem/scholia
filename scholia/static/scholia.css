@@ -2035,3 +2035,50 @@ body.scholia-dark .scholia-code-copy {
 .scholia-save-as-btn-primary:hover {
   opacity: 0.85;
 }
+
+/* ── "AI is waiting for your review" banner ─────────────── */
+.scholia-review-banner {
+  margin: 0 0 0.7em;
+  padding: 0.6em 0.7em;
+  border-radius: var(--s-radius);
+  border: 1px solid var(--s-ai);
+  background: var(--s-accent-dim);
+  font-family: var(--s-comment);
+}
+.scholia-review-banner.working {
+  border-color: var(--s-border);
+  opacity: 0.85;
+}
+.scholia-review-banner-title {
+  font-weight: 600;
+  font-size: 0.9em;
+  color: var(--s-text);
+}
+.scholia-review-banner-note {
+  font-size: 0.82em;
+  color: var(--s-text-dim);
+  margin-top: 0.3em;
+  font-style: italic;
+}
+.scholia-review-banner-actions {
+  display: flex;
+  gap: 0.4em;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.55em;
+}
+.scholia-review-banner-actions button {
+  padding: 0.25em 0.7em;
+  font-size: 0.82em;
+  border-radius: var(--s-radius);
+  cursor: pointer;
+}
+.scholia-review-banner-hint {
+  font-size: 0.76em;
+  color: var(--s-text-dim);
+  margin-top: 0.45em;
+}
+/* Per-comment send button picks up the AI accent color */
+.scholia-send-ai {
+  color: var(--s-ai);
+}
