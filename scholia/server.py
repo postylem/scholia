@@ -1589,11 +1589,30 @@ class ScholiaServer:
             self.reviews.remove(session_id)
             await self._broadcast_review_state(session.doc_path)
             return web.json_response({"status": "aborted", "reason": payload.get("reason", "")})
+        # Coalesce any batches already queued behind this one (a burst of
+        # per-comment "Send to AI" clicks) so the agent receives them together
+        # rather than one-per-poll.
+        comment_ids = list(payload.get("comment_ids", []))
+        instruction = payload.get("instruction", "")
+        for extra in session.drain_pending():
+            if extra.get("action") == "abort":
+                continue
+            for cid in extra.get("comment_ids", []):
+                if cid not in comment_ids:
+                    comment_ids.append(cid)
+            if extra.get("instruction"):
+                instruction = (
+                    f"{instruction}; {extra['instruction']}"
+                    if instruction
+                    else extra["instruction"]
+                )
+            if extra.get("action") == "finish":
+                action = "finish"
         resp = {
             "status": "submitted",
             "action": action,
-            "comment_ids": payload.get("comment_ids", []),
-            "instruction": payload.get("instruction", ""),
+            "comment_ids": comment_ids,
+            "instruction": instruction,
         }
         if action == "finish":
             self.reviews.remove(session_id)

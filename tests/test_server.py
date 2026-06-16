@@ -1110,6 +1110,27 @@ async def test_review_cancel_aborts_wait(client, tmp_doc):
 
 
 @pytest.mark.asyncio
+async def test_review_wait_coalesces_queued_batches(client, tmp_doc):
+    """A burst of per-comment sends reaches the agent in one batch, not one per poll."""
+    r = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid = (await r.json())["session_id"]
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    await ws.send_json(
+        {"type": "review_submit", "session_id": sid, "comment_ids": ["a"], "final": False}
+    )
+    await ws.send_json(
+        {"type": "review_submit", "session_id": sid, "comment_ids": ["b"], "final": False}
+    )
+    await asyncio.sleep(0.1)  # let both submissions queue
+    resp = await client.get("/api/review/wait", params={"session_id": sid, "timeout": "2"})
+    data = await resp.json()
+    await ws.close()
+    assert data["status"] == "submitted"
+    assert set(data["comment_ids"]) == {"a", "b"}
+
+
+@pytest.mark.asyncio
 async def test_watch_receives_review_state(client, tmp_doc):
     """A browser connecting mid-review is told about the active session."""
     r = await client.post(

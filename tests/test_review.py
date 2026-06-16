@@ -115,3 +115,15 @@ def test_mark_waiting_transition(tmp_path):
     assert s.mark_waiting() is True
     assert s.status == "waiting"
     assert s.mark_waiting() is False
+
+
+@pytest.mark.asyncio
+async def test_drain_pending_returns_remaining_batches(tmp_path):
+    s = ReviewSession(tmp_path / "doc.md")
+    s.submit(["a"])
+    s.submit(["b"])
+    first = await s.wait(timeout=0.05)
+    rest = s.drain_pending()
+    assert first["comment_ids"] == ["a"]
+    assert [r["comment_ids"] for r in rest] == [["b"]]
+    assert s.drain_pending() == []  # now empty

@@ -118,6 +118,17 @@ class ReviewSession:
         self.status = "aborted"
         return payload
 
+    def drain_pending(self) -> list[dict]:
+        """Pop and return all buffered submissions still in the queue.
+
+        Used to coalesce a burst of per-comment "Send to AI" clicks into a
+        single delivery, so the agent sees them together instead of one batch
+        per poll (with later ones stranded if it stops polling).
+        """
+        items = list(self._pending)
+        self._pending.clear()
+        return items
+
 
 class ReviewRegistry:
     """Tracks live review sessions for a server, keyed by session id."""
