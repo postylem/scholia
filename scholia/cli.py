@@ -817,6 +817,52 @@ def cmd_skill_init(args):
     _offer_gitignore()
 
 
+# ── MCP server ──────────────────────────────────────────
+
+
+def _mcp_install():
+    """Register the scholia MCP server with Claude Code (user scope)."""
+    import shutil
+    import subprocess
+
+    scholia_exe = shutil.which("scholia") or sys.argv[0]
+    cmd = ["claude", "mcp", "add", "--scope", "user", "scholia", "--", scholia_exe, "mcp"]
+    if shutil.which("claude") is None:
+        print(
+            "Claude Code CLI ('claude') not found. Register the server manually with:\n  "
+            + " ".join(cmd),
+            file=sys.stderr,
+        )
+        return
+    result = subprocess.run(cmd)
+    if result.returncode == 0:
+        print("Registered the scholia MCP server with Claude Code (user scope).")
+        print("Start a new Claude Code session (or run /mcp) to pick it up.")
+    else:
+        print(
+            "Registration command failed; you can run it manually:\n  " + " ".join(cmd),
+            file=sys.stderr,
+        )
+
+
+def cmd_mcp(args):
+    if getattr(args, "action", None) == "install":
+        _mcp_install()
+        return
+    try:
+        import mcp  # noqa: F401
+    except ImportError:
+        print(
+            "Error: the MCP server needs the optional 'mcp' package.\n"
+            "Install it with:  pip install 'scholia[mcp]'   (or: uv pip install mcp)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    from scholia.mcp_server import run
+
+    run()
+
+
 # ── Main ────────────────────────────────────────────────
 
 
@@ -1036,6 +1082,20 @@ def main():
     )
     p_skill.add_argument("--force", action="store_true", help="Overwrite existing file")
 
+    # mcp
+    p_mcp = sub.add_parser(
+        "mcp",
+        help="Run the MCP server so a waiting AI agent can receive your browser review "
+        "('scholia mcp install' registers it with Claude Code)",
+    )
+    p_mcp.add_argument(
+        "action",
+        nargs="?",
+        choices=["install"],
+        default=None,
+        help="'install' registers the server with Claude Code; omit to run the server (stdio)",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -1055,6 +1115,7 @@ def main():
         "export": cmd_export,
         "mv": cmd_mv,
         "rm": cmd_rm,
+        "mcp": cmd_mcp,
     }
 
     try:
