@@ -2090,3 +2090,16 @@ body.scholia-dark .scholia-code-copy {
   opacity: 0.7;
   cursor: default;
 }
+/* "Awaiting AI" header badge — a sent comment is pending with the assistant.
+   Stands alone (no card border) to avoid clashing with the ai-replied/unread
+   left-border states. */
+.scholia-awaiting-badge {
+  font-size: 0.7em;
+  color: var(--s-ai);
+  background: var(--s-accent-dim);
+  border: 1px solid var(--s-ai);
+  border-radius: 3px;
+  padding: 0.05em 0.4em;
+  white-space: nowrap;
+  font-family: var(--s-comment);
+}

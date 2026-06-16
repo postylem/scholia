@@ -508,6 +508,7 @@
           }
         }
         comments = msg.comments;
+        pruneAiSent();  // clear "awaiting AI" marks for threads the assistant just answered
         scheduleRender();
         // Refresh overlay if open
         if (activeOverlay) {
@@ -1888,6 +1889,22 @@
     return openCommentIds().filter(function (id) { return !aiSentIds.has(id); });
   }
 
+  // A comment stays "awaiting AI" (in aiSentIds) until the assistant replies
+  // (last message is Software) or the thread closes. Pruning here clears the
+  // header badge and re-enables the send button for a fresh follow-up.
+  function pruneAiSent() {
+    if (!aiSentIds.size) return;
+    var byId = {};
+    for (var i = 0; i < comments.length; i++) byId[comments[i].id] = comments[i];
+    aiSentIds.forEach(function (id) {
+      var c = byId[id];
+      if (!c || (c['scholia:status'] || 'open') !== 'open') { aiSentIds.delete(id); return; }
+      var bodies = c.body || [];
+      var last = bodies[bodies.length - 1];
+      if (last && last.creator && last.creator.type === 'Software') aiSentIds.delete(id);
+    });
+  }
+
   function buildReviewBanner() {
     var waiting = [];
     for (var i = 0; i < activeReviews.length; i++) {
@@ -2091,6 +2108,17 @@
       resolvedLabel.className = 'scholia-resolved-label';
       resolvedLabel.textContent = 'resolved';
       header.appendChild(resolvedLabel);
+    }
+
+    // "Awaiting AI" badge — shown in the (always-visible) header, so a sent
+    // comment reads as pending even while the card is collapsed.
+    if (aiSentIds.has(ann.id)) {
+      card.classList.add('scholia-awaiting-ai');
+      var awaitBadge = document.createElement('span');
+      awaitBadge.className = 'scholia-awaiting-badge';
+      awaitBadge.textContent = '⏳ awaiting AI';
+      awaitBadge.title = 'Sent to the AI assistant — waiting for a reply';
+      header.appendChild(awaitBadge);
     }
 
     // Message count
