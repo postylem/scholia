@@ -2171,7 +2171,7 @@
 
     // Pop-out button
     var popoutBtn = document.createElement('button');
-    popoutBtn.className = 'scholia-btn-popout';
+    popoutBtn.className = 'scholia-chip scholia-btn-popout';
     popoutBtn.innerHTML = '&#x2922;'; // ⤢
     popoutBtn.title = 'Pop out thread';
     popoutBtn.addEventListener('click', (function (theAnn) {
@@ -2220,6 +2220,13 @@
       if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
       meta.appendChild(timeSpan);
 
+      // Right-aligned cluster for the inline controls so they keep a stable
+      // position (see CSS: </> is forced rightmost regardless of which controls
+      // are present).
+      var metaActions = document.createElement('span');
+      metaActions.className = 'scholia-meta-actions';
+      meta.appendChild(metaActions);
+
       msgEl.appendChild(meta);
 
       var body = document.createElement('div');
@@ -2230,7 +2237,7 @@
 
       // Raw/rendered toggle button
       var toggleBtn = document.createElement('button');
-      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.className = 'scholia-chip scholia-btn-toggle-raw';
       toggleBtn.textContent = '</>';
       toggleBtn.title = 'Toggle raw markdown';
       toggleBtn.addEventListener('click', (function (theBody, theBtn) {
@@ -2250,12 +2257,12 @@
           }
         };
       })(body, toggleBtn));
-      meta.appendChild(toggleBtn);
+      metaActions.appendChild(toggleBtn);
 
       // Edit button on the very last body entry, only if it's the current user's message
       if (j === bodies.length - 1 && !isSoftware && msgCreator === creatorName) {
         var editBtn = document.createElement('button');
-        editBtn.className = 'scholia-btn-edit';
+        editBtn.className = 'scholia-chip scholia-btn-edit';
         editBtn.textContent = 'Edit';
         editBtn.addEventListener('click', (function (theBody, theAnn) {
           return function (e) {
@@ -2331,13 +2338,13 @@
             theBody.appendChild(btnRow);
           };
         })(body, ann));
-        meta.appendChild(editBtn);
+        metaActions.appendChild(editBtn);
       }
 
       // Last AI message: read/unread toggle label in upper-right
       if (j === lastAiIdx) {
         var readLabel = document.createElement('button');
-        readLabel.className = 'scholia-read-toggle';
+        readLabel.className = 'scholia-chip scholia-read-toggle';
         if (unread) {
           readLabel.classList.add('scholia-read-toggle-unread');
           readLabel.textContent = 'unread';
@@ -2359,7 +2366,7 @@
           };
         })(card, readLabel));
         // Insert into meta row (upper-right)
-        meta.appendChild(readLabel);
+        metaActions.appendChild(readLabel);
       }
 
       thread.appendChild(msgEl);
@@ -2652,6 +2659,10 @@
       if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
       meta.appendChild(timeSpan);
 
+      var metaActions = document.createElement('span');
+      metaActions.className = 'scholia-meta-actions';
+      meta.appendChild(metaActions);
+
       var bodyEl = document.createElement('div');
       bodyEl.className = 'scholia-message-body';
       bodyEl.dataset.raw = msg.value;
@@ -2659,7 +2670,7 @@
       overlayBodies.push(bodyEl);
 
       var toggleBtn = document.createElement('button');
-      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.className = 'scholia-chip scholia-btn-toggle-raw';
       toggleBtn.textContent = '</>';
       toggleBtn.title = 'Toggle raw markdown';
       toggleBtn.addEventListener('click', (function (theBody, theBtn) {
@@ -2684,7 +2695,7 @@
           }
         };
       })(bodyEl, toggleBtn));
-      meta.appendChild(toggleBtn);
+      metaActions.appendChild(toggleBtn);
 
       msgEl.appendChild(meta);
       msgEl.appendChild(bodyEl);
