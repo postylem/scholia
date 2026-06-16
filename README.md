@@ -124,6 +124,27 @@ If you've set up the agent skill, tell your agent to respond when you're ready:
 
 The agent will go through open comment threads, reply to each, and/or edit the document. Replies appear live in the sidebar.
 
+### Send to AI — live review loop (MCP)
+
+The flow above is terminal-driven: you tell the agent "check the scholia." With the optional MCP server you can flip the direction — the agent **waits in the browser** for your review, and you hand it comments with a button, without switching back to the terminal.
+
+Install the MCP extra and register the server with Claude Code:
+
+```bash
+pip install 'scholia[mcp]'    # or: uv pip install mcp
+scholia mcp install           # registers the server with Claude Code (user scope)
+```
+
+After the agent has written or revised a document you're viewing with scholia, it calls its `request_review` tool and parks itself. A banner appears in the sidebar — **🤖 AI assistant is waiting for your review**. Mark up the document, then use:
+
+- **Send to AI** on a single comment — hand off just that one,
+- **Send open comments** — hand off all open threads at once, or
+- **Send & finish** — send and let the agent stop waiting.
+
+The agent addresses them (replying and editing live), then waits for your next round until you finish. The agent and the browser rendezvous through the running `scholia view` server, so it works whether you or the agent started it.
+
+> The review-loop design (an agent that long-polls a server-held session the browser resolves) was inspired by [md-redline](https://github.com/dejuknow/md-redline).
+
 ### LaTeX macros
 
 If your document uses custom LaTeX macros, you can define them in an external file (e.g. `macros.sty`) and reference it in the YAML frontmatter:
@@ -164,6 +185,9 @@ scholia comment <doc.md> "anchor" "text"  Anchor to text or line:col-line:col
 scholia resolve <doc.md> <id>             Resolve a thread
 scholia unresolve <doc.md> <id>           Reopen a thread
 scholia export <doc.md> --to pdf|html|latex  Export document
+scholia mcp                              Run the MCP review server (see "Send to AI")
 ```
 
 Use `scholia list --open -v` to see threads and their messages, reply with `scholia reply`, and edit the `.md` file directly when the comment requests a change to the document.
+
+If the `request_review` MCP tool is available, you can also wait in the browser for the user's review instead of waiting for them to say "check the scholia" — see the skill (`scholia/data/agent-instructions.md`) for the loop.

@@ -123,6 +123,20 @@ When asked to review comments, "check the scholia," or equivalent:
 
 6. **Follow-up reviews.** For iterative review sessions (when you've already reviewed this document before), use `scholia list <doc.md> --since <ISO-timestamp>` to see only threads with activity since your last pass. Note the current time before listing so you can use it as the `--since` value next time.
 
+## Waiting for the human's review (MCP `request_review`)
+
+If the `request_review` MCP tool is available (the user installed `scholia[mcp]` and ran `scholia mcp install`), you can **wait in the browser for the human's review** instead of waiting for them to type "check the scholia" in the terminal.
+
+After you write or revise a document the user is viewing with scholia, call:
+
+```
+request_review(doc="<doc.md>", instruction="optional: what to look at")
+```
+
+This blocks until the human clicks **Send to AI** (one comment), **Send open comments**, or **Send & finish** in the sidebar, then returns the selected threads with the same file references and context as `scholia list`. Address each one the normal way — edit the `.md` and/or `scholia reply` / `scholia resolve` (the human sees replies live) — then call `request_review` again with the same `doc` to wait for the next round. Stop when the result says the human marked the review **COMPLETE**.
+
+Use this when you've just produced something for the user to react to (e.g. after rendering a response or drafting a section). For a one-shot "check the scholia" with no waiting, the CLI workflow above is all you need. If no view server is running for the document, `request_review` starts one (opening the browser) before waiting.
+
 ## Guidelines
 
 - **Use short IDs default**: Always pass the short 4-8 character ID prefix (e.g. `a8c0`) instead of the full `urn:uuid:...` to save context tokens.
