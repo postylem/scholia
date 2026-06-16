@@ -26,6 +26,7 @@ from scholia.comments import (
     resolve,
     unresolve,
 )
+from scholia.review import ReviewRegistry
 from scholia.state import load_state, mark_read, mark_unread
 
 
@@ -936,6 +937,7 @@ class ScholiaServer:
         self._open_browser = open_browser
         self.render_errors: dict[Path, str] = {}  # doc_path -> last error message
         self._stop_event: asyncio.Event | None = None
+        self.reviews = ReviewRegistry()  # human → AI "send to review" sessions
 
     def _load_template(self) -> str:
         template_path = Path(__file__).parent / "template.html"
@@ -957,6 +959,9 @@ class ScholiaServer:
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
         self.app.router.add_post("/api/relocate", self._handle_relocate)
         self.app.router.add_post("/api/shutdown", self._handle_shutdown)
+        self.app.router.add_post("/api/review/start", self._handle_review_start)
+        self.app.router.add_get("/api/review/wait", self._handle_review_wait)
+        self.app.router.add_post("/api/review/cancel", self._handle_review_cancel)
         static_dir = Path(__file__).parent / "static"
         self.app.router.add_static("/static/", static_dir)
 
@@ -1263,6 +1268,12 @@ class ScholiaServer:
                 stored_error = self.render_errors.get(file_path)
                 if stored_error:
                     await ws.send_json({"type": "render_error", "message": stored_error})
+                # Tell a (re)connecting browser about any active "AI is waiting"
+                # review session so it can show the banner. Only sent when one
+                # exists, so the common no-review case adds no extra traffic.
+                active_reviews = [s.to_public() for s in self.reviews.find_active(file_path)]
+                if active_reviews:
+                    await ws.send_json({"type": "review_state", "sessions": active_reviews})
                 return
             doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
@@ -1308,6 +1319,25 @@ class ScholiaServer:
                 mark_read(doc, msg["annotation_id"])
             elif msg_type == "mark_unread":
                 mark_unread(doc, msg["annotation_id"])
+            elif msg_type == "review_submit":
+                session = self.reviews.get(msg.get("session_id"))
+                if session is not None:
+                    # Don't remove a finished session here: the agent's wait may
+                    # not have arrived yet (localhost submits beat the long-poll).
+                    # The wait handler removes it once the batch is delivered, so
+                    # the buffered payload is never lost. The broadcast still
+                    # drops the banner because a done session isn't "active".
+                    session.submit(
+                        msg.get("comment_ids") or [],
+                        msg.get("instruction", ""),
+                        final=bool(msg.get("final")),
+                    )
+                    await self._broadcast_review_state(session.doc_path)
+            elif msg_type == "review_cancel":
+                session = self.reviews.get(msg.get("session_id"))
+                if session is not None:
+                    session.abort("cancelled by user")
+                    await self._broadcast_review_state(session.doc_path)
             elif msg_type == "reanchor":
                 source_selector = None
                 if msg.get("source_exact"):
@@ -1491,6 +1521,98 @@ class ScholiaServer:
         if self._stop_event is not None:
             self._stop_event.set()
         return web.json_response({"status": "stopping"})
+
+    # ── Review sessions (human → AI "send to review" handshake) ──────────
+    #
+    # The `scholia mcp` process drives these HTTP endpoints; the browser drives
+    # the WebSocket side (review_submit / review_cancel). Both meet at a
+    # ReviewSession held in self.reviews. See scholia/review.py.
+
+    async def _broadcast_review_state(self, doc_path: Path) -> None:
+        """Push the active review sessions for a document to its WS clients."""
+        doc_path = Path(doc_path).resolve()
+        clients = self.ws_clients.get(doc_path, set())
+        if not clients:
+            return
+        sessions = [s.to_public() for s in self.reviews.find_active(doc_path)]
+        payload = json.dumps({"type": "review_state", "sessions": sessions})
+        for ws in list(clients):
+            try:
+                await ws.send_str(payload)
+            except Exception:
+                pass
+
+    async def _handle_review_start(self, request: web.Request) -> web.Response:
+        """POST /api/review/start — begin (or rejoin) a review session.
+
+        Body: ``{"doc": "<path>", "instruction": "<optional>"}``.
+        Rejoins an existing active session for the same document so that a
+        re-invoked tool call resumes rather than stacking duplicates.
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+        doc = body.get("doc")
+        if not doc:
+            return web.json_response({"error": "Missing 'doc'"}, status=400)
+        doc_path = Path(doc).expanduser().resolve()
+        instruction = body.get("instruction", "")
+        existing = self.reviews.find_active(doc_path)
+        session = existing[-1] if existing else self.reviews.start(doc_path, instruction)
+        await self._broadcast_review_state(doc_path)
+        return web.json_response(session.to_public())
+
+    async def _handle_review_wait(self, request: web.Request) -> web.Response:
+        """GET /api/review/wait?session_id=&timeout= — long-poll for a submission.
+
+        Returns ``{status: submitted|pending|aborted|unknown, ...}``. The agent
+        re-calls on ``pending`` (or after addressing a batch) until ``finish``.
+        """
+        session_id = request.query.get("session_id")
+        try:
+            timeout = float(request.query.get("timeout", "25"))
+        except ValueError:
+            timeout = 25.0
+        timeout = max(0.0, min(timeout, 120.0))
+        session = self.reviews.get(session_id)
+        if session is None:
+            return web.json_response({"status": "unknown"}, status=404)
+        # Agent (re)started waiting — let the browser re-arm its banner.
+        if session.mark_waiting():
+            await self._broadcast_review_state(session.doc_path)
+        payload = await session.wait(timeout)
+        if payload is None:
+            return web.json_response({"status": "pending", "session_id": session_id})
+        action = payload.get("action")
+        if action == "abort":
+            self.reviews.remove(session_id)
+            await self._broadcast_review_state(session.doc_path)
+            return web.json_response({"status": "aborted", "reason": payload.get("reason", "")})
+        resp = {
+            "status": "submitted",
+            "action": action,
+            "comment_ids": payload.get("comment_ids", []),
+            "instruction": payload.get("instruction", ""),
+        }
+        if action == "finish":
+            self.reviews.remove(session_id)
+            await self._broadcast_review_state(session.doc_path)
+        return web.json_response(resp)
+
+    async def _handle_review_cancel(self, request: web.Request) -> web.Response:
+        """POST /api/review/cancel — abort a session (e.g. the agent gave up)."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        session = self.reviews.get(body.get("session_id"))
+        if session is None:
+            return web.json_response({"status": "unknown"}, status=404)
+        session.abort(body.get("reason", "cancelled"))
+        self.reviews.remove(session.id)
+        await self._broadcast_review_state(session.doc_path)
+        return web.json_response({"status": "aborted"})
 
     async def start(self):
         self._loop = asyncio.get_running_loop()
