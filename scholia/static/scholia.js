@@ -429,11 +429,8 @@
 
   function connectPrompt() {
     var path = window.__SCHOLIA_DOC_FULLPATH__ || window.__SCHOLIA_DOC_PATH__ || '';
-    return 'Connect to my scholia review session for ' + path + '. '
-      + 'Call your request_review tool (the scholia MCP server) so it opens the document '
-      + 'and waits. Do not review anything yet; I will send you specific comments to '
-      + 'address with the "Send to AI" buttons in the browser. If you do not have that '
-      + 'tool, just wait and I will tell you which comments to address.';
+    return 'Call your request_review tool on ' + path + ' and wait for the comments '
+      + 'I send. Do not review anything until I send it.';
   }
 
   function legacyCopy(text) {
