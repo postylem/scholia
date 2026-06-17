@@ -486,8 +486,11 @@
     reviewPill.className = 'scholia-review-pill visible';
     if (!activeReviews.length) {
       reviewPill.classList.add('disconnected');
-      reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>';
-      reviewPill.title = 'copy command to request AI review';
+      reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>'
+        + '<span class="scholia-pill-label">request AI review</span>';
+      reviewPill.title = 'No AI assistant connected. Click to copy a prompt to paste into '
+        + 'your AI chat — it connects to this document so you can use the "Send to AI" '
+        + 'buttons. Works after a Cancel, or for a scholia you opened yourself.';
       return;
     }
     // "awaiting" = comment(s) sent but not yet answered by the assistant.

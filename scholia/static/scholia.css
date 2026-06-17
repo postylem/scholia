@@ -2119,7 +2119,7 @@ body.scholia-dark .scholia-code-copy {
   border-color: var(--s-border);
   background: none;
   padding: 0.15em 0.5em;
-  font-size: 0.95em;
+  font-size: 1em;
 }
 .scholia-review-pill.disconnected:hover {
   color: var(--s-accent);
@@ -2147,4 +2147,21 @@ body.scholia-dark .scholia-code-copy {
 }
 .scholia-review-pill.disconnected:hover .scholia-robot-off::after {
   border-top-color: var(--s-accent);
+}
+/* Hover expands the chip to reveal a short label; full details stay in the
+   tooltip. Collapsed to zero width by default (min-width:0 lets it shrink in
+   the inline-flex pill). */
+.scholia-pill-label {
+  min-width: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  font-size: 0.72rem;
+  transition: max-width 0.2s ease, opacity 0.2s ease, margin-left 0.2s ease;
+}
+.scholia-review-pill.disconnected:hover .scholia-pill-label {
+  max-width: 12em;
+  opacity: 1;
+  margin-left: 0.35em;
 }
