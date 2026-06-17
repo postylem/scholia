@@ -1108,7 +1108,7 @@
         var saveAsTd = document.createElement('td');
         saveAsTd.setAttribute('colspan', '2');
         var saveAsBtn = document.createElement('button');
-        saveAsBtn.className = 'scholia-export-btn';
+        saveAsBtn.className = 'scholia-toolbar-btn scholia-toolbar-btn-block';
         saveAsBtn.textContent = 'Save as\u2026';
         saveAsBtn.addEventListener('click', function () {
           menu.remove();
@@ -1125,7 +1125,7 @@
       var exportTd = document.createElement('td');
       exportTd.setAttribute('colspan', '2');
       var exportBtn = document.createElement('button');
-      exportBtn.className = 'scholia-export-btn';
+      exportBtn.className = 'scholia-toolbar-btn scholia-toolbar-btn-block';
       exportBtn.textContent = 'Export PDF';
       exportBtn.addEventListener('click', function () {
         exportBtn.textContent = 'Exporting\u2026';
@@ -1173,7 +1173,7 @@
       var stopTd = document.createElement('td');
       stopTd.setAttribute('colspan', '2');
       var stopBtn = document.createElement('button');
-      stopBtn.className = 'scholia-export-btn';
+      stopBtn.className = 'scholia-toolbar-btn scholia-toolbar-btn-block';
       stopBtn.textContent = 'Stop server';
       stopBtn.addEventListener('click', function () {
         stopBtn.disabled = true;
@@ -2282,6 +2282,7 @@
             btnRow.className = 'scholia-edit-buttons';
 
             var saveBtn = document.createElement('button');
+            saveBtn.className = 'scholia-btn-primary';
             saveBtn.textContent = 'Save';
             saveBtn.title = 'Save edit (\u2318Enter)';
             saveBtn.addEventListener('click', function (ev) {
@@ -2302,6 +2303,7 @@
             btnRow.appendChild(saveBtn);
 
             var cancelBtn = document.createElement('button');
+            cancelBtn.className = 'scholia-btn-ghost';
             cancelBtn.textContent = 'Cancel';
             cancelBtn.title = 'Discard edit (Esc)';
             cancelBtn.addEventListener('click', function (ev) {

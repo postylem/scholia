@@ -847,26 +847,11 @@ div.sidenote-wrapper .sidenote[data-number]::before {
   gap: 0.3rem;
   margin-top: 0.25rem;
 }
+/* Save / Cancel / Preview reuse .scholia-btn-primary / .scholia-btn-ghost (the
+   same buttons as the card footer), just sized down. */
 .scholia-edit-buttons button {
   font-size: 0.65rem;
-  font-family: var(--s-sans);
-  border: none;
-  border-radius: 3px;
   padding: 0.1rem 0.4rem;
-  cursor: pointer;
-}
-.scholia-edit-buttons button:first-child {
-  background: var(--s-accent);
-  color: #fff;
-}
-.scholia-edit-buttons button:last-child {
-  background: none;
-  color: var(--s-text-dim);
-  border: 1px solid var(--s-border);
-}
-.scholia-edit-buttons button:last-child:hover {
-  border-color: var(--s-accent);
-  color: var(--s-accent);
 }
 .scholia-read-toggle-unread {
   color: var(--s-unread);
@@ -996,8 +981,6 @@ div.sidenote-wrapper .sidenote[data-number]::before {
 .scholia-btn-ghost:disabled:hover,
 .scholia-btn-primary:disabled,
 .scholia-btn-primary:disabled:hover,
-.scholia-export-btn:disabled,
-.scholia-export-btn:disabled:hover,
 .scholia-toolbar-btn:disabled,
 .scholia-toolbar-btn:disabled:hover {
   color: var(--s-text-dim);
@@ -1480,6 +1463,11 @@ a.scholia-toolbar-brand:hover {
   color: #fff;
   border-color: var(--s-accent);
 }
+/* Full-width variant for the block action buttons in the Options menu
+   (Export PDF / Stop server / Save as…). */
+.scholia-toolbar-btn-block {
+  width: 100%;
+}
 
 /* Button group: merge adjacent buttons */
 .scholia-toolbar-group {
@@ -1796,23 +1784,8 @@ body.scholia-dark .scholia-code-copy {
   padding-top: 4px;
   border-top: none;
 }
-.scholia-export-btn {
-  width: 100%;
-  padding: 0.15rem 0.5rem;
-  min-height: 1.6rem;
-  cursor: pointer;
-  border: 1px solid var(--s-border);
-  border-radius: var(--s-radius);
-  background: none;
-  color: var(--s-text-dim);
-  font-size: 0.7rem;
-  font-family: var(--s-sans);
-  transition: color 0.15s, border-color 0.15s;
-}
-.scholia-export-btn:hover {
-  color: var(--s-accent);
-  border-color: var(--s-accent);
-}
+/* Export / Stop / Save-as use .scholia-toolbar-btn .scholia-toolbar-btn-block
+   (consolidated with the navbar buttons). */
 
 /* Export warning banner */
 .scholia-export-warning {
