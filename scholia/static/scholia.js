@@ -486,8 +486,8 @@
     reviewPill.className = 'scholia-review-pill visible';
     if (!activeReviews.length) {
       reviewPill.classList.add('disconnected');
-      reviewPill.textContent = '🤖 request AI review';
-      reviewPill.title = 'Copy a prompt to paste into your AI assistant so it connects for review';
+      reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>';
+      reviewPill.title = 'copy command to request AI review';
       return;
     }
     // "awaiting" = comment(s) sent but not yet answered by the assistant.

@@ -2112,13 +2112,39 @@ body.scholia-dark .scholia-code-copy {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74, 111, 165, 0.5); }
   50% { box-shadow: 0 0 0 5px rgba(74, 111, 165, 0); }
 }
-/* Disconnected: muted (just an entry point to summon an AI), brightens on hover. */
+/* Disconnected: an icon-only, muted, crossed-out robot — click to copy the
+   request command. Brightens (and un-crosses) on hover to signal it's actionable. */
 .scholia-review-pill.disconnected {
   color: var(--s-text-dim);
   border-color: var(--s-border);
   background: none;
+  padding: 0.15em 0.5em;
+  font-size: 0.95em;
 }
 .scholia-review-pill.disconnected:hover {
   color: var(--s-accent);
   border-color: var(--s-accent);
+}
+.scholia-robot-off {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.75;
+}
+.scholia-robot-off::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 50%;
+  border-top: 1.5px solid var(--s-text-dim);
+  transform: rotate(-20deg);
+}
+.scholia-review-pill.disconnected:hover .scholia-robot-off {
+  filter: none;
+  opacity: 1;
+}
+.scholia-review-pill.disconnected:hover .scholia-robot-off::after {
+  border-top-color: var(--s-accent);
 }

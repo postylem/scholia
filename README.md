@@ -143,7 +143,7 @@ After the agent has written or revised a document you're viewing with scholia, i
 
 The agent addresses them (replying and editing live), then waits for your next round until you finish. The agent and the browser rendezvous through the running `scholia view` server, so it works whether you or the agent started it.
 
-When **no** agent is connected — you launched `scholia view` yourself, or cancelled a review — the toolbar shows a muted **🤖 request AI review** chip. Click it to copy a ready-made prompt (with the document path) that you paste into any AI chat; the agent then calls `request_review`, attaches to your running server, and the "Send to AI" controls appear. The chip turns into a live **🤖 AI connected / working…** status once an agent is parked.
+When **no** agent is connected — you launched `scholia view` yourself, or cancelled a review — the toolbar shows a muted, crossed-out **🤖** robot icon (tooltip: *copy command to request AI review*). Click it to copy a ready-made prompt (with the document path) that you paste into any AI chat; the agent then calls `request_review`, attaches to your running server, and the "Send to AI" controls appear. The icon turns into a live **🤖 AI connected / working…** status once an agent is parked.
 
 > The review-loop design (an agent that long-polls a server-held session the browser resolves) was inspired by [md-redline](https://github.com/dejuknow/md-redline).
 
