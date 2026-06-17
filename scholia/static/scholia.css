@@ -1469,6 +1469,51 @@ a.scholia-toolbar-brand:hover {
   width: 100%;
 }
 
+/* Toolbar controls collapse behind a hamburger on narrow screens. */
+.scholia-toolbar-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.scholia-toolbar-hamburger {
+  display: none;
+}
+@media (max-width: 600px) {
+  .scholia-toolbar-hamburger {
+    display: inline-flex;
+  }
+  .scholia-toolbar-controls {
+    position: absolute;
+    top: 100%;
+    right: 0.5rem;
+    margin-top: 2px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    min-width: 9rem;
+    padding: 0.5rem;
+    background: var(--s-card);
+    border: 1px solid var(--s-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    display: none;
+    z-index: 600;
+  }
+  .scholia-toolbar.scholia-menu-open .scholia-toolbar-controls {
+    display: flex;
+  }
+  /* Order the big Options menu last so its submenu opens below the panel. */
+  .scholia-toolbar-controls .scholia-toolbar-group { order: 1; }
+  .scholia-toolbar-controls .scholia-toc-wrap { order: 2; }
+  .scholia-toolbar-controls .scholia-options-wrap { order: 3; }
+  /* Keep the connect pill compact (no hover-expand) when space is tight. */
+  .scholia-review-pill.disconnected:hover .scholia-pill-label {
+    max-width: 0;
+    opacity: 0;
+    margin-left: 0;
+  }
+}
+
 /* Button group: merge adjacent buttons */
 .scholia-toolbar-group {
   display: inline-flex;

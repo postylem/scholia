@@ -328,9 +328,22 @@
     if (optMenu && optWrap && !optWrap.contains(e.target)) {
       closeOptionsMenu();
     }
+    // Hamburger menu (narrow screens). Use composedPath so a click on a control
+    // that re-renders the toolbar (detaching the target) still counts as inside.
+    if (toolbarEl.classList.contains('scholia-menu-open')) {
+      var hpath = e.composedPath ? e.composedPath() : [];
+      var inMenu = hpath.some(function (el) {
+        return el && el.classList && (el.classList.contains('scholia-toolbar-controls')
+          || el.classList.contains('scholia-toolbar-hamburger'));
+      });
+      if (!inMenu) toolbarEl.classList.remove('scholia-menu-open');
+    }
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeAllDropdowns();
+    if (e.key === 'Escape') {
+      closeAllDropdowns();
+      toolbarEl.classList.remove('scholia-menu-open');
+    }
   });
 
   function applyZoom() {
@@ -484,11 +497,10 @@
     if (!activeReviews.length) {
       reviewPill.classList.add('disconnected');
       reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>'
-        + '<span class="scholia-pill-label">connect to AI</span>';
+        + '<span class="scholia-pill-label">connect AI session</span>';
       reviewPill.title = 'No AI assistant connected. Click to copy a prompt that connects an '
-        + 'AI to this document so it waits for you. It will not review anything until you '
-        + 'send specific comments with the "Send to AI" buttons. Works after a Cancel, or '
-        + 'for a scholia you opened yourself.';
+        + 'AI to this document and has it wait for you. It will not review anything until '
+        + 'you send comments. Works after a Cancel, or for a scholia you opened yourself.';
       return;
     }
     // "awaiting" = comment(s) sent but not yet answered by the assistant.
@@ -932,6 +944,25 @@
     updateReviewPill();
     shadow.appendChild(renderErrorOverlay);
 
+    // Hamburger (shown only on narrow screens) toggles the controls panel.
+    var hamburgerBtn = document.createElement('button');
+    hamburgerBtn.className = 'scholia-toolbar-btn scholia-toolbar-hamburger';
+    hamburgerBtn.title = 'Menu';
+    hamburgerBtn.setAttribute('aria-label', 'Toolbar menu');
+    hamburgerBtn.innerHTML = '<svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="1" y1="2" x2="13" y2="2"/><line x1="1" y1="6" x2="13" y2="6"/><line x1="1" y1="10" x2="13" y2="10"/></svg>';
+    hamburgerBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = toolbarEl.classList.toggle('scholia-menu-open');
+      if (open) closeAllDropdowns();
+    });
+    toolbarEl.appendChild(hamburgerBtn);
+
+    // The toolbar controls (TOC, Options, Resolved/Read/comments toggles) live in
+    // this wrapper so they can collapse behind the hamburger when space is tight.
+    var controlsWrap = document.createElement('span');
+    controlsWrap.className = 'scholia-toolbar-controls';
+    toolbarEl.appendChild(controlsWrap);
+
     // Contents (TOC) dropdown — before Options
     tocWrapEl = document.createElement('span');
     tocWrapEl.className = 'scholia-toc-wrap';
@@ -945,7 +976,7 @@
     });
     tocWrapEl.appendChild(tocBtn);
     if (!tocEl) tocWrapEl.style.display = 'none';
-    toolbarEl.appendChild(tocWrapEl);
+    controlsWrap.appendChild(tocWrapEl);
     if (tocEl) {
       tocWrapEl.appendChild(tocEl);
       renderMathIn(tocEl);
@@ -1238,7 +1269,7 @@
       optionsWrap.appendChild(menu);
     });
     optionsWrap.appendChild(optionsBtn);
-    toolbarEl.appendChild(optionsWrap);
+    controlsWrap.appendChild(optionsWrap);
 
     var btnGroup = document.createElement('span');
     btnGroup.className = 'scholia-toolbar-group';
@@ -1309,7 +1340,7 @@
     });
     btnGroup.appendChild(cbBtn);
 
-    toolbarEl.appendChild(btnGroup);
+    controlsWrap.appendChild(btnGroup);
 
     // Update toolbar height CSS variable for body padding/scroll offset
     if (isQuarto) {
