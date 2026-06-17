@@ -14,14 +14,14 @@ Scholia provides a simple interactive comment-thread interface on top of rendere
   - Resolve and reopen threads, or filter to show only open threads
   - Hide the sidebar entirely for a clean reading view
   - Toggle between footnotes and sidenotes, and dark and light theme
-- **Live sync** — edits to the markdown or new comments show up instantly in the browser via WebSocket
-- Behind the scenes, a **CLI API** (`scholia list`, `scholia reply`, `scholia comment`, ...) for reading and responding to threads — designed for AI agents, but usable by anyone
+- **Live sync**: edits to the markdown or new comments show up instantly in the browser via WebSocket
+- Behind the scenes, a **CLI API** (`scholia list`, `scholia reply`, `scholia comment`, ...) for reading and responding to threads, designed for AI agents but usable by anyone
 
 **Example:** You're chatting with an AI about a plan. The AI drafts the plan a markdown file `plan.md`. Now you're going through the file and want to ask questions or push back on specific parts. In a linear chat, the conversation quickly loses track of which comment refers to which section, and it's hard to make minor comments while also continuing the general conversation. With scholia, you open the rendered plan in your browser (math, code, citations all formatted), select text in the document and add notes or start threaded converations right there in the margin. Meanwhile the AI can also edit the document directly. Everything stays anchored to the text it's about, and you can keep the terminal chat going for bigger-picture discussion.
 
 ## Install
 
-Requires Python 3.10+ and [Pandoc](https://pandoc.org/installing.html). Optionally install [`pandoc-crossref`](https://github.com/lierdakil/pandoc-crossref) for cross-reference support (`{#sec:id}` attributes and `@sec:id` references) — scholia auto-detects and uses it if available.
+Requires Python 3.10+ and [Pandoc](https://pandoc.org/installing.html). Optionally install [`pandoc-crossref`](https://github.com/lierdakil/pandoc-crossref) for cross-reference support (`{#sec:id}` attributes and `@sec:id` references); scholia auto-detects and uses it if available.
 
 ### Step 1: Install the `scholia` CLI
 
@@ -77,10 +77,10 @@ This copies a single markdown file describing the CLI commands and review workfl
 
 ## Files
 
-Scholia doesn't touch your markdown file — it only reads and renders it. When you run `scholia view` on some file `<file>.md`, it creates sidecar files in the same directory:
+Scholia doesn't touch your markdown file. It only reads and renders it. When you run `scholia view` on some file `<file>.md`, it creates sidecar files in the same directory:
 
-- `<file>.md.scholia.jsonl` — comment threads (append-only, [W3C Web Annotation](https://www.w3.org/TR/annotation-model/) format)
-- `<file>.md.scholia.state.json` — per-thread read/unread state (created when you view threads in the browser)
+- `<file>.md.scholia.jsonl`: comment threads (append-only, [W3C Web Annotation](https://www.w3.org/TR/annotation-model/) format)
+- `<file>.md.scholia.state.json`: per-thread read/unread state (created when you view threads in the browser)
 
 If you're working in a git repo, you'll probably want to ignore at least the state file:
 
@@ -124,9 +124,9 @@ If you've set up the agent skill, tell your agent to respond when you're ready:
 
 The agent will go through open comment threads, reply to each, and/or edit the document. Replies appear live in the sidebar.
 
-### Send to AI — live review loop (MCP)
+### Send to AI: live review loop (MCP)
 
-The flow above is terminal-driven: you tell the agent "check the scholia." With the optional MCP server you can flip the direction — the agent **waits in the browser** for your review, and you hand it comments with a button, without switching back to the terminal.
+The flow above is terminal-driven: you tell the agent "check the scholia." With the optional MCP server you can flip the direction: the agent **waits in the browser** for your review, and you hand it comments with a button, without switching back to the terminal.
 
 Install the MCP extra and register the server with Claude Code:
 
@@ -135,15 +135,15 @@ pip install 'scholia[mcp]'    # or: uv pip install mcp
 scholia mcp install           # registers the server with Claude Code (user scope)
 ```
 
-After the agent has written or revised a document you're viewing with scholia, it calls its `request_review` tool and parks itself. A banner appears in the sidebar — **🤖 AI assistant is waiting for your review**. Mark up the document, then use:
+After the agent has written or revised a document you're viewing with scholia, it calls its `request_review` tool and parks itself. A banner appears in the sidebar: **🤖 AI assistant is waiting for your review**. Mark up the document, then use:
 
-- **Send to AI** on a single comment — hand off just that one,
-- **Send open comments** — hand off all open threads at once, or
-- **Send & finish** — send and let the agent stop waiting.
+- **Send to AI** on a single comment: hand off just that one,
+- **Send open comments**: hand off all open threads at once, or
+- **Send & finish**: send and let the agent stop waiting.
 
 The agent addresses them (replying and editing live), then waits for your next round until you finish. The agent and the browser rendezvous through the running `scholia view` server, so it works whether you or the agent started it.
 
-When **no** agent is connected — you launched `scholia view` yourself, or cancelled a review — the toolbar shows a muted, crossed-out **🤖** robot icon (tooltip: *copy command to request AI review*). Click it to copy a ready-made prompt (with the document path) that you paste into any AI chat; the agent then calls `request_review`, attaches to your running server, and the "Send to AI" controls appear. The icon turns into a live **🤖 AI connected / working…** status once an agent is parked.
+When **no** agent is connected (you launched `scholia view` yourself, or cancelled a review), the toolbar shows a muted, crossed-out **🤖** robot icon; hover it to reveal *request AI review*. Click it to copy a ready-made prompt (with the document path) that you paste into any AI chat; the agent then calls `request_review`, attaches to your running server, and the "Send to AI" controls appear. The icon turns into a live **🤖 AI connected / working…** status once an agent is parked.
 
 > The review-loop design (an agent that long-polls a server-held session the browser resolves) was inspired by [md-redline](https://github.com/dejuknow/md-redline).
 
@@ -165,13 +165,13 @@ where `macros.sty` contains standard `\newcommand` definitions:
 \newcommand{\KL}[2]{D_{\mathrm{KL}}\!\left(#1 \,\|\, #2\right)}
 ```
 
-This works the same way for plain markdown (`.md`) and Quarto (`.qmd`/`.rmd`) documents, in both the live preview and exports — Pandoc expands the macros at parse time, so the same `.sty` file can be shared with a LaTeX/PDF workflow. To render the same document with plain Pandoc (outside scholia), pass the macros file as an additional input:
+This works the same way for plain markdown (`.md`) and Quarto (`.qmd`/`.rmd`) documents, in both the live preview and exports; Pandoc expands the macros at parse time, so the same `.sty` file can be shared with a LaTeX/PDF workflow. To render the same document with plain Pandoc (outside scholia), pass the macros file as an additional input:
 
 ```bash
 pandoc macros.sty document.md --katex -o output.html
 ```
 
-(In Quarto you can alternatively `{{< include macros.sty >}}` in the body, but the `macros:` key above is preferred — it keeps the definitions out of the rendered text and works identically across formats.)
+(In Quarto you can alternatively `{{< include macros.sty >}}` in the body, but the `macros:` key above is preferred; it keeps the definitions out of the rendered text and works identically across formats.)
 
 ## For agents
 
@@ -192,4 +192,4 @@ scholia mcp                              Run the MCP review server (see "Send to
 
 Use `scholia list --open -v` to see threads and their messages, reply with `scholia reply`, and edit the `.md` file directly when the comment requests a change to the document.
 
-If the `request_review` MCP tool is available, you can also wait in the browser for the user's review instead of waiting for them to say "check the scholia" — see the skill (`scholia/data/agent-instructions.md`) for the loop.
+If the `request_review` MCP tool is available, you can also wait in the browser for the user's review instead of waiting for them to say "check the scholia". See the skill (`scholia/data/agent-instructions.md`) for the loop.

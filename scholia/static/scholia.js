@@ -450,7 +450,7 @@
   function copyReviewRequest() {
     var text = reviewRequestPrompt();
     var confirmCopied = function () {
-      reviewPill.textContent = '✓ copied — paste to your AI';
+      reviewPill.textContent = '✓ copied, paste to your AI';
       setTimeout(updateReviewPill, 2500);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -489,7 +489,7 @@
       reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>'
         + '<span class="scholia-pill-label">request AI review</span>';
       reviewPill.title = 'No AI assistant connected. Click to copy a prompt to paste into '
-        + 'your AI chat — it connects to this document so you can use the "Send to AI" '
+        + 'your AI chat. It connects to this document so you can use the "Send to AI" '
         + 'buttons. Works after a Cancel, or for a scholia you opened yourself.';
       return;
     }
@@ -498,7 +498,7 @@
     if (awaiting) reviewPill.classList.add('awaiting');
     reviewPill.textContent = awaiting ? '🤖 AI working…' : '🤖 AI connected';
     reviewPill.title = awaiting
-      ? aiSentIds.size + ' comment(s) sent — waiting for the assistant to respond'
+      ? aiSentIds.size + ' comment(s) sent, waiting for the assistant to respond'
       : 'An AI assistant is connected and waiting for your review';
   }
 
@@ -2005,7 +2005,7 @@
     title.className = 'scholia-review-banner-title';
     title.textContent = awaiting
       ? '🤖 Awaiting the assistant…'
-      : '🤖 Assistant connected — ready for your review';
+      : '🤖 Assistant connected, ready for your review';
     bar.appendChild(title);
 
     if (primary && primary.instruction) {
@@ -2202,7 +2202,7 @@
       var awaitBadge = document.createElement('span');
       awaitBadge.className = 'scholia-awaiting-badge';
       awaitBadge.textContent = '⏳ awaiting AI';
-      awaitBadge.title = 'Sent to the AI assistant — waiting for a reply';
+      awaitBadge.title = 'Sent to the AI assistant, waiting for a reply';
       header.appendChild(awaitBadge);
     }
 
@@ -2641,14 +2641,14 @@
     var pandocHeaderBtn = document.createElement('button');
     pandocHeaderBtn.className = 'scholia-btn-pandoc active';
     pandocHeaderBtn.textContent = 'P';
-    pandocHeaderBtn.title = 'Render citations via Pandoc — click to toggle off';
+    pandocHeaderBtn.title = 'Render citations via Pandoc (click to toggle off)';
     pandocHeaderBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       overlayPandocActive = !overlayPandocActive;
       pandocHeaderBtn.classList.toggle('active', overlayPandocActive);
       pandocHeaderBtn.title = overlayPandocActive
-        ? 'Render citations via Pandoc — click to toggle off'
-        : 'Citations off — click to render via Pandoc';
+        ? 'Render citations via Pandoc (click to toggle off)'
+        : 'Citations off (click to render via Pandoc)';
       for (var bi = 0; bi < overlayBodies.length; bi++) {
         var b = overlayBodies[bi];
         if (b.classList.contains('scholia-raw-view')) continue; // skip if in raw mode
