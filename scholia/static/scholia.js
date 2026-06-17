@@ -421,10 +421,55 @@
   }
 
   // ── Review status pill (always-visible in the sticky toolbar) ──
+  // Reflects the AI review state: "request AI review" when nothing is parked
+  // (click copies a summon prompt to paste into any AI chat), "AI connected",
+  // or "AI working…" (sent comments awaiting a reply, with a pulse).
   var reviewPill = document.createElement('span');
   reviewPill.className = 'scholia-review-pill';
+
+  function reviewRequestPrompt() {
+    var path = window.__SCHOLIA_DOC_FULLPATH__ || window.__SCHOLIA_DOC_PATH__ || '';
+    return 'Please review my scholia comments on ' + path + '. '
+      + 'Use your request_review tool (the scholia MCP server) so the document opens '
+      + 'for review and I can send you comments with the "Send to AI" buttons in the '
+      + 'browser. If you do not have that tool, run `scholia list ' + path + '` and '
+      + 'reply to the open threads.';
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    shadow.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    ta.remove();
+  }
+
+  function copyReviewRequest() {
+    var text = reviewRequestPrompt();
+    var confirmCopied = function () {
+      reviewPill.textContent = '✓ copied — paste to your AI';
+      setTimeout(updateReviewPill, 2500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(confirmCopied, function () {
+        legacyCopy(text); confirmCopied();
+      });
+    } else {
+      legacyCopy(text); confirmCopied();
+    }
+  }
+
   reviewPill.addEventListener('click', function () {
-    // Reveal the sidebar and scroll to the banner if it's hidden/scrolled away.
+    if (!activeReviews.length) {
+      // No AI parked — copy a prompt the user can paste into their AI chat to
+      // (re)connect, including after a Cancel or for a manually-opened server.
+      copyReviewRequest();
+      return;
+    }
+    // Connected — reveal the sidebar/banner.
     if (sidebarHidden) {
       sidebarHidden = false;
       localStorage.setItem('scholia-sidebar-hidden', 'false');
@@ -438,14 +483,16 @@
   });
 
   function updateReviewPill() {
+    reviewPill.className = 'scholia-review-pill visible';
     if (!activeReviews.length) {
-      reviewPill.classList.remove('visible', 'awaiting');
+      reviewPill.classList.add('disconnected');
+      reviewPill.textContent = '🤖 request AI review';
+      reviewPill.title = 'Copy a prompt to paste into your AI assistant so it connects for review';
       return;
     }
-    reviewPill.classList.add('visible');
     // "awaiting" = comment(s) sent but not yet answered by the assistant.
     var awaiting = aiSentIds.size > 0;
-    reviewPill.classList.toggle('awaiting', awaiting);
+    if (awaiting) reviewPill.classList.add('awaiting');
     reviewPill.textContent = awaiting ? '🤖 AI working…' : '🤖 AI connected';
     reviewPill.title = awaiting
       ? aiSentIds.size + ' comment(s) sent — waiting for the assistant to respond'

@@ -2112,3 +2112,13 @@ body.scholia-dark .scholia-code-copy {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74, 111, 165, 0.5); }
   50% { box-shadow: 0 0 0 5px rgba(74, 111, 165, 0); }
 }
+/* Disconnected: muted (just an entry point to summon an AI), brightens on hover. */
+.scholia-review-pill.disconnected {
+  color: var(--s-text-dim);
+  border-color: var(--s-border);
+  background: none;
+}
+.scholia-review-pill.disconnected:hover {
+  color: var(--s-accent);
+  border-color: var(--s-accent);
+}
