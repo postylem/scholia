@@ -427,13 +427,13 @@
   var reviewPill = document.createElement('span');
   reviewPill.className = 'scholia-review-pill';
 
-  function reviewRequestPrompt() {
+  function connectPrompt() {
     var path = window.__SCHOLIA_DOC_FULLPATH__ || window.__SCHOLIA_DOC_PATH__ || '';
-    return 'Please review my scholia comments on ' + path + '. '
-      + 'Use your request_review tool (the scholia MCP server) so the document opens '
-      + 'for review and I can send you comments with the "Send to AI" buttons in the '
-      + 'browser. If you do not have that tool, run `scholia list ' + path + '` and '
-      + 'reply to the open threads.';
+    return 'Connect to my scholia review session for ' + path + '. '
+      + 'Call your request_review tool (the scholia MCP server) so it opens the document '
+      + 'and waits. Do not review anything yet; I will send you specific comments to '
+      + 'address with the "Send to AI" buttons in the browser. If you do not have that '
+      + 'tool, just wait and I will tell you which comments to address.';
   }
 
   function legacyCopy(text) {
@@ -447,8 +447,8 @@
     ta.remove();
   }
 
-  function copyReviewRequest() {
-    var text = reviewRequestPrompt();
+  function copyConnectPrompt() {
+    var text = connectPrompt();
     var confirmCopied = function () {
       reviewPill.textContent = '✓ copied, paste to your AI';
       setTimeout(updateReviewPill, 2500);
@@ -464,9 +464,9 @@
 
   reviewPill.addEventListener('click', function () {
     if (!activeReviews.length) {
-      // No AI parked — copy a prompt the user can paste into their AI chat to
+      // No AI parked, so copy a prompt the user can paste into their AI chat to
       // (re)connect, including after a Cancel or for a manually-opened server.
-      copyReviewRequest();
+      copyConnectPrompt();
       return;
     }
     // Connected — reveal the sidebar/banner.
@@ -487,10 +487,11 @@
     if (!activeReviews.length) {
       reviewPill.classList.add('disconnected');
       reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>'
-        + '<span class="scholia-pill-label">request AI review</span>';
-      reviewPill.title = 'No AI assistant connected. Click to copy a prompt to paste into '
-        + 'your AI chat. It connects to this document so you can use the "Send to AI" '
-        + 'buttons. Works after a Cancel, or for a scholia you opened yourself.';
+        + '<span class="scholia-pill-label">connect to AI</span>';
+      reviewPill.title = 'No AI assistant connected. Click to copy a prompt that connects an '
+        + 'AI to this document so it waits for you. It will not review anything until you '
+        + 'send specific comments with the "Send to AI" buttons. Works after a Cancel, or '
+        + 'for a scholia you opened yourself.';
       return;
     }
     // "awaiting" = comment(s) sent but not yet answered by the assistant.
