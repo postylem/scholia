@@ -129,6 +129,10 @@ class ReviewSession:
         self._pending.clear()
         return items
 
+    def has_pending(self) -> bool:
+        """True if a submitted batch is still buffered, awaiting collection."""
+        return bool(self._pending)
+
 
 class ReviewRegistry:
     """Tracks live review sessions for a server, keyed by session id."""
@@ -155,3 +159,21 @@ class ReviewRegistry:
         return [
             s for s in self._by_id.values() if s.doc_path == dp and s.status in ACTIVE_STATUSES
         ]
+
+    def find_for_rejoin(self, doc_path: str | Path) -> ReviewSession | None:
+        """The session a re-issued ``request_review`` should resume, or None.
+
+        Prefers the newest active (waiting/working) session. Falls back to a
+        terminal session (done/aborted) whose batch was never delivered — so a
+        "Send & finish"/"Cancel" that landed while the agent was between rounds
+        is collected on the next poll instead of being stranded in an abandoned
+        session while a fresh, empty one is minted. (A terminal session whose
+        batch has already been drained has no pending items and is skipped.)
+        """
+        dp = Path(doc_path).resolve()
+        mine = [s for s in self._by_id.values() if s.doc_path == dp]
+        active = [s for s in mine if s.status in ACTIVE_STATUSES]
+        if active:
+            return active[-1]
+        undelivered = [s for s in mine if s.has_pending()]
+        return undelivered[-1] if undelivered else None

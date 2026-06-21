@@ -1097,6 +1097,37 @@ async def test_review_finish_ends_session(client, tmp_doc):
 
 
 @pytest.mark.asyncio
+async def test_review_start_recovers_stranded_finish_batch(client, tmp_doc):
+    """If 'Send & finish' lands before the agent re-polls, the re-issued
+    request_review rejoins the finished session and still receives the final
+    batch — rather than opening a fresh empty session and stranding it."""
+    ann = append_comment(tmp_doc, exact="Some text", body_text="last one")
+    r1 = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid1 = (await r1.json())["session_id"]
+
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    # Human clicks Send & finish while the agent is between rounds (not polling).
+    await ws.send_json(
+        {"type": "review_submit", "session_id": sid1, "comment_ids": [ann["id"]], "final": True}
+    )
+    await asyncio.sleep(0.1)
+
+    # Agent re-issues request_review for the next round.
+    r2 = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid2 = (await r2.json())["session_id"]
+    assert sid2 == sid1, "re-request opened a new session; finish batch stranded"
+
+    # ...and the agent's wait now delivers the stranded final batch.
+    resp = await client.get("/api/review/wait", params={"session_id": sid2, "timeout": "2"})
+    data = await resp.json()
+    await ws.close()
+    assert data["status"] == "submitted"
+    assert data["action"] == "finish"
+    assert data["comment_ids"] == [ann["id"]]
+
+
+@pytest.mark.asyncio
 async def test_review_cancel_aborts_wait(client, tmp_doc):
     r = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
     sid = (await r.json())["session_id"]

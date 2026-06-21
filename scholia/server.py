@@ -1558,8 +1558,12 @@ class ScholiaServer:
             return web.json_response({"error": "Missing 'doc'"}, status=400)
         doc_path = Path(doc).expanduser().resolve()
         instruction = body.get("instruction", "")
-        existing = self.reviews.find_active(doc_path)
-        session = existing[-1] if existing else self.reviews.start(doc_path, instruction)
+        # Rejoin an active session, or recover a just-finished/cancelled one whose
+        # batch was never delivered (the agent re-requested before its previous
+        # wait re-registered), rather than stacking a duplicate empty session.
+        session = self.reviews.find_for_rejoin(doc_path) or self.reviews.start(
+            doc_path, instruction
+        )
         await self._broadcast_review_state(doc_path)
         return web.json_response(session.to_public())
 
