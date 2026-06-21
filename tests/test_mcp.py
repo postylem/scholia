@@ -74,6 +74,36 @@ def test_format_payload_empty_finish(tmp_doc):
     assert "without selecting comments" in out
 
 
+def test_format_payload_single_line_includes_end_column(tmp_doc):
+    """The file reference mirrors `scholia list`: a single-line selection still
+    carries its end column (e.g. ':7:1-10'), not just the start."""
+    ann = append_comment(
+        tmp_doc, exact="Some text", body_text="hi", source_selector={"exact": "Some text"}
+    )
+    out = _format_review_payload(tmp_doc, [ann["id"]], "submit", "")
+    assert "7:1-10" in out
+
+
+def test_format_payload_orphan_includes_original_context(tmp_doc):
+    """An orphaned comment still shows its original prefix/exact/suffix context,
+    so the agent knows what the comment referred to (mirrors `scholia list`)."""
+    ann = append_comment(
+        tmp_doc,
+        exact="a phrase that is absent from the document",
+        body_text="what about this?",
+        source_selector={
+            "exact": "a phrase that is absent from the document",
+            "prefix": "unique-left-marker ",
+            "suffix": " unique-right-marker",
+        },
+    )
+    out = _format_review_payload(tmp_doc, [ann["id"]], "submit", "")
+    assert "orphaned" in out
+    # The original context (not just the bare "orphaned" line) must survive.
+    assert "a phrase that is absent from the document" in out
+    assert "unique-left-marker" in out
+
+
 # ── _await_submission ────────────────────────────────────
 
 

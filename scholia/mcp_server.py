@@ -35,7 +35,7 @@ from pathlib import Path
 import aiohttp
 
 from scholia.comments import load_comments, short_id_map
-from scholia.context import locate_anchor, render_doc_plain
+from scholia.context import format_orphan_context, locate_anchor, render_doc_plain
 from scholia.state import get_server
 
 # How long each long-poll HTTP request waits before the server returns
@@ -128,13 +128,19 @@ def _format_review_payload(
             loc = f"{doc_path}:{ctx['line']}:{ctx['col']}"
             if ctx["end_line"] != ctx["line"]:
                 loc += f"-{ctx['end_line']}:{ctx['end_col']}"
+            elif ctx["end_col"] != ctx["col"] + 1:
+                loc += f"-{ctx['end_col']}"
             lines.append(f"  {loc}")
             if ctx.get("heading"):
                 lines.append(f"  in {ctx['heading']}")
             for cline in ctx.get("context_lines") or []:
                 lines.append(cline)
         else:
+            # Orphaned: show the original prefix/exact/suffix the comment was
+            # made against, so the agent still knows what it referred to.
             lines.append("  (anchor text not found in current document — orphaned)")
+            lines.append("  original context:")
+            lines.extend(format_orphan_context(selector))
         lines.append("")
         for b in ann.get("body", []):
             who = (b.get("creator") or {}).get("name", "?")
