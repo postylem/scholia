@@ -127,6 +127,8 @@
   var orphanIds = new Set();
   var showResolved = false;
   var showRead = true;
+  var activeReviews = [];       // [{session_id,status,instruction}] — AI "send to review" sessions
+  var aiSentIds = new Set();    // comment ids already sent to the AI this review (durable across re-renders)
   var expandOverrides = {};     // annotation id → boolean (user manual toggle)
   var sidebarHidden = localStorage.getItem('scholia-sidebar-hidden') === 'true';
   var _sidebarTransitionHandler = null;
@@ -326,9 +328,22 @@
     if (optMenu && optWrap && !optWrap.contains(e.target)) {
       closeOptionsMenu();
     }
+    // Hamburger menu (narrow screens). Use composedPath so a click on a control
+    // that re-renders the toolbar (detaching the target) still counts as inside.
+    if (toolbarEl.classList.contains('scholia-menu-open')) {
+      var hpath = e.composedPath ? e.composedPath() : [];
+      var inMenu = hpath.some(function (el) {
+        return el && el.classList && (el.classList.contains('scholia-toolbar-controls')
+          || el.classList.contains('scholia-toolbar-hamburger'));
+      });
+      if (!inMenu) toolbarEl.classList.remove('scholia-menu-open');
+    }
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeAllDropdowns();
+    if (e.key === 'Escape') {
+      closeAllDropdowns();
+      toolbarEl.classList.remove('scholia-menu-open');
+    }
   });
 
   function applyZoom() {
@@ -416,6 +431,85 @@
 
   function hideRenderingBanner() {
     renderingBanner.classList.remove('visible');
+  }
+
+  // ── Review status pill (always-visible in the sticky toolbar) ──
+  // Reflects the AI review state: "request AI review" when nothing is parked
+  // (click copies a summon prompt to paste into any AI chat), "AI connected",
+  // or "AI working…" (sent comments awaiting a reply, with a pulse).
+  var reviewPill = document.createElement('span');
+  reviewPill.className = 'scholia-review-pill';
+
+  function connectPrompt() {
+    var path = window.__SCHOLIA_DOC_FULLPATH__ || window.__SCHOLIA_DOC_PATH__ || '';
+    return 'Call your request_review tool on ' + path + ' and wait for the comments '
+      + 'I send. Do not review anything until I send it.';
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    shadow.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    ta.remove();
+  }
+
+  function copyConnectPrompt() {
+    var text = connectPrompt();
+    var confirmCopied = function () {
+      reviewPill.textContent = '✓ copied, paste to your AI';
+      setTimeout(updateReviewPill, 2500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(confirmCopied, function () {
+        legacyCopy(text); confirmCopied();
+      });
+    } else {
+      legacyCopy(text); confirmCopied();
+    }
+  }
+
+  reviewPill.addEventListener('click', function () {
+    if (!activeReviews.length) {
+      // No AI parked, so copy a prompt the user can paste into their AI chat to
+      // (re)connect, including after a Cancel or for a manually-opened server.
+      copyConnectPrompt();
+      return;
+    }
+    // Connected — reveal the sidebar/banner.
+    if (sidebarHidden) {
+      sidebarHidden = false;
+      localStorage.setItem('scholia-sidebar-hidden', 'false');
+      document.body.classList.remove('scholia-sidebar-hidden');
+      sidebarEl.style.display = '';
+      resizeHandle.style.display = '';
+      renderToolbar();
+      scheduleRender(true);
+    }
+    sidebarEl.scrollTop = 0;
+  });
+
+  function updateReviewPill() {
+    reviewPill.className = 'scholia-review-pill visible';
+    if (!activeReviews.length) {
+      reviewPill.classList.add('disconnected');
+      reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>'
+        + '<span class="scholia-pill-label">connect AI session</span>';
+      reviewPill.title = 'No AI assistant connected. Click to copy a prompt that connects an '
+        + 'AI to this document and has it wait for you. It will not review anything until '
+        + 'you send comments. Works after a Cancel, or for a scholia you opened yourself.';
+      return;
+    }
+    // "awaiting" = comment(s) sent but not yet answered by the assistant.
+    var awaiting = aiSentIds.size > 0;
+    if (awaiting) reviewPill.classList.add('awaiting');
+    reviewPill.textContent = awaiting ? '🤖 AI working…' : '🤖 AI connected';
+    reviewPill.title = awaiting
+      ? aiSentIds.size + ' comment(s) sent, waiting for the assistant to respond'
+      : 'An AI assistant is connected and waiting for your review';
   }
 
   // ── Render error overlay (persistent, minimizable) ──
@@ -506,6 +600,8 @@
           }
         }
         comments = msg.comments;
+        pruneAiSent();  // clear "awaiting AI" marks for threads the assistant just answered
+        updateReviewPill();
         scheduleRender();
         // Refresh overlay if open
         if (activeOverlay) {
@@ -518,6 +614,21 @@
             }
           }
         }
+      } else if (msg.type === 'review_state') {
+        activeReviews = msg.sessions || [];
+        if (!activeReviews.length) aiSentIds.clear();  // reset sent marks when the review ends
+        updateReviewPill();
+        // When the assistant starts waiting, make sure the sidebar is visible
+        // so the human sees the banner and the per-comment Send buttons.
+        if (activeReviews.length && sidebarHidden) {
+          sidebarHidden = false;
+          localStorage.setItem('scholia-sidebar-hidden', 'false');
+          document.body.classList.remove('scholia-sidebar-hidden');
+          sidebarEl.style.display = '';
+          resizeHandle.style.display = '';
+          renderToolbar();
+        }
+        scheduleRender(true);  // re-render sidebar; no doc change so skip re-anchoring
       } else if (msg.type === 'rendered_markdown') {
         var cb = pandocCallbacks.get(msg.request_id);
         if (cb) {
@@ -829,7 +940,28 @@
     toolbarEl.appendChild(brandPath);
     toolbarEl.appendChild(disconnectBanner);
     toolbarEl.appendChild(renderingBanner);
+    toolbarEl.appendChild(reviewPill);
+    updateReviewPill();
     shadow.appendChild(renderErrorOverlay);
+
+    // Hamburger (shown only on narrow screens) toggles the controls panel.
+    var hamburgerBtn = document.createElement('button');
+    hamburgerBtn.className = 'scholia-toolbar-btn scholia-toolbar-hamburger';
+    hamburgerBtn.title = 'Menu';
+    hamburgerBtn.setAttribute('aria-label', 'Toolbar menu');
+    hamburgerBtn.innerHTML = '<svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="1" y1="2" x2="13" y2="2"/><line x1="1" y1="6" x2="13" y2="6"/><line x1="1" y1="10" x2="13" y2="10"/></svg>';
+    hamburgerBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = toolbarEl.classList.toggle('scholia-menu-open');
+      if (open) closeAllDropdowns();
+    });
+    toolbarEl.appendChild(hamburgerBtn);
+
+    // The toolbar controls (TOC, Options, Resolved/Read/comments toggles) live in
+    // this wrapper so they can collapse behind the hamburger when space is tight.
+    var controlsWrap = document.createElement('span');
+    controlsWrap.className = 'scholia-toolbar-controls';
+    toolbarEl.appendChild(controlsWrap);
 
     // Contents (TOC) dropdown — before Options
     tocWrapEl = document.createElement('span');
@@ -844,7 +976,7 @@
     });
     tocWrapEl.appendChild(tocBtn);
     if (!tocEl) tocWrapEl.style.display = 'none';
-    toolbarEl.appendChild(tocWrapEl);
+    controlsWrap.appendChild(tocWrapEl);
     if (tocEl) {
       tocWrapEl.appendChild(tocEl);
       renderMathIn(tocEl);
@@ -1055,7 +1187,7 @@
         var saveAsTd = document.createElement('td');
         saveAsTd.setAttribute('colspan', '2');
         var saveAsBtn = document.createElement('button');
-        saveAsBtn.className = 'scholia-export-btn';
+        saveAsBtn.className = 'scholia-toolbar-btn scholia-toolbar-btn-block';
         saveAsBtn.textContent = 'Save as\u2026';
         saveAsBtn.addEventListener('click', function () {
           menu.remove();
@@ -1072,7 +1204,7 @@
       var exportTd = document.createElement('td');
       exportTd.setAttribute('colspan', '2');
       var exportBtn = document.createElement('button');
-      exportBtn.className = 'scholia-export-btn';
+      exportBtn.className = 'scholia-toolbar-btn scholia-toolbar-btn-block';
       exportBtn.textContent = 'Export PDF';
       exportBtn.addEventListener('click', function () {
         exportBtn.textContent = 'Exporting\u2026';
@@ -1120,7 +1252,7 @@
       var stopTd = document.createElement('td');
       stopTd.setAttribute('colspan', '2');
       var stopBtn = document.createElement('button');
-      stopBtn.className = 'scholia-export-btn';
+      stopBtn.className = 'scholia-toolbar-btn scholia-toolbar-btn-block';
       stopBtn.textContent = 'Stop server';
       stopBtn.addEventListener('click', function () {
         stopBtn.disabled = true;
@@ -1137,7 +1269,7 @@
       optionsWrap.appendChild(menu);
     });
     optionsWrap.appendChild(optionsBtn);
-    toolbarEl.appendChild(optionsWrap);
+    controlsWrap.appendChild(optionsWrap);
 
     var btnGroup = document.createElement('span');
     btnGroup.className = 'scholia-toolbar-group';
@@ -1208,7 +1340,7 @@
     });
     btnGroup.appendChild(cbBtn);
 
-    toolbarEl.appendChild(btnGroup);
+    controlsWrap.appendChild(btnGroup);
 
     // Update toolbar height CSS variable for body padding/scroll offset
     if (isQuarto) {
@@ -1833,6 +1965,133 @@
     positionCards();
   }
 
+  // ── Review handshake ("Send to AI") ─────────────────
+
+  function reviewIsActive() {
+    return activeReviews.length > 0;
+  }
+
+  // The session to target for a submit: prefer one that is waiting (the agent
+  // is parked, ready), else the most recent active one.
+  function primaryReviewSession() {
+    for (var i = 0; i < activeReviews.length; i++) {
+      if (activeReviews[i].status === 'waiting') return activeReviews[i].session_id;
+    }
+    return activeReviews.length ? activeReviews[activeReviews.length - 1].session_id : null;
+  }
+
+  function openCommentIds() {
+    var ids = [];
+    for (var i = 0; i < comments.length; i++) {
+      if ((comments[i]['scholia:status'] || 'open') === 'open') ids.push(comments[i].id);
+    }
+    return ids;
+  }
+
+  function submitReview(commentIds, final) {
+    var sid = primaryReviewSession();
+    if (!sid) return;
+    (commentIds || []).forEach(function (id) { aiSentIds.add(id); });
+    updateReviewPill();
+    wsSend({
+      type: 'review_submit',
+      session_id: sid,
+      comment_ids: commentIds || [],
+      final: !!final
+    });
+  }
+
+  function unsentOpenIds() {
+    return openCommentIds().filter(function (id) { return !aiSentIds.has(id); });
+  }
+
+  // A comment stays "awaiting AI" (in aiSentIds) until the assistant replies
+  // (last message is Software) or the thread closes. Pruning here clears the
+  // header badge and re-enables the send button for a fresh follow-up.
+  function pruneAiSent() {
+    if (!aiSentIds.size) return;
+    var byId = {};
+    for (var i = 0; i < comments.length; i++) byId[comments[i].id] = comments[i];
+    aiSentIds.forEach(function (id) {
+      var c = byId[id];
+      if (!c || (c['scholia:status'] || 'open') !== 'open') { aiSentIds.delete(id); return; }
+      var bodies = c.body || [];
+      var last = bodies[bodies.length - 1];
+      if (last && last.creator && last.creator.type === 'Software') aiSentIds.delete(id);
+    });
+  }
+
+  function buildReviewBanner() {
+    // "awaiting" = you've sent comment(s) the assistant hasn't answered yet.
+    // Otherwise it's simply connected and ready — not "working".
+    var awaiting = aiSentIds.size > 0;
+    var primary = activeReviews[0];
+
+    var bar = document.createElement('div');
+    bar.className = 'scholia-review-banner' + (awaiting ? ' awaiting' : ' connected');
+
+    var title = document.createElement('div');
+    title.className = 'scholia-review-banner-title';
+    title.textContent = awaiting
+      ? '🤖 Awaiting the assistant…'
+      : '🤖 Assistant connected, ready for your review';
+    bar.appendChild(title);
+
+    if (primary && primary.instruction) {
+      var note = document.createElement('div');
+      note.className = 'scholia-review-banner-note';
+      note.textContent = 'Asked: ' + primary.instruction;
+      bar.appendChild(note);
+    }
+
+    // Always render the actions (incl. Cancel) whenever a session is active —
+    // even while "working" — so the human is never stuck without an escape
+    // hatch if the assistant is slow to re-poll or has stopped.
+    if (activeReviews.length) {
+      var actions = document.createElement('div');
+      actions.className = 'scholia-review-banner-actions';
+
+      var unsent = unsentOpenIds();
+
+      var sendBtn = document.createElement('button');
+      sendBtn.className = 'scholia-btn-primary';
+      sendBtn.textContent = unsent.length
+        ? ('Send ' + unsent.length + ' comment' + (unsent.length === 1 ? '' : 's') + ' to AI')
+        : '✓ All sent';
+      sendBtn.title = 'Send open comments not yet sent to the assistant';
+      sendBtn.disabled = unsent.length === 0;
+      sendBtn.addEventListener('click', function () { submitReview(unsentOpenIds(), false); });
+      actions.appendChild(sendBtn);
+
+      var finishBtn = document.createElement('button');
+      finishBtn.className = 'scholia-btn-ghost';
+      finishBtn.textContent = 'Send & finish';
+      finishBtn.title = 'Send any remaining open comments and end the review (the assistant stops waiting)';
+      finishBtn.addEventListener('click', function () { submitReview(unsentOpenIds(), true); });
+      actions.appendChild(finishBtn);
+
+      var cancelBtn = document.createElement('button');
+      cancelBtn.className = 'scholia-btn-ghost';
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.title = 'Stop the assistant waiting without sending anything';
+      cancelBtn.style.marginLeft = 'auto';
+      cancelBtn.addEventListener('click', function () {
+        var sid = primaryReviewSession();
+        if (sid) wsSend({ type: 'review_cancel', session_id: sid });
+      });
+      actions.appendChild(cancelBtn);
+
+      bar.appendChild(actions);
+
+      var hint = document.createElement('div');
+      hint.className = 'scholia-review-banner-hint';
+      hint.textContent = 'Or use “Send to AI” on an individual comment below.';
+      bar.appendChild(hint);
+    }
+
+    return bar;
+  }
+
   // ── Sidebar ────────────────────────────────────────
 
   function renderSidebar() {
@@ -1844,6 +2103,11 @@
 
     if (existingForm) {
       sidebarEl.appendChild(existingForm);
+    }
+
+    // "AI is waiting for your review" banner (only when a session is active)
+    if (reviewIsActive()) {
+      sidebarEl.appendChild(buildReviewBanner());
     }
 
     // Filter comments
@@ -1960,6 +2224,17 @@
       header.appendChild(resolvedLabel);
     }
 
+    // "Awaiting AI" badge — shown in the (always-visible) header, so a sent
+    // comment reads as pending even while the card is collapsed.
+    if (aiSentIds.has(ann.id)) {
+      card.classList.add('scholia-awaiting-ai');
+      var awaitBadge = document.createElement('span');
+      awaitBadge.className = 'scholia-awaiting-badge';
+      awaitBadge.textContent = '⏳ awaiting AI';
+      awaitBadge.title = 'Sent to the AI assistant, waiting for a reply';
+      header.appendChild(awaitBadge);
+    }
+
     // Message count
     var countSpan = document.createElement('span');
     countSpan.className = 'scholia-msg-count';
@@ -1975,7 +2250,7 @@
 
     // Pop-out button
     var popoutBtn = document.createElement('button');
-    popoutBtn.className = 'scholia-btn-popout';
+    popoutBtn.className = 'scholia-chip scholia-btn-popout';
     popoutBtn.innerHTML = '&#x2922;'; // ⤢
     popoutBtn.title = 'Pop out thread';
     popoutBtn.addEventListener('click', (function (theAnn) {
@@ -2024,6 +2299,13 @@
       if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
       meta.appendChild(timeSpan);
 
+      // Right-aligned cluster for the inline controls so they keep a stable
+      // position (see CSS: </> is forced rightmost regardless of which controls
+      // are present).
+      var metaActions = document.createElement('span');
+      metaActions.className = 'scholia-meta-actions';
+      meta.appendChild(metaActions);
+
       msgEl.appendChild(meta);
 
       var body = document.createElement('div');
@@ -2034,7 +2316,7 @@
 
       // Raw/rendered toggle button
       var toggleBtn = document.createElement('button');
-      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.className = 'scholia-chip scholia-btn-toggle-raw';
       toggleBtn.textContent = '</>';
       toggleBtn.title = 'Toggle raw markdown';
       toggleBtn.addEventListener('click', (function (theBody, theBtn) {
@@ -2054,12 +2336,12 @@
           }
         };
       })(body, toggleBtn));
-      meta.appendChild(toggleBtn);
+      metaActions.appendChild(toggleBtn);
 
       // Edit button on the very last body entry, only if it's the current user's message
       if (j === bodies.length - 1 && !isSoftware && msgCreator === creatorName) {
         var editBtn = document.createElement('button');
-        editBtn.className = 'scholia-btn-edit';
+        editBtn.className = 'scholia-chip scholia-btn-edit';
         editBtn.textContent = 'Edit';
         editBtn.addEventListener('click', (function (theBody, theAnn) {
           return function (e) {
@@ -2079,6 +2361,7 @@
             btnRow.className = 'scholia-edit-buttons';
 
             var saveBtn = document.createElement('button');
+            saveBtn.className = 'scholia-btn-primary';
             saveBtn.textContent = 'Save';
             saveBtn.title = 'Save edit (\u2318Enter)';
             saveBtn.addEventListener('click', function (ev) {
@@ -2099,6 +2382,7 @@
             btnRow.appendChild(saveBtn);
 
             var cancelBtn = document.createElement('button');
+            cancelBtn.className = 'scholia-btn-ghost';
             cancelBtn.textContent = 'Cancel';
             cancelBtn.title = 'Discard edit (Esc)';
             cancelBtn.addEventListener('click', function (ev) {
@@ -2135,13 +2419,13 @@
             theBody.appendChild(btnRow);
           };
         })(body, ann));
-        meta.appendChild(editBtn);
+        metaActions.appendChild(editBtn);
       }
 
       // Last AI message: read/unread toggle label in upper-right
       if (j === lastAiIdx) {
         var readLabel = document.createElement('button');
-        readLabel.className = 'scholia-read-toggle';
+        readLabel.className = 'scholia-chip scholia-read-toggle';
         if (unread) {
           readLabel.classList.add('scholia-read-toggle-unread');
           readLabel.textContent = 'unread';
@@ -2163,7 +2447,7 @@
           };
         })(card, readLabel));
         // Insert into meta row (upper-right)
-        meta.appendChild(readLabel);
+        metaActions.appendChild(readLabel);
       }
 
       thread.appendChild(msgEl);
@@ -2265,6 +2549,33 @@
       replyBtnRow.appendChild(unresolveBtn);
     }
 
+    // "Send to AI": ask the waiting assistant to address just this comment.
+    // Only shown while a review session is active and this thread is open.
+    if (reviewIsActive() && status === 'open') {
+      var alreadySent = aiSentIds.has(ann.id);
+      var sendAiBtn = document.createElement('button');
+      sendAiBtn.className = 'scholia-btn-ghost scholia-send-ai' + (alreadySent ? ' scholia-sent-ai' : '');
+      sendAiBtn.textContent = alreadySent ? '✓ Sent to AI' : 'Send to AI';
+      sendAiBtn.disabled = alreadySent;
+      sendAiBtn.title = alreadySent
+        ? 'Already sent to the assistant this round'
+        : 'Ask the waiting AI assistant to address this comment';
+      if (!alreadySent) {
+        sendAiBtn.addEventListener('click', (function (theAnnId, theBtn) {
+          return function (e) {
+            e.stopPropagation();
+            // Instant feedback now; the durable aiSentIds keeps it through the
+            // re-render that the server's review_state broadcast triggers.
+            theBtn.textContent = '✓ Sent to AI';
+            theBtn.disabled = true;
+            theBtn.classList.add('scholia-sent-ai');
+            submitReview([theAnnId], false);
+          };
+        })(ann.id, sendAiBtn));
+      }
+      replyBtnRow.appendChild(sendAiBtn);
+    }
+
     replyRow.appendChild(replyBtnRow);
     thread.appendChild(replyRow);
 
@@ -2359,14 +2670,14 @@
     var pandocHeaderBtn = document.createElement('button');
     pandocHeaderBtn.className = 'scholia-btn-pandoc active';
     pandocHeaderBtn.textContent = 'P';
-    pandocHeaderBtn.title = 'Render citations via Pandoc — click to toggle off';
+    pandocHeaderBtn.title = 'Render citations via Pandoc (click to toggle off)';
     pandocHeaderBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       overlayPandocActive = !overlayPandocActive;
       pandocHeaderBtn.classList.toggle('active', overlayPandocActive);
       pandocHeaderBtn.title = overlayPandocActive
-        ? 'Render citations via Pandoc — click to toggle off'
-        : 'Citations off — click to render via Pandoc';
+        ? 'Render citations via Pandoc (click to toggle off)'
+        : 'Citations off (click to render via Pandoc)';
       for (var bi = 0; bi < overlayBodies.length; bi++) {
         var b = overlayBodies[bi];
         if (b.classList.contains('scholia-raw-view')) continue; // skip if in raw mode
@@ -2429,6 +2740,10 @@
       if (msg.created) timeSpan.title = new Date(msg.created).toLocaleString();
       meta.appendChild(timeSpan);
 
+      var metaActions = document.createElement('span');
+      metaActions.className = 'scholia-meta-actions';
+      meta.appendChild(metaActions);
+
       var bodyEl = document.createElement('div');
       bodyEl.className = 'scholia-message-body';
       bodyEl.dataset.raw = msg.value;
@@ -2436,7 +2751,7 @@
       overlayBodies.push(bodyEl);
 
       var toggleBtn = document.createElement('button');
-      toggleBtn.className = 'scholia-btn-toggle-raw';
+      toggleBtn.className = 'scholia-chip scholia-btn-toggle-raw';
       toggleBtn.textContent = '</>';
       toggleBtn.title = 'Toggle raw markdown';
       toggleBtn.addEventListener('click', (function (theBody, theBtn) {
@@ -2461,7 +2776,7 @@
           }
         };
       })(bodyEl, toggleBtn));
-      meta.appendChild(toggleBtn);
+      metaActions.appendChild(toggleBtn);
 
       msgEl.appendChild(meta);
       msgEl.appendChild(bodyEl);

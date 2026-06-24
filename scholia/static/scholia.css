@@ -765,8 +765,37 @@ div.sidenote-wrapper .sidenote[data-number]::before {
   margin-left: 0.5em;
 }
 
-/* Inline meta-row buttons (tiny, inside author line) */
-.scholia-btn-toggle-raw,
+/* Right-aligned cluster for the inline meta-row controls. */
+.scholia-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: auto;
+}
+/* The </> toggle is forced rightmost regardless of which other controls
+   (Edit / mark-unread) are present, so it never shifts position. */
+.scholia-meta-actions .scholia-btn-toggle-raw { order: 9; }
+
+/* Shared "chip": one outlined visual language for every tiny inline control
+   (</>, pop-out, Edit, mark unread) so they all look and behave the same. */
+.scholia-chip {
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: var(--s-radius);
+  padding: 0 5px;
+  font-size: 0.62rem;
+  line-height: 1.6;
+  font-family: var(--s-sans);
+  font-weight: 400;
+  color: var(--s-text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.scholia-chip:hover { border-color: var(--s-accent); color: var(--s-accent); }
+.scholia-chip.active { background: var(--s-accent-dim); color: var(--s-accent); border-color: var(--s-accent); }
+.scholia-btn-toggle-raw { font-family: var(--s-mono); }
+
+/* .scholia-btn-pandoc: self-contained (not currently emitted with .scholia-chip) */
 .scholia-btn-pandoc {
   background: none;
   border: 1px solid var(--s-border);
@@ -776,13 +805,12 @@ div.sidenote-wrapper .sidenote[data-number]::before {
   color: var(--s-text-dim);
   cursor: pointer;
   line-height: 1.4;
+  font-weight: 600;
+  min-width: 1.2em;
+  text-align: center;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.scholia-btn-toggle-raw { font-family: var(--s-mono); margin-left: auto; }
-.scholia-btn-pandoc { font-weight: 600; min-width: 1.2em; text-align: center; }
-.scholia-btn-toggle-raw:hover,
 .scholia-btn-pandoc:hover { border-color: var(--s-accent); color: var(--s-accent); }
-.scholia-btn-toggle-raw.active,
 .scholia-btn-pandoc.active { background: var(--s-accent-dim); color: var(--s-accent); border-color: var(--s-accent); }
 
 .scholia-message-body.scholia-raw-view {
@@ -800,31 +828,7 @@ div.sidenote-wrapper .sidenote[data-number]::before {
   opacity: 0.7;
 }
 
-.scholia-read-toggle {
-  font-size: 0.7rem;
-  font-family: var(--s-sans);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  color: var(--s-text-dim);
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-}
-.scholia-read-toggle:hover { color: var(--s-accent); }
-.scholia-btn-edit {
-  font-size: 0.7rem;
-  font-family: var(--s-sans);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  color: var(--s-text-dim);
-  font-weight: 400;
-  margin-left: auto;
-}
-.scholia-btn-edit:hover { color: var(--s-accent); }
+/* mark-unread / unread toggle and Edit both use the shared .scholia-chip base. */
 .scholia-edit-textarea {
   width: 100%;
   font-family: var(--s-comment);
@@ -843,29 +847,15 @@ div.sidenote-wrapper .sidenote[data-number]::before {
   gap: 0.3rem;
   margin-top: 0.25rem;
 }
+/* Save / Cancel / Preview reuse .scholia-btn-primary / .scholia-btn-ghost (the
+   same buttons as the card footer), just sized down. */
 .scholia-edit-buttons button {
   font-size: 0.65rem;
-  font-family: var(--s-sans);
-  border: none;
-  border-radius: 3px;
   padding: 0.1rem 0.4rem;
-  cursor: pointer;
-}
-.scholia-edit-buttons button:first-child {
-  background: var(--s-accent);
-  color: #fff;
-}
-.scholia-edit-buttons button:last-child {
-  background: none;
-  color: var(--s-text-dim);
-  border: 1px solid var(--s-border);
-}
-.scholia-edit-buttons button:last-child:hover {
-  border-color: var(--s-accent);
-  color: var(--s-accent);
 }
 .scholia-read-toggle-unread {
   color: var(--s-unread);
+  border-color: var(--s-unread);
   font-weight: 700;
 }
 .scholia-ai {
@@ -982,6 +972,24 @@ div.sidenote-wrapper .sidenote[data-number]::before {
   transition: opacity 0.15s;
 }
 .scholia-btn-primary:hover { opacity: 0.85; }
+
+/* Unified disabled state across every button role: muted, with no hover or
+   border highlight — a disabled button must never look clickable. */
+.scholia-chip:disabled,
+.scholia-chip:disabled:hover,
+.scholia-btn-ghost:disabled,
+.scholia-btn-ghost:disabled:hover,
+.scholia-btn-primary:disabled,
+.scholia-btn-primary:disabled:hover,
+.scholia-toolbar-btn:disabled,
+.scholia-toolbar-btn:disabled:hover {
+  color: var(--s-text-dim);
+  border-color: var(--s-border);
+  background: none;
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
 
 /* ── Pandoc syntax highlighting (pygments) ─────────── */
 
@@ -1455,6 +1463,56 @@ a.scholia-toolbar-brand:hover {
   color: #fff;
   border-color: var(--s-accent);
 }
+/* Full-width variant for the block action buttons in the Options menu
+   (Export PDF / Stop server / Save as…). */
+.scholia-toolbar-btn-block {
+  width: 100%;
+}
+
+/* Toolbar controls collapse behind a hamburger on narrow screens. */
+.scholia-toolbar-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.scholia-toolbar-hamburger {
+  display: none;
+}
+@media (max-width: 600px) {
+  .scholia-toolbar-hamburger {
+    display: inline-flex;
+  }
+  .scholia-toolbar-controls {
+    position: absolute;
+    top: 100%;
+    right: 0.5rem;
+    margin-top: 2px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    min-width: 9rem;
+    padding: 0.5rem;
+    background: var(--s-card);
+    border: 1px solid var(--s-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    display: none;
+    z-index: 600;
+  }
+  .scholia-toolbar.scholia-menu-open .scholia-toolbar-controls {
+    display: flex;
+  }
+  /* Order the big Options menu last so its submenu opens below the panel. */
+  .scholia-toolbar-controls .scholia-toolbar-group { order: 1; }
+  .scholia-toolbar-controls .scholia-toc-wrap { order: 2; }
+  .scholia-toolbar-controls .scholia-options-wrap { order: 3; }
+  /* Keep the connect pill compact (no hover-expand) when space is tight. */
+  .scholia-review-pill.disconnected:hover .scholia-pill-label {
+    max-width: 0;
+    opacity: 0;
+    margin-left: 0;
+  }
+}
 
 /* Button group: merge adjacent buttons */
 .scholia-toolbar-group {
@@ -1749,19 +1807,8 @@ body.scholia-dark .scholia-code-copy {
   flex-shrink: 0;
 }
 
-.scholia-btn-popout {
-  background: none;
-  border: 1px solid var(--s-border);
-  border-radius: var(--s-radius);
-  padding: 0 4px;
-  font-size: 0.7rem;
-  color: var(--s-text-dim);
-  cursor: pointer;
-  line-height: 1.4;
-  margin-left: 0.2rem;
-  transition: color 0.15s, border-color 0.15s;
-}
-.scholia-btn-popout:hover { border-color: var(--s-accent); color: var(--s-accent); }
+/* Pop-out uses the shared .scholia-chip base; just nudge it off the count. */
+.scholia-btn-popout { margin-left: 0.2rem; font-size: 0.68rem; }
 
 /* Preview and resolve/unresolve buttons inherit from .scholia-btn-ghost via JS class */
 
@@ -1782,23 +1829,8 @@ body.scholia-dark .scholia-code-copy {
   padding-top: 4px;
   border-top: none;
 }
-.scholia-export-btn {
-  width: 100%;
-  padding: 0.15rem 0.5rem;
-  min-height: 1.6rem;
-  cursor: pointer;
-  border: 1px solid var(--s-border);
-  border-radius: var(--s-radius);
-  background: none;
-  color: var(--s-text-dim);
-  font-size: 0.7rem;
-  font-family: var(--s-sans);
-  transition: color 0.15s, border-color 0.15s;
-}
-.scholia-export-btn:hover {
-  color: var(--s-accent);
-  border-color: var(--s-accent);
-}
+/* Export / Stop / Save-as use .scholia-toolbar-btn .scholia-toolbar-btn-block
+   (consolidated with the navbar buttons). */
 
 /* Export warning banner */
 .scholia-export-warning {
@@ -2034,4 +2066,147 @@ body.scholia-dark .scholia-code-copy {
 }
 .scholia-save-as-btn-primary:hover {
   opacity: 0.85;
+}
+
+/* ── "AI is waiting for your review" banner ─────────────── */
+.scholia-review-banner {
+  margin: 0 0 0.7em;
+  padding: 0.6em 0.7em;
+  border-radius: var(--s-radius);
+  border: 1px solid var(--s-ai);
+  background: var(--s-accent-dim);
+  font-family: var(--s-comment);
+}
+.scholia-review-banner.working {
+  border-color: var(--s-border);
+  opacity: 0.85;
+}
+.scholia-review-banner-title {
+  font-weight: 600;
+  font-size: 0.9em;
+  color: var(--s-text);
+}
+.scholia-review-banner-note {
+  font-size: 0.82em;
+  color: var(--s-text-dim);
+  margin-top: 0.3em;
+  font-style: italic;
+}
+.scholia-review-banner-actions {
+  display: flex;
+  gap: 0.4em;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.55em;
+}
+.scholia-review-banner-actions button {
+  padding: 0.25em 0.7em;
+  font-size: 0.82em;
+  border-radius: var(--s-radius);
+  cursor: pointer;
+}
+.scholia-review-banner-hint {
+  font-size: 0.76em;
+  color: var(--s-text-dim);
+  margin-top: 0.45em;
+}
+/* Per-comment send button picks up the AI accent color */
+.scholia-send-ai {
+  color: var(--s-ai);
+}
+/* Sent / unavailable state: muted and non-interactive, so it's obvious the
+   click registered and the comment was already handed off. */
+/* (disabled "✓ Sent to AI" / banner buttons handled by the unified :disabled rule) */
+/* "Awaiting AI" header badge — a sent comment is pending with the assistant.
+   Stands alone (no card border) to avoid clashing with the ai-replied/unread
+   left-border states. */
+.scholia-awaiting-badge {
+  font-size: 0.7em;
+  color: var(--s-ai);
+  background: var(--s-accent-dim);
+  border: 1px solid var(--s-ai);
+  border-radius: 3px;
+  padding: 0.05em 0.4em;
+  white-space: nowrap;
+  font-family: var(--s-comment);
+}
+/* Always-visible toolbar pill: assistant connection / awaiting state. */
+.scholia-review-pill {
+  display: none;
+  align-items: center;
+  font-family: var(--s-comment);
+  font-size: 0.72em;
+  line-height: 1;
+  padding: 0.25em 0.65em;
+  margin: 0 0.4em;
+  border-radius: 999px;
+  border: 1px solid var(--s-ai);
+  color: var(--s-ai);
+  background: var(--s-accent-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scholia-review-pill.visible {
+  display: inline-flex;
+}
+/* Pulsing glow while we're actively waiting on the assistant. */
+.scholia-review-pill.awaiting {
+  animation: scholia-review-pulse 1.6s ease-in-out infinite;
+}
+@keyframes scholia-review-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 111, 165, 0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(74, 111, 165, 0); }
+}
+/* Disconnected: an icon-only, muted, crossed-out robot — click to copy the
+   request command. Brightens (and un-crosses) on hover to signal it's actionable. */
+.scholia-review-pill.disconnected {
+  color: var(--s-text-dim);
+  border-color: var(--s-border);
+  background: none;
+  padding: 0.15em 0.5em;
+  font-size: 1em;
+}
+.scholia-review-pill.disconnected:hover {
+  color: var(--s-accent);
+  border-color: var(--s-accent);
+}
+.scholia-robot-off {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.75;
+}
+.scholia-robot-off::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 50%;
+  border-top: 1.5px solid var(--s-text-dim);
+  transform: rotate(-20deg);
+}
+.scholia-review-pill.disconnected:hover .scholia-robot-off {
+  filter: none;
+  opacity: 1;
+}
+.scholia-review-pill.disconnected:hover .scholia-robot-off::after {
+  border-top-color: var(--s-accent);
+}
+/* Hover expands the chip to reveal a short label; full details stay in the
+   tooltip. Collapsed to zero width by default (min-width:0 lets it shrink in
+   the inline-flex pill). */
+.scholia-pill-label {
+  min-width: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  font-size: 0.72rem;
+  transition: max-width 0.2s ease, opacity 0.2s ease, margin-left 0.2s ease;
+}
+.scholia-review-pill.disconnected:hover .scholia-pill-label {
+  max-width: 12em;
+  opacity: 1;
+  margin-left: 0.35em;
 }

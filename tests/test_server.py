@@ -1,5 +1,6 @@
 """Integration tests for the scholia server."""
 
+import asyncio
 import shutil
 
 import pytest
@@ -998,3 +999,183 @@ def test_server_writes_and_clears_server_state(tmp_path):
     assert "pid" in info
     server._clear_server_state()
     assert get_server(str(doc)) is None
+
+
+# ── Review session endpoints (human → AI handshake) ──────────
+
+
+@pytest.mark.asyncio
+async def test_review_start_returns_session(client, tmp_doc):
+    resp = await client.post(
+        "/api/review/start", json={"doc": str(tmp_doc.resolve()), "instruction": "check it"}
+    )
+    assert resp.status == 200
+    data = await resp.json()
+    assert data["session_id"].startswith("rev-")
+    assert data["status"] == "waiting"
+    assert data["instruction"] == "check it"
+
+
+@pytest.mark.asyncio
+async def test_review_start_dedups_active_session(client, tmp_doc):
+    """A second start for the same document rejoins the first session."""
+    r1 = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    r2 = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    assert (await r1.json())["session_id"] == (await r2.json())["session_id"]
+
+
+@pytest.mark.asyncio
+async def test_review_wait_pending_on_timeout(client, tmp_doc):
+    r = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid = (await r.json())["session_id"]
+    resp = await client.get("/api/review/wait", params={"session_id": sid, "timeout": "0.05"})
+    data = await resp.json()
+    assert data["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_review_wait_unknown_session(client):
+    resp = await client.get(
+        "/api/review/wait", params={"session_id": "rev-nope", "timeout": "0.05"}
+    )
+    assert resp.status == 404
+    assert (await resp.json())["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_review_wait_resolves_on_ws_submit(client, tmp_doc):
+    """The agent's long-poll unblocks when the browser submits a batch."""
+    ann = append_comment(tmp_doc, exact="Some text", body_text="hi")
+    r = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid = (await r.json())["session_id"]
+
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+
+    wait_task = asyncio.ensure_future(
+        client.get("/api/review/wait", params={"session_id": sid, "timeout": "5"})
+    )
+    await asyncio.sleep(0.05)
+    await ws.send_json(
+        {
+            "type": "review_submit",
+            "session_id": sid,
+            "comment_ids": [ann["id"]],
+            "instruction": "please address",
+            "final": False,
+        }
+    )
+    resp = await wait_task
+    data = await resp.json()
+    await ws.close()
+    assert data["status"] == "submitted"
+    assert data["action"] == "submit"
+    assert data["comment_ids"] == [ann["id"]]
+    assert data["instruction"] == "please address"
+
+
+@pytest.mark.asyncio
+async def test_review_finish_ends_session(client, tmp_doc):
+    r = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid = (await r.json())["session_id"]
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    wait_task = asyncio.ensure_future(
+        client.get("/api/review/wait", params={"session_id": sid, "timeout": "5"})
+    )
+    await asyncio.sleep(0.05)
+    await ws.send_json(
+        {"type": "review_submit", "session_id": sid, "comment_ids": [], "final": True}
+    )
+    data = await (await wait_task).json()
+    await ws.close()
+    assert data["status"] == "submitted"
+    assert data["action"] == "finish"
+    # Session is gone after a finish — a re-poll finds nothing.
+    resp = await client.get("/api/review/wait", params={"session_id": sid, "timeout": "0.05"})
+    assert resp.status == 404
+
+
+@pytest.mark.asyncio
+async def test_review_start_recovers_stranded_finish_batch(client, tmp_doc):
+    """If 'Send & finish' lands before the agent re-polls, the re-issued
+    request_review rejoins the finished session and still receives the final
+    batch — rather than opening a fresh empty session and stranding it."""
+    ann = append_comment(tmp_doc, exact="Some text", body_text="last one")
+    r1 = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid1 = (await r1.json())["session_id"]
+
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    # Human clicks Send & finish while the agent is between rounds (not polling).
+    await ws.send_json(
+        {"type": "review_submit", "session_id": sid1, "comment_ids": [ann["id"]], "final": True}
+    )
+    await asyncio.sleep(0.1)
+
+    # Agent re-issues request_review for the next round.
+    r2 = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid2 = (await r2.json())["session_id"]
+    assert sid2 == sid1, "re-request opened a new session; finish batch stranded"
+
+    # ...and the agent's wait now delivers the stranded final batch.
+    resp = await client.get("/api/review/wait", params={"session_id": sid2, "timeout": "2"})
+    data = await resp.json()
+    await ws.close()
+    assert data["status"] == "submitted"
+    assert data["action"] == "finish"
+    assert data["comment_ids"] == [ann["id"]]
+
+
+@pytest.mark.asyncio
+async def test_review_cancel_aborts_wait(client, tmp_doc):
+    r = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid = (await r.json())["session_id"]
+    wait_task = asyncio.ensure_future(
+        client.get("/api/review/wait", params={"session_id": sid, "timeout": "5"})
+    )
+    await asyncio.sleep(0.05)
+    await client.post("/api/review/cancel", json={"session_id": sid})
+    data = await (await wait_task).json()
+    assert data["status"] == "aborted"
+
+
+@pytest.mark.asyncio
+async def test_review_wait_coalesces_queued_batches(client, tmp_doc):
+    """A burst of per-comment sends reaches the agent in one batch, not one per poll."""
+    r = await client.post("/api/review/start", json={"doc": str(tmp_doc.resolve())})
+    sid = (await r.json())["session_id"]
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    await ws.send_json(
+        {"type": "review_submit", "session_id": sid, "comment_ids": ["a"], "final": False}
+    )
+    await ws.send_json(
+        {"type": "review_submit", "session_id": sid, "comment_ids": ["b"], "final": False}
+    )
+    await asyncio.sleep(0.1)  # let both submissions queue
+    resp = await client.get("/api/review/wait", params={"session_id": sid, "timeout": "2"})
+    data = await resp.json()
+    await ws.close()
+    assert data["status"] == "submitted"
+    assert set(data["comment_ids"]) == {"a", "b"}
+
+
+@pytest.mark.asyncio
+async def test_watch_receives_review_state(client, tmp_doc):
+    """A browser connecting mid-review is told about the active session."""
+    r = await client.post(
+        "/api/review/start", json={"doc": str(tmp_doc.resolve()), "instruction": "x"}
+    )
+    sid = (await r.json())["session_id"]
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    found = None
+    for _ in range(10):
+        msg = await asyncio.wait_for(ws.receive_json(), timeout=2)
+        if msg.get("type") == "review_state":
+            found = msg
+            break
+    await ws.close()
+    assert found is not None
+    assert any(s["session_id"] == sid for s in found["sessions"])
