@@ -3,12 +3,14 @@
 import asyncio
 import json
 import os
+import posixpath
 import re
 import signal
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import quote
 
 from aiohttp import web
@@ -41,6 +43,9 @@ def _check_pandoc():
 # resort. pandoc defaults to pdflatex when no engine is specified, which is why
 # documents containing Unicode fail unless we pick a capable engine explicitly.
 _PDF_ENGINES = ("xelatex", "lualatex", "tectonic", "pdflatex")
+
+# Sentinel: "caller did not supply a detected project; detect inside the function."
+_DETECT_PROJECT = object()
 
 
 def _default_pdf_engine() -> str | None:
@@ -364,6 +369,44 @@ def _is_quarto(path: Path) -> bool:
     return path.suffix.lower() in _QUARTO_EXTENSIONS
 
 
+class QuartoProject(NamedTuple):
+    """Location of a Quarto project relevant to serving a single rendered doc."""
+
+    root: Path  # absolute project root (dir containing _quarto.yml)
+    output_dir: Path  # absolute dir Quarto writes rendered output into
+
+
+def _detect_quarto_project(doc_path: Path) -> "QuartoProject | None":
+    """Return the Quarto project a document belongs to, or None if standalone.
+
+    Uses ``quarto inspect`` to read ``config.project.output-dir`` and the
+    project root. Any failure (quarto missing, non-zero exit, bad JSON,
+    no project config) is treated as standalone and returns None, so
+    detection never blocks rendering.
+    """
+    quarto = shutil.which("quarto")
+    if not quarto:
+        return None
+    try:
+        result = subprocess.run(
+            [quarto, "inspect", str(doc_path.parent.resolve())],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            return None
+        info = json.loads(result.stdout)
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return None
+    project = (info.get("config") or {}).get("project")
+    if not project or not project.get("output-dir"):
+        return None
+    root = Path(info["dir"]).resolve()
+    output_dir = (root / project["output-dir"]).resolve()
+    return QuartoProject(root=root, output_dir=output_dir)
+
+
 def _rewrite_quarto_assets(html: str, stem: str, base_dir: Path) -> str:
     """Rewrite asset URLs in a rendered Quarto page for scholia's server.
 
@@ -381,7 +424,42 @@ def _rewrite_quarto_assets(html: str, stem: str, base_dir: Path) -> str:
     return _rewrite_local_asset_urls(html, base_dir)
 
 
-def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str, str]:
+def _rewrite_quarto_project_assets(html: str, doc_subdir: Path) -> str:
+    """Rewrite relative asset URLs in a project-rendered Quarto page.
+
+    The page is served at ``/`` but its assets live under the project's
+    output dir. Each relative ``href``/``src`` is resolved against the
+    document's own directory within the output tree (``doc_subdir``) and
+    re-pointed at the /quarto-site/ route, which serves from output-dir.
+
+    Absolute URLs (leading ``/``, a scheme, ``data:``, ``mailto:``) and
+    pure ``#fragment`` links are left untouched so in-page anchors keep
+    working. Sibling-page links (e.g. ``about.html``) are rewritten too,
+    so the kept site chrome navigates to statically-served project pages.
+    """
+    base = doc_subdir.as_posix()
+
+    def repl(match: "re.Match[str]") -> str:
+        attr, value = match.group(1), match.group(2)
+        if (
+            not value
+            or value.startswith("/")
+            or value.startswith("#")
+            or "://" in value
+            or value.startswith("data:")
+            or value.startswith("mailto:")
+        ):
+            return match.group(0)
+        joined = value if base == "." else f"{base}/{value}"
+        target = posixpath.normpath(joined)
+        return f'{attr}="/quarto-site/{target}"'
+
+    return re.sub(r'(href|src)="([^"]*)"', repl, html)
+
+
+def _render_quarto_sync(
+    doc_path: Path, use_defaults: bool = True, project=_DETECT_PROJECT
+) -> tuple[str, str]:
     """Render a Quarto document and return the full HTML page (blocking).
 
     Runs ``quarto render`` in the document's own directory so that
@@ -402,7 +480,6 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str,
     tmp_src = _write_macro_injected_source(doc_path)
     render_path = tmp_src or doc_path
     try:
-        out_file = render_path.with_suffix(".html")
         cmd = [
             quarto,
             "render",
@@ -433,6 +510,29 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str,
         if result.returncode != 0:
             raise RuntimeError(f"quarto render failed: {result.stderr}")
 
+        if project is _DETECT_PROJECT:
+            project = _detect_quarto_project(doc_path)
+        if project is not None:
+            try:
+                rel = render_path.resolve().relative_to(project.root)
+            except ValueError:
+                project = None
+        if project is not None:
+            out_file = (project.output_dir / rel).with_suffix(".html")
+            html = out_file.read_text(encoding="utf-8")
+            html = _rewrite_quarto_project_assets(html, rel.parent)
+            if tmp_src is not None:
+                # Remove the temp source's stray outputs under output-dir.
+                stray_html = out_file
+                stray_files = out_file.with_name(render_path.stem + "_files")
+                if stray_html.exists():
+                    stray_html.unlink()
+                if stray_files.is_dir():
+                    shutil.rmtree(stray_files)
+            return html, result.stderr
+
+        # Standalone: output is adjacent to the source.
+        out_file = render_path.with_suffix(".html")
         html = out_file.read_text(encoding="utf-8")
         html = _rewrite_quarto_assets(html, render_path.stem, doc_path.parent.resolve())
 
@@ -453,7 +553,10 @@ def _render_quarto_sync(doc_path: Path, use_defaults: bool = True) -> tuple[str,
 
 
 async def render_doc(
-    doc_path: Path, sidenotes: bool = False, quarto_use_defaults: bool = True
+    doc_path: Path,
+    sidenotes: bool = False,
+    quarto_use_defaults: bool = True,
+    project=_DETECT_PROJECT,
 ) -> tuple[str, str]:
     """Render a document to HTML, choosing the right pipeline.
 
@@ -463,7 +566,9 @@ async def render_doc(
     """
     loop = asyncio.get_running_loop()
     if _is_quarto(doc_path):
-        return await loop.run_in_executor(None, _render_quarto_sync, doc_path, quarto_use_defaults)
+        return await loop.run_in_executor(
+            None, _render_quarto_sync, doc_path, quarto_use_defaults, project
+        )
     return await loop.run_in_executor(None, _render_pandoc_sync, doc_path, sidenotes)
 
 
@@ -777,11 +882,12 @@ async def build_page(
     sidenotes: bool = False,
     display_path: str = "",
     quarto_theme: str = "scholia",
+    project=_DETECT_PROJECT,
 ) -> str:
     """Build full HTML page from template + rendered markdown + comments."""
     use_defaults = quarto_theme != "default"
     html, _stderr = await render_doc(
-        doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults
+        doc_path, sidenotes=sidenotes, quarto_use_defaults=use_defaults, project=project
     )
 
     if _is_quarto(doc_path):
@@ -936,6 +1042,7 @@ class ScholiaServer:
         self._ephemeral = ephemeral
         self._open_browser = open_browser
         self.render_errors: dict[Path, str] = {}  # doc_path -> last error message
+        self._quarto_project_cache: dict[Path, QuartoProject | None] = {}
         self._stop_event: asyncio.Event | None = None
         self.reviews = ReviewRegistry()  # human → AI "send to review" sessions
 
@@ -954,6 +1061,7 @@ class ScholiaServer:
         self.app.router.add_get("/", self._handle_index)
         self.app.router.add_get("/ws", self._handle_ws)
         self.app.router.add_get("/quarto-assets/{path:.+}", self._handle_quarto_assets)
+        self.app.router.add_get("/quarto-site/{path:.+}", self._handle_quarto_site)
         self.app.router.add_get("/doc-assets/{path:.+}", self._handle_doc_assets)
         self.app.router.add_get("/api/list-dir", self._handle_list_dir)
         self.app.router.add_get("/api/export-pdf", self._handle_export_pdf)
@@ -971,6 +1079,33 @@ class ScholiaServer:
         assets_dir = self.doc_path.parent / (self.doc_path.stem + "_files")
         file_path = (assets_dir / rel_path).resolve()
         if not file_path.is_relative_to(assets_dir.resolve()):
+            return web.Response(status=403)
+        if not file_path.is_file():
+            return web.Response(status=404)
+        return web.FileResponse(file_path)
+
+    def _get_quarto_project(self, doc_path: "Path | None" = None) -> "QuartoProject | None":
+        """Detect (and cache) the Quarto project for *doc_path*, if any.
+
+        Defaults to ``self.doc_path`` so the route handler can call it with no
+        arguments (unchanged behavior). Pass *doc_path* explicitly at render
+        entry points to key the cache on the doc being rendered rather than
+        always on the server's primary doc.
+        """
+        dp = doc_path or self.doc_path
+        if dp not in self._quarto_project_cache:
+            self._quarto_project_cache[dp] = _detect_quarto_project(dp)
+        return self._quarto_project_cache[dp]
+
+    async def _handle_quarto_site(self, request):
+        """Serve Quarto project assets/pages from the project output-dir."""
+        project = self._get_quarto_project()
+        if project is None:
+            return web.Response(status=404)
+        rel_path = request.match_info["path"]
+        base = project.output_dir.resolve()
+        file_path = (base / rel_path).resolve()
+        if not file_path.is_relative_to(base):
             return web.Response(status=403)
         if not file_path.is_file():
             return web.Response(status=404)
@@ -1044,6 +1179,7 @@ class ScholiaServer:
                     sidenotes=sidenotes,
                     display_path=display,
                     quarto_theme=quarto_theme,
+                    project=self._get_quarto_project(doc_path),
                 )
             else:
                 force_raw = request.query.get("raw") == "1"
@@ -1422,7 +1558,9 @@ class ScholiaServer:
                     closed.add(ws)
             try:
                 for sn_val, ws_list in by_sidenotes.items():
-                    rendered, stderr = await render_doc(doc_path, sidenotes=sn_val)
+                    rendered, stderr = await render_doc(
+                        doc_path, sidenotes=sn_val, project=self._get_quarto_project(doc_path)
+                    )
                     if stderr.strip():
                         warn_display = self._display_path(doc_path)
                         pfx = f"\033[33m[scholia] Render warning ({warn_display}):\033[0m"
