@@ -1179,3 +1179,210 @@ async def test_watch_receives_review_state(client, tmp_doc):
     await ws.close()
     assert found is not None
     assert any(s["session_id"] == sid for s in found["sessions"])
+
+
+# ── Quarto project detection tests ────────────────────────────────────────────
+
+
+def test_detect_quarto_project_parses_inspect(tmp_path, monkeypatch):
+    """Project inspect JSON maps to QuartoProject(root, output_dir)."""
+    import json
+    import subprocess as sp
+    from scholia import server
+
+    inspect_json = json.dumps(
+        {"dir": str(tmp_path), "config": {"project": {"output-dir": "_site"}}}
+    )
+
+    def fake_run(cmd, **kwargs):
+        return sp.CompletedProcess(cmd, 0, stdout=inspect_json, stderr="")
+
+    monkeypatch.setattr(server.shutil, "which", lambda _: "/usr/bin/quarto")
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+
+    proj = server._detect_quarto_project(tmp_path / "index.qmd")
+    assert proj is not None
+    assert proj.root == tmp_path.resolve()
+    assert proj.output_dir == (tmp_path / "_site").resolve()
+
+
+def test_detect_quarto_project_returns_none_for_standalone(tmp_path, monkeypatch):
+    """A doc with no project config (config.project is null) is standalone."""
+    import json
+    import subprocess as sp
+    from scholia import server
+
+    inspect_json = json.dumps({"dir": str(tmp_path), "config": {"project": None}})
+
+    def fake_run(cmd, **kwargs):
+        return sp.CompletedProcess(cmd, 0, stdout=inspect_json, stderr="")
+
+    monkeypatch.setattr(server.shutil, "which", lambda _: "/usr/bin/quarto")
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+
+    assert server._detect_quarto_project(tmp_path / "solo.qmd") is None
+
+
+def test_detect_quarto_project_returns_none_on_failure(tmp_path, monkeypatch):
+    """inspect failure (non-zero / bad JSON) falls back to standalone, never raises."""
+    import subprocess as sp
+    from scholia import server
+
+    def fake_run(cmd, **kwargs):
+        return sp.CompletedProcess(cmd, 1, stdout="not json", stderr="boom")
+
+    monkeypatch.setattr(server.shutil, "which", lambda _: "/usr/bin/quarto")
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+
+    assert server._detect_quarto_project(tmp_path / "x.qmd") is None
+
+
+def test_rewrite_quarto_project_assets_root_doc():
+    """Root-level project doc: site_libs/_files/images map to /quarto-site/."""
+    from pathlib import Path
+    from scholia.server import _rewrite_quarto_project_assets
+
+    html = (
+        '<link href="site_libs/bootstrap/bootstrap.min.css">'
+        '<script src="site_libs/quarto-nav/quarto-nav.js"></script>'
+        '<img src="index_files/figure-html/fig.png">'
+        '<img src="img.png">'
+        '<a href="about.html">about</a>'
+        '<a href="#sec-intro">jump</a>'
+        '<script src="https://cdn.example.com/m.js"></script>'
+    )
+    out = _rewrite_quarto_project_assets(html, Path("."))
+    assert 'href="/quarto-site/site_libs/bootstrap/bootstrap.min.css"' in out
+    assert 'src="/quarto-site/site_libs/quarto-nav/quarto-nav.js"' in out
+    assert 'src="/quarto-site/index_files/figure-html/fig.png"' in out
+    assert 'src="/quarto-site/img.png"' in out
+    # Kept chrome: sibling links route through /quarto-site/ (served statically).
+    assert 'href="/quarto-site/about.html"' in out
+    # In-page anchors and absolute/CDN URLs are untouched.
+    assert 'href="#sec-intro"' in out
+    assert 'src="https://cdn.example.com/m.js"' in out
+
+
+def test_rewrite_quarto_project_assets_nested_doc():
+    """A doc in chapters/ references ../site_libs/, which resolves to the root."""
+    from pathlib import Path
+    from scholia.server import _rewrite_quarto_project_assets
+
+    html = (
+        '<script src="../site_libs/quarto-nav/quarto-nav.js"></script>'
+        '<img src="intro_files/figure-html/fig.png">'
+    )
+    out = _rewrite_quarto_project_assets(html, Path("chapters"))
+    assert 'src="/quarto-site/site_libs/quarto-nav/quarto-nav.js"' in out
+    assert 'src="/quarto-site/chapters/intro_files/figure-html/fig.png"' in out
+
+
+def _make_website_project(tmp_path):
+    """Create the issue's repro: a type:website project with output-dir _site."""
+    (tmp_path / "_quarto.yml").write_text("project:\n  type: website\n  output-dir: _site\n")
+    (tmp_path / "index.qmd").write_text(
+        "---\ntitle: Repro\n---\n# Hello\nInline math: $E = mc^2$.\n"
+    )
+    return tmp_path / "index.qmd"
+
+
+@pytest.mark.skipif(not shutil.which("quarto"), reason="quarto not installed")
+def test_render_quarto_sync_reads_project_output(tmp_path):
+    """A .qmd in a website project renders without 'File not found'."""
+    from scholia.server import _render_quarto_sync
+
+    doc = _make_website_project(tmp_path)
+    html, _stderr = _render_quarto_sync(doc, use_defaults=False)
+    # The render succeeded and we read the real output, not an error page.
+    assert "Hello" in html
+    # Assets are routed through /quarto-site/, not left relative.
+    assert "/quarto-site/site_libs/" in html
+    # And we actually read from _site, where quarto wrote it.
+    assert (tmp_path / "_site" / "index.html").exists()
+
+
+@pytest.mark.skipif(not shutil.which("quarto"), reason="quarto not installed")
+def test_render_quarto_sync_reads_nested_project_output(tmp_path):
+    """A nested .qmd reads <output-dir>/<subdir>/<stem>.html."""
+    from scholia.server import _render_quarto_sync
+
+    (tmp_path / "_quarto.yml").write_text("project:\n  type: website\n  output-dir: _site\n")
+    (tmp_path / "chapters").mkdir()
+    doc = tmp_path / "chapters" / "intro.qmd"
+    doc.write_text("---\ntitle: Intro\n---\n# Intro chapter\n")
+    html, _stderr = _render_quarto_sync(doc, use_defaults=False)
+    assert "Intro chapter" in html
+    assert "/quarto-site/site_libs/" in html
+    assert (tmp_path / "_site" / "chapters" / "intro.html").exists()
+
+
+@pytest.mark.asyncio
+async def test_quarto_site_route_serves_output_dir(aiohttp_client, tmp_path):
+    """/quarto-site/<path> serves files from the project output-dir."""
+    (tmp_path / "_quarto.yml").write_text("project:\n  type: website\n  output-dir: _site\n")
+    doc = tmp_path / "index.qmd"
+    doc.write_text("---\ntitle: Q\n---\n# Hi\n")
+    site = tmp_path / "_site" / "site_libs"
+    site.mkdir(parents=True)
+    (site / "app.js").write_text("console.log(1)")
+
+    server = ScholiaServer(str(doc))
+    # Pin the project so the route does not depend on quarto being installed.
+    from scholia.server import QuartoProject
+
+    server._quarto_project_cache[server.doc_path] = QuartoProject(
+        root=tmp_path.resolve(), output_dir=(tmp_path / "_site").resolve()
+    )
+    client = await aiohttp_client(server.app)
+
+    resp = await client.get("/quarto-site/site_libs/app.js")
+    assert resp.status == 200
+    assert "console.log(1)" in await resp.text()
+
+    # Path traversal is rejected.
+    resp = await client.get("/quarto-site/../_quarto.yml")
+    assert resp.status in (403, 404)
+
+    # Missing file is a 404.
+    resp = await client.get("/quarto-site/site_libs/missing.js")
+    assert resp.status == 404
+
+
+def test_detect_quarto_project_returns_none_on_bad_json(tmp_path, monkeypatch):
+    """returncode 0 but non-JSON stdout returns None (json.loads ValueError path)."""
+    import subprocess as sp
+    from scholia import server
+
+    def fake_run(cmd, **kwargs):
+        return sp.CompletedProcess(cmd, 0, stdout="not json", stderr="")
+
+    monkeypatch.setattr(server.shutil, "which", lambda _: "/usr/bin/quarto")
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+
+    assert server._detect_quarto_project(tmp_path / "x.qmd") is None
+
+
+def test_get_quarto_project_caches_detection(tmp_path, monkeypatch):
+    """_get_quarto_project(doc_path) calls _detect_quarto_project only once per path."""
+    from scholia import server
+
+    call_count = 0
+
+    def counting_detect(doc_path):
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    monkeypatch.setattr(server, "_detect_quarto_project", counting_detect)
+
+    doc = tmp_path / "doc.md"
+    doc.write_text("# Hello")
+    srv = ScholiaServer(str(doc))
+
+    # Call _get_quarto_project twice with the same path.
+    result1 = srv._get_quarto_project(doc)
+    result2 = srv._get_quarto_project(doc)
+
+    assert result1 is None
+    assert result2 is None
+    assert call_count == 1, f"_detect_quarto_project called {call_count} times; expected 1"
