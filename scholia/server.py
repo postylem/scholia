@@ -20,6 +20,7 @@ from watchdog.observers import Observer
 from scholia.comments import (
     annotation_path,
     append_comment,
+    append_general_comment,
     append_reply,
     edit_body,
     get_human_username,
@@ -1413,23 +1414,31 @@ class ScholiaServer:
                 return
             doc = self.ws_file.get(ws, self.doc_path)
             if msg_type == "new_comment":
-                source_selector = None
-                if msg.get("source_exact"):
-                    source_selector = {
-                        "exact": msg["source_exact"],
-                        "prefix": msg.get("source_prefix", ""),
-                        "suffix": msg.get("source_suffix", ""),
-                    }
-                append_comment(
-                    doc,
-                    exact=msg["exact"],
-                    prefix=msg.get("prefix", ""),
-                    suffix=msg.get("suffix", ""),
-                    body_text=msg["body"],
-                    creator=msg.get("creator", get_human_username()),
-                    source_selector=source_selector,
-                    via="browser",
-                )
+                if msg.get("scope") == "document":
+                    append_general_comment(
+                        doc,
+                        body_text=msg["body"],
+                        creator=msg.get("creator", get_human_username()),
+                        via="browser",
+                    )
+                else:
+                    source_selector = None
+                    if msg.get("source_exact"):
+                        source_selector = {
+                            "exact": msg["source_exact"],
+                            "prefix": msg.get("source_prefix", ""),
+                            "suffix": msg.get("source_suffix", ""),
+                        }
+                    append_comment(
+                        doc,
+                        exact=msg["exact"],
+                        prefix=msg.get("prefix", ""),
+                        suffix=msg.get("suffix", ""),
+                        body_text=msg["body"],
+                        creator=msg.get("creator", get_human_username()),
+                        source_selector=source_selector,
+                        via="browser",
+                    )
             elif msg_type == "reply":
                 append_reply(
                     doc,

@@ -157,6 +157,16 @@ async def test_run_request_review_missing_doc(tmp_path):
 # ── FastMCP wiring (needs the optional `mcp` package) ────
 
 
+def test_format_payload_general_comment(tmp_doc):
+    from scholia.comments import append_general_comment
+
+    ann = append_general_comment(tmp_doc, body_text="Does the math use standard notation?")
+    out = _format_review_payload(tmp_doc, [ann["id"]], "submit", "")
+    assert "general comment - about the whole document" in out
+    assert "Does the math use standard notation?" in out
+    assert "orphaned" not in out
+
+
 def test_build_server_exposes_request_review():
     pytest.importorskip("mcp")
     from scholia.mcp_server import build_server

@@ -2116,7 +2116,7 @@ body.scholia-dark .scholia-code-copy {
 }
 /* Sent / unavailable state: muted and non-interactive, so it's obvious the
    click registered and the comment was already handed off. */
-/* (disabled "✓ Sent to AI" / banner buttons handled by the unified :disabled rule) */
+/* (disabled "Sent to AI" / banner buttons handled by the unified :disabled rule) */
 /* "Awaiting AI" header badge — a sent comment is pending with the assistant.
    Stands alone (no card border) to avoid clashing with the ai-replied/unread
    left-border states. */
@@ -2129,6 +2129,11 @@ body.scholia-dark .scholia-code-copy {
   padding: 0.05em 0.4em;
   white-space: nowrap;
   font-family: var(--s-comment);
+  animation: scholia-awaiting-pulse 1.6s ease-in-out infinite;
+}
+@keyframes scholia-awaiting-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 /* Always-visible toolbar pill: assistant connection / awaiting state. */
 .scholia-review-pill {
@@ -2157,56 +2162,19 @@ body.scholia-dark .scholia-code-copy {
   0%, 100% { box-shadow: 0 0 0 0 rgba(74, 111, 165, 0.5); }
   50% { box-shadow: 0 0 0 5px rgba(74, 111, 165, 0); }
 }
-/* Disconnected: an icon-only, muted, crossed-out robot — click to copy the
-   request command. Brightens (and un-crosses) on hover to signal it's actionable. */
+/* Disconnected: a muted text chip; click to copy the request command.
+   Brightens on hover to signal it is actionable. */
 .scholia-review-pill.disconnected {
   color: var(--s-text-dim);
   border-color: var(--s-border);
   background: none;
-  padding: 0.15em 0.5em;
-  font-size: 1em;
 }
 .scholia-review-pill.disconnected:hover {
   color: var(--s-accent);
   border-color: var(--s-accent);
 }
-.scholia-robot-off {
-  position: relative;
-  display: inline-block;
-  line-height: 1;
-  filter: grayscale(1);
-  opacity: 0.75;
-}
-.scholia-robot-off::after {
-  content: '';
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  top: 50%;
-  border-top: 1.5px solid var(--s-text-dim);
-  transform: rotate(-20deg);
-}
-.scholia-review-pill.disconnected:hover .scholia-robot-off {
-  filter: none;
-  opacity: 1;
-}
-.scholia-review-pill.disconnected:hover .scholia-robot-off::after {
-  border-top-color: var(--s-accent);
-}
-/* Hover expands the chip to reveal a short label; full details stay in the
-   tooltip. Collapsed to zero width by default (min-width:0 lets it shrink in
-   the inline-flex pill). */
-.scholia-pill-label {
-  min-width: 0;
-  max-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  opacity: 0;
-  font-size: 0.72rem;
-  transition: max-width 0.2s ease, opacity 0.2s ease, margin-left 0.2s ease;
-}
-.scholia-review-pill.disconnected:hover .scholia-pill-label {
-  max-width: 12em;
-  opacity: 1;
-  margin-left: 0.35em;
-}
+
+/* ── General (document-level) comments ─────────────────────────── */
+.scholia-general-bar { padding: 0.4rem 0 0; }
+.scholia-general-add { width: 100%; }
+.scholia-general-label { font-style: italic; color: var(--s-text-dim); }

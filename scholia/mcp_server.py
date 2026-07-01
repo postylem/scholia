@@ -34,7 +34,7 @@ from pathlib import Path
 
 import aiohttp
 
-from scholia.comments import load_comments, short_id_map
+from scholia.comments import is_general, load_comments, short_id_map
 from scholia.context import format_orphan_context, locate_anchor, render_doc_plain
 from scholia.state import get_server
 
@@ -123,24 +123,27 @@ def _format_review_payload(
         selector = target.get("scholia:sourceSelector") or target.get("selector", {})
         short = id_map.get(ann["id"], ann["id"])
         lines.append(short)
-        ctx = locate_anchor(doc_path, selector, rendered_text=rendered)
-        if ctx["found"]:
-            loc = f"{doc_path}:{ctx['line']}:{ctx['col']}"
-            if ctx["end_line"] != ctx["line"]:
-                loc += f"-{ctx['end_line']}:{ctx['end_col']}"
-            elif ctx["end_col"] != ctx["col"] + 1:
-                loc += f"-{ctx['end_col']}"
-            lines.append(f"  {loc}")
-            if ctx.get("heading"):
-                lines.append(f"  in {ctx['heading']}")
-            for cline in ctx.get("context_lines") or []:
-                lines.append(cline)
+        if is_general(ann):
+            lines.append("  (general comment - about the whole document)")
         else:
-            # Orphaned: show the original prefix/exact/suffix the comment was
-            # made against, so the agent still knows what it referred to.
-            lines.append("  (anchor text not found in current document — orphaned)")
-            lines.append("  original context:")
-            lines.extend(format_orphan_context(selector))
+            ctx = locate_anchor(doc_path, selector, rendered_text=rendered)
+            if ctx["found"]:
+                loc = f"{doc_path}:{ctx['line']}:{ctx['col']}"
+                if ctx["end_line"] != ctx["line"]:
+                    loc += f"-{ctx['end_line']}:{ctx['end_col']}"
+                elif ctx["end_col"] != ctx["col"] + 1:
+                    loc += f"-{ctx['end_col']}"
+                lines.append(f"  {loc}")
+                if ctx.get("heading"):
+                    lines.append(f"  in {ctx['heading']}")
+                for cline in ctx.get("context_lines") or []:
+                    lines.append(cline)
+            else:
+                # Orphaned: show the original prefix/exact/suffix the comment was
+                # made against, so the agent still knows what it referred to.
+                lines.append("  (anchor text not found in current document — orphaned)")
+                lines.append("  original context:")
+                lines.extend(format_orphan_context(selector))
         lines.append("")
         for b in ann.get("body", []):
             who = (b.get("creator") or {}).get("name", "?")
@@ -163,7 +166,8 @@ def _format_review_payload(
             "Address each item (edit the document and/or use `scholia reply <doc> <id> "
             '"..." --author-ai-model <model>` and `scholia resolve <doc> <id>`). The '
             "human sees your replies live. When done, call request_review again with the "
-            "same doc to wait for the next round."
+            "same doc to wait for the next round. General comments refer to the whole "
+            "document - read the document as needed and answer as you would in chat."
         )
     return "\n".join(lines)
 

@@ -135,6 +135,54 @@ def _pandoc_plain(text: str) -> str:
     return text
 
 
+def _build_annotation(
+    target: dict, body_text: str, creator_obj: dict, now: str, via: str | None
+) -> dict:
+    return {
+        "@context": "http://www.w3.org/ns/anno.jsonld",
+        "id": f"urn:uuid:{uuid.uuid4()}",
+        "type": "Annotation",
+        "created": now,
+        "creator": creator_obj,
+        "target": target,
+        "body": [
+            {"type": "TextualBody", "value": body_text, "creator": creator_obj, "created": now}
+        ],
+        "scholia:status": "open",
+        **({"scholia:via": via} if via else {}),
+    }
+
+
+def _write_annotation(doc_path: str | Path, ann: dict) -> dict:
+    path = annotation_path(doc_path)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ann) + "\n")
+    return ann
+
+
+def is_general(ann: dict) -> bool:
+    """True if the annotation is an intentionally-unanchored, document-level thread."""
+    return ann.get("target", {}).get("scholia:scope") == "document"
+
+
+def append_general_comment(
+    doc_path: str | Path,
+    body_text: str = "",
+    *,
+    creator: str | None = None,
+    nickname: str | None = None,
+    is_software: bool = False,
+    via: str | None = None,
+) -> dict:
+    """Create a general (document-level) annotation: no selector, scope marker only."""
+    if creator is None:
+        creator = get_human_username()
+    now = datetime.now(timezone.utc).isoformat()
+    creator_obj = _make_creator(creator, nickname, is_software=is_software)
+    ann = _build_annotation({"scholia:scope": "document"}, body_text, creator_obj, now, via)
+    return _write_annotation(doc_path, ann)
+
+
 def append_comment(
     doc_path: str | Path,
     exact: str,
@@ -171,28 +219,8 @@ def append_comment(
             "prefix": source_selector.get("prefix", ""),
             "suffix": source_selector.get("suffix", ""),
         }
-    ann = {
-        "@context": "http://www.w3.org/ns/anno.jsonld",
-        "id": f"urn:uuid:{uuid.uuid4()}",
-        "type": "Annotation",
-        "created": now,
-        "creator": creator_obj,
-        "target": target,
-        "body": [
-            {
-                "type": "TextualBody",
-                "value": body_text,
-                "creator": creator_obj,
-                "created": now,
-            }
-        ],
-        "scholia:status": "open",
-        **({"scholia:via": via} if via else {}),
-    }
-    path = annotation_path(doc_path)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(ann) + "\n")
-    return ann
+    ann = _build_annotation(target, body_text, creator_obj, now, via)
+    return _write_annotation(doc_path, ann)
 
 
 def append_reply(

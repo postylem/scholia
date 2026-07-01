@@ -10,8 +10,10 @@ import pytest
 from scholia.comments import (
     annotation_path,
     append_comment,
+    append_general_comment,
     append_reply,
     edit_body,
+    is_general,
     list_open,
     load_comments,
     resolve,
@@ -151,6 +153,22 @@ def test_short_id_map_stability(tmp_doc):
     mapping = short_id_map(tmp_doc)
     assert a1["id"] in mapping
     assert a2["id"] in mapping
+
+
+def test_append_general_comment_has_scope_marker(tmp_doc):
+    ann = append_general_comment(tmp_doc, body_text="Does the math use standard notation?")
+    assert ann["target"] == {"scholia:scope": "document"}
+    assert "selector" not in ann["target"]
+    assert ann["scholia:status"] == "open"
+    assert ann["body"][0]["value"] == "Does the math use standard notation?"
+
+
+def test_is_general_distinguishes_from_anchored(tmp_doc):
+    g = append_general_comment(tmp_doc, body_text="whole-doc question")
+    a = append_comment(tmp_doc, exact="Some text", body_text="anchored")
+    assert is_general(g) is True
+    assert is_general(a) is False
+    assert is_general({"target": {}}) is False
 
 
 # ── Read/unread state ──────────────────────────────────
@@ -511,3 +529,29 @@ def test_cli_export_pdf_no_latex(tmp_doc, tmp_path):
     code, _, stderr = _run_cli("export", str(tmp_doc), "--to", "pdf", "-o", str(out))
     assert code == 1
     assert "latex" in stderr.lower() or "pdf" in stderr.lower()
+
+
+def test_cli_comment_general(tmp_doc):
+    from scholia.comments import is_general, load_comments
+
+    code, out, _ = _run_cli("comment", str(tmp_doc), "--general", "Does notation hold?")
+    assert code == 0 and "Comment created" in out
+    comments = load_comments(tmp_doc)
+    assert len(comments) == 1 and is_general(comments[0])
+    assert comments[0]["body"][0]["value"] == "Does notation hold?"
+
+
+def test_cli_comment_general_rejects_anchor(tmp_doc):
+    code, _, err = _run_cli("comment", str(tmp_doc), "--general", "anchor", "body")
+    assert code != 0
+    assert "general" in err.lower()
+
+
+def test_cli_list_groups_general_separately(tmp_doc):
+    _run_cli("comment", str(tmp_doc), "--general", "About the whole doc")
+    _run_cli("comment", str(tmp_doc), "Some text", "Anchored one")
+    code, out, _ = _run_cli("list", str(tmp_doc))
+    assert code == 0
+    assert "general (document-level)" in out
+    assert "About the whole doc" in out
+    assert "orphaned" not in out  # the general thread must NOT be called orphaned
