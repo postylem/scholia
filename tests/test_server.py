@@ -539,6 +539,22 @@ async def test_ws_mark_unread(client, tmp_doc):
     assert state[ann["id"]]["lastReadAt"] is None
 
 
+@pytest.mark.asyncio
+async def test_ws_new_general_comment(client, tmp_doc):
+    from scholia.comments import is_general, load_comments
+
+    ws = await client.ws_connect("/ws")
+    await ws.send_json({"type": "watch", "file": str(tmp_doc.resolve())})
+    await ws.send_json({"type": "new_comment", "scope": "document", "body": "Whole-doc question?"})
+    await asyncio.sleep(0.1)
+    await ws.close()
+    comments = load_comments(tmp_doc)
+    general = [c for c in comments if is_general(c)]
+    assert len(general) == 1
+    assert general[0]["body"][0]["value"] == "Whole-doc question?"
+    assert "selector" not in general[0]["target"]
+
+
 # ── Static analysis ──────────────────────────────────
 
 

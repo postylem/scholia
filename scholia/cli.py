@@ -13,6 +13,7 @@ from scholia.comments import (
     append_comment,
     append_reply,
     edit_body,
+    is_general,
     list_open,
     load_comments,
     resolve,
@@ -125,7 +126,9 @@ def _print_annotation(
         return
 
     # Context lookup (for FORMAT_CONTEXT)
-    if fmt == FORMAT_CONTEXT and doc_path:
+    if is_general(ann):
+        print("  (general comment - about the whole document)")
+    elif fmt == FORMAT_CONTEXT and doc_path:
         if ctx is None:
             ctx = locate_anchor(
                 doc_path,
@@ -436,9 +439,12 @@ def cmd_list(args):
 
     if args.fmt == FORMAT_CONTEXT and args.doc:
         rendered_text = render_doc_plain(args.doc)
+        general = [a for a in items if is_general(a)]
         anchored = []
         orphaned = []
         for ann in items:
+            if is_general(ann):
+                continue
             selector = _cli_selector(ann)
             ctx = locate_anchor(
                 args.doc,
@@ -452,6 +458,16 @@ def cmd_list(args):
             else:
                 orphaned.append(ann)
         anchored.sort(key=lambda pair: pair[1]["line"])
+        if general:
+            print(f"── general (document-level) ({len(general)}) ──\n")
+            for ann in general:
+                _print_annotation(
+                    ann,
+                    fmt=args.fmt,
+                    doc_path=args.doc,
+                    short_id=id_map.get(ann["id"]),
+                    show_status=show_status,
+                )
         for ann, ctx in anchored:
             _print_annotation(
                 ann,
@@ -561,19 +577,41 @@ def _parse_line_col_range(spec: str, text: str) -> tuple[int, int] | None:
 
 
 def cmd_comment(args):
-    from scholia.comments import _pandoc_plain
+    from scholia.comments import _pandoc_plain, append_general_comment
     from scholia.context import generate_selector_context, render_doc_plain
 
     creator, nickname, is_software = _resolve_author(args)
+
+    if args.general:
+        if len(args.texts) != 1:
+            print("Error: --general takes only the comment text (no anchor)", file=sys.stderr)
+            sys.exit(1)
+        ann = append_general_comment(
+            args.doc,
+            body_text=args.texts[0],
+            creator=creator,
+            nickname=nickname,
+            is_software=is_software,
+            via="cli",
+        )
+        if not args.quiet:
+            print(f"Comment created: {ann['id']}")
+        return
+
+    if len(args.texts) != 2:
+        print("Error: comment requires '<anchor>' '<text>'", file=sys.stderr)
+        sys.exit(1)
+    anchor, text = args.texts
+
     doc_text = Path(args.doc).read_text(encoding="utf-8")
 
     # Parse anchor: either line:col-line:col range or exact text
-    range_result = _parse_line_col_range(args.anchor, doc_text)
+    range_result = _parse_line_col_range(anchor, doc_text)
     if range_result:
         pos, end = range_result
         raw_exact = doc_text[pos:end]
     else:
-        raw_exact = args.anchor
+        raw_exact = anchor
         pos = doc_text.find(raw_exact)
         if pos == -1:
             print("Error: anchor text not found in document", file=sys.stderr)
@@ -602,7 +640,7 @@ def cmd_comment(args):
         exact=browser_exact,
         prefix=browser_prefix,
         suffix=browser_suffix,
-        body_text=args.text,
+        body_text=text,
         creator=creator,
         nickname=nickname,
         is_software=is_software,
@@ -980,10 +1018,15 @@ def main():
     )
     p_comment.add_argument("doc", help="Markdown document path")
     p_comment.add_argument(
-        "anchor",
-        help="Exact text, or line:col-line:col range (1-based) to anchor to",
+        "--general",
+        action="store_true",
+        help="Make a general comment about the whole document (no text anchor)",
     )
-    p_comment.add_argument("text", help="Comment text")
+    p_comment.add_argument(
+        "texts",
+        nargs="+",
+        help="With an anchor: '<anchor>' '<text>'. With --general: just '<text>'.",
+    )
     p_comment.add_argument(
         "-q", "--quiet", action="store_true", help="Suppress confirmation output"
     )
