@@ -125,6 +125,10 @@
 
   var highlights = new Map();   // annotation id → [mark elements]
   var orphanIds = new Set();
+
+  function isGeneral(ann) {
+    return !!(ann.target && ann.target['scholia:scope'] === 'document');
+  }
   var showResolved = false;
   var showRead = true;
   var activeReviews = [];       // [{session_id,status,instruction}] — AI "send to review" sessions
@@ -460,7 +464,7 @@
   function copyConnectPrompt() {
     var text = connectPrompt();
     var confirmCopied = function () {
-      reviewPill.textContent = '✓ copied, paste to your AI';
+      reviewPill.textContent = 'copied, paste to your AI';
       setTimeout(updateReviewPill, 2500);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -496,8 +500,7 @@
     reviewPill.className = 'scholia-review-pill visible';
     if (!activeReviews.length) {
       reviewPill.classList.add('disconnected');
-      reviewPill.innerHTML = '<span class="scholia-robot-off">🤖</span>'
-        + '<span class="scholia-pill-label">connect AI session</span>';
+      reviewPill.textContent = 'connect AI session';
       reviewPill.title = 'No AI assistant connected. Click to copy a prompt that connects an '
         + 'AI to this document and has it wait for you. It will not review anything until '
         + 'you send comments. Works after a Cancel, or for a scholia you opened yourself.';
@@ -506,7 +509,7 @@
     // "awaiting" = comment(s) sent but not yet answered by the assistant.
     var awaiting = aiSentIds.size > 0;
     if (awaiting) reviewPill.classList.add('awaiting');
-    reviewPill.textContent = awaiting ? '🤖 AI working…' : '🤖 AI connected';
+    reviewPill.textContent = awaiting ? 'AI working…' : 'AI connected';
     reviewPill.title = awaiting
       ? aiSentIds.size + ' comment(s) sent, waiting for the assistant to respond'
       : 'An AI assistant is connected and waiting for your review';
@@ -2033,8 +2036,8 @@
     var title = document.createElement('div');
     title.className = 'scholia-review-banner-title';
     title.textContent = awaiting
-      ? '🤖 Awaiting the assistant…'
-      : '🤖 Assistant connected, ready for your review';
+      ? 'Awaiting the assistant…'
+      : 'Assistant connected, ready for your review';
     bar.appendChild(title);
 
     if (primary && primary.instruction) {
@@ -2057,7 +2060,7 @@
       sendBtn.className = 'scholia-btn-primary';
       sendBtn.textContent = unsent.length
         ? ('Send ' + unsent.length + ' comment' + (unsent.length === 1 ? '' : 's') + ' to AI')
-        : '✓ All sent';
+        : 'All sent';
       sendBtn.title = 'Send open comments not yet sent to the assistant';
       sendBtn.disabled = unsent.length === 0;
       sendBtn.addEventListener('click', function () { submitReview(unsentOpenIds(), false); });
@@ -2072,8 +2075,8 @@
 
       var cancelBtn = document.createElement('button');
       cancelBtn.className = 'scholia-btn-ghost';
-      cancelBtn.textContent = 'Cancel';
-      cancelBtn.title = 'Stop the assistant waiting without sending anything';
+      cancelBtn.textContent = 'Disconnect AI';
+      cancelBtn.title = 'Disconnect the waiting assistant (nothing is sent)';
       cancelBtn.style.marginLeft = 'auto';
       cancelBtn.addEventListener('click', function () {
         var sid = primaryReviewSession();
@@ -2110,7 +2113,20 @@
       sidebarEl.appendChild(buildReviewBanner());
     }
 
-    // Filter comments
+    // "+ General comment" button — start an unanchored, document-level thread.
+    var genBar = document.createElement('div');
+    genBar.className = 'scholia-general-bar';
+    var genBtn = document.createElement('button');
+    genBtn.className = 'scholia-btn-ghost scholia-general-add';
+    genBtn.textContent = '+ General comment';
+    genBtn.title = 'Comment on the whole document (no text selection)';
+    genBtn.addEventListener('click', showGeneralCommentForm);
+    genBar.appendChild(genBtn);
+    sidebarEl.appendChild(genBar);
+
+    // Filter comments. General (document-level) threads are included here and
+    // positioned by positionCards as if anchored to the top of the document, so
+    // they push the anchored cards down instead of living in a separate group.
     var filtered = [];
     for (var i = 0; i < comments.length; i++) {
       var ann = comments[i];
@@ -2121,17 +2137,20 @@
     }
 
     if (filtered.length === 0) {
-      var empty = document.createElement('div');
-      empty.className = 'scholia-empty';
-      var reason = !showResolved && !showRead
-        ? 'No unread open comments.'
-        : !showResolved
-          ? 'No open comments.'
-          : !showRead
-            ? 'No unresolved unread comments.'
-            : 'No comments yet.';
-      empty.textContent = reason + ' Select text to add one.';
-      sidebarEl.appendChild(empty);
+      var emptyMsg;
+      if (!showResolved && !showRead) {
+        emptyMsg = 'No unread open comments.';
+      } else if (!showResolved) {
+        emptyMsg = 'No open comments.';
+      } else if (!showRead) {
+        emptyMsg = 'No unresolved unread comments.';
+      } else {
+        emptyMsg = 'No comments yet.';
+      }
+      var emptyEl = document.createElement('div');
+      emptyEl.className = 'scholia-empty';
+      emptyEl.textContent = emptyMsg + ' Select text to add one.';
+      sidebarEl.appendChild(emptyEl);
       return;
     }
 
@@ -2144,6 +2163,7 @@
     var card = document.createElement('div');
     card.className = 'scholia-card';
     card.dataset.annotationId = ann.id;
+    if (isGeneral(ann)) card.classList.add('scholia-general-card');
     var bodies = ann.body || [];
 
     var status = ann['scholia:status'] || 'open';
@@ -2182,38 +2202,45 @@
     var header = document.createElement('div');
     header.className = 'scholia-card-header';
 
-    var anchorText = (ann.target && ann.target['scholia:sourceSelector'] && ann.target['scholia:sourceSelector'].exact)
-      || (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
-    var anchorSpan = document.createElement('span');
-    anchorSpan.className = 'scholia-anchor-text';
-    var openQ = document.createElement('span');
-    openQ.className = 'scholia-anchor-quote';
-    openQ.textContent = '\u201c';
-    var closeQ = document.createElement('span');
-    closeQ.className = 'scholia-anchor-quote';
-    closeQ.textContent = (anchorText.length > 50 ? '\u2026' : '') + '\u201d';
-    anchorSpan.appendChild(openQ);
-    anchorSpan.appendChild(document.createTextNode(anchorText.slice(0, 50)));
-    anchorSpan.appendChild(closeQ);
-    if (anchorText.length > 50) anchorSpan.title = anchorText;
-    header.appendChild(anchorSpan);
+    if (isGeneral(ann)) {
+      var genLabel = document.createElement('span');
+      genLabel.className = 'scholia-anchor-text scholia-general-label';
+      genLabel.textContent = 'Whole document';
+      header.appendChild(genLabel);
+    } else {
+      var anchorText = (ann.target && ann.target['scholia:sourceSelector'] && ann.target['scholia:sourceSelector'].exact)
+        || (ann.target && ann.target.selector && ann.target.selector.exact) || '(no anchor)';
+      var anchorSpan = document.createElement('span');
+      anchorSpan.className = 'scholia-anchor-text';
+      var openQ = document.createElement('span');
+      openQ.className = 'scholia-anchor-quote';
+      openQ.textContent = '\u201c';
+      var closeQ = document.createElement('span');
+      closeQ.className = 'scholia-anchor-quote';
+      closeQ.textContent = (anchorText.length > 50 ? '\u2026' : '') + '\u201d';
+      anchorSpan.appendChild(openQ);
+      anchorSpan.appendChild(document.createTextNode(anchorText.slice(0, 50)));
+      anchorSpan.appendChild(closeQ);
+      if (anchorText.length > 50) anchorSpan.title = anchorText;
+      header.appendChild(anchorSpan);
 
-    // Orphan icon
-    if (orphanIds.has(ann.id)) {
-      var orphanIcon = document.createElement('span');
-      orphanIcon.className = 'scholia-orphan-icon';
-      orphanIcon.textContent = '?';
-      var orphanTip = document.createElement('div');
-      orphanTip.className = 'scholia-orphan-tooltip';
-      orphanTip.textContent = 'Anchor text not found. Click to re-anchor.';
-      orphanIcon.appendChild(orphanTip);
-      orphanIcon.addEventListener('click', (function (theAnnId) {
-        return function (e) {
-          e.stopPropagation();
-          startReanchor(theAnnId);
-        };
-      })(ann.id));
-      header.appendChild(orphanIcon);
+      // Orphan icon
+      if (orphanIds.has(ann.id)) {
+        var orphanIcon = document.createElement('span');
+        orphanIcon.className = 'scholia-orphan-icon';
+        orphanIcon.textContent = '?';
+        var orphanTip = document.createElement('div');
+        orphanTip.className = 'scholia-orphan-tooltip';
+        orphanTip.textContent = 'Anchor text not found. Click to re-anchor.';
+        orphanIcon.appendChild(orphanTip);
+        orphanIcon.addEventListener('click', (function (theAnnId) {
+          return function (e) {
+            e.stopPropagation();
+            startReanchor(theAnnId);
+          };
+        })(ann.id));
+        header.appendChild(orphanIcon);
+      }
     }
 
     // Resolved label
@@ -2230,7 +2257,7 @@
       card.classList.add('scholia-awaiting-ai');
       var awaitBadge = document.createElement('span');
       awaitBadge.className = 'scholia-awaiting-badge';
-      awaitBadge.textContent = '⏳ awaiting AI';
+      awaitBadge.textContent = 'awaiting AI';
       awaitBadge.title = 'Sent to the AI assistant, waiting for a reply';
       header.appendChild(awaitBadge);
     }
@@ -2555,7 +2582,7 @@
       var alreadySent = aiSentIds.has(ann.id);
       var sendAiBtn = document.createElement('button');
       sendAiBtn.className = 'scholia-btn-ghost scholia-send-ai' + (alreadySent ? ' scholia-sent-ai' : '');
-      sendAiBtn.textContent = alreadySent ? '✓ Sent to AI' : 'Send to AI';
+      sendAiBtn.textContent = alreadySent ? 'Sent to AI' : 'Send to AI';
       sendAiBtn.disabled = alreadySent;
       sendAiBtn.title = alreadySent
         ? 'Already sent to the assistant this round'
@@ -2566,7 +2593,7 @@
             e.stopPropagation();
             // Instant feedback now; the durable aiSentIds keeps it through the
             // re-render that the server's review_state broadcast triggers.
-            theBtn.textContent = '✓ Sent to AI';
+            theBtn.textContent = 'Sent to AI';
             theBtn.disabled = true;
             theBtn.classList.add('scholia-sent-ai');
             submitReview([theAnnId], false);
@@ -2946,6 +2973,8 @@
       if (!showResolved && status === 'resolved') continue;
       if (!showRead && !isUnread(ann)) continue;
 
+      if (isGeneral(ann)) continue;  // no selector to anchor; not orphaned
+
       var selector = ann.target && ann.target.selector;
       var srcSel = ann.target && ann.target['scholia:sourceSelector'];
       var via = ann['scholia:via'];
@@ -3164,8 +3193,15 @@
     var sidebarTop = sidebarEl.getBoundingClientRect().top;
 
     // New-comment form floats above existing cards; don't reserve space for it.
-    var minY = parseFloat(getComputedStyle(sidebarEl).paddingTop) || 0;
-    minY += 4;
+    // Reserve space for the static-flow chrome (review banner + the
+    // "+ General comment" button) above the absolutely-positioned cards. The
+    // button's measured bottom accounts for the banner height and every
+    // inter-element margin in one shot, in the same coordinate space as the
+    // cards' absolute `top`.
+    var genBarEl = sidebarEl.querySelector('.scholia-general-bar');
+    var minY = genBarEl
+      ? genBarEl.offsetTop + genBarEl.offsetHeight + 4
+      : (parseFloat(getComputedStyle(sidebarEl).paddingTop) || 0) + 4;
 
     var positioned = [];
     var orphans = [];
@@ -3174,6 +3210,19 @@
       var card = cards[i];
       if (card.id === 'scholia-new-comment') continue;
       var annId = card.dataset.annotationId;
+
+      // General (document-level) cards anchor to the top of the document, so
+      // they sort first and push the anchored cards below them.
+      if (card.classList.contains('scholia-general-card')) {
+        var gCreated = '';
+        for (var gci = 0; gci < comments.length; gci++) {
+          if (comments[gci].id === annId) { gCreated = comments[gci].created || ''; break; }
+        }
+        positioned.push({ card: card, annId: annId, anchorY: minY, isGen: true,
+                          startMark: null, endMark: null, created: gCreated });
+        continue;
+      }
+
       var marks = highlights.get(annId);
 
       if (!marks || marks.length === 0 || orphanIds.has(annId)) {
@@ -3193,6 +3242,10 @@
     }
 
     positioned.sort(function (a, b) {
+      // General (top-anchored) cards sort before all anchored cards.
+      if (a.isGen && !b.isGen) return -1;
+      if (b.isGen && !a.isGen) return 1;
+      if (a.isGen && b.isGen) return a.created < b.created ? -1 : a.created > b.created ? 1 : 0;
       // Primary: document order of anchor start (earlier in text first)
       var cmp = a.startMark.compareDocumentPosition(b.startMark);
       if (cmp & Node.DOCUMENT_POSITION_FOLLOWING) return -1;  // a is before b
@@ -3245,6 +3298,9 @@
       var shouldExpand;
       if (override !== undefined) {
         shouldExpand = override;
+      } else if (entry.isGen) {
+        // General cards push everything below them down, so expanding is always safe.
+        shouldExpand = true;
       } else {
         // Auto-expand unless it would push next card past its anchor
         var nextAnchorY = (p + 1 < positioned.length) ? positioned[p + 1].anchorY : Infinity;
@@ -3571,6 +3627,61 @@
         highlights.set('__pending__', marks);
       }
     });
+  }
+
+  function showGeneralCommentForm() {
+    dismissCommentPrompt();
+    var form = document.createElement('div');
+    form.id = 'scholia-new-comment';
+    form.className = 'scholia-card scholia-new-comment-floating';
+    form.style.position = 'relative';
+    form.style.margin = '0 0.75rem 0.5rem';
+
+    var header = document.createElement('div');
+    header.className = 'scholia-card-header';
+    var label = document.createElement('span');
+    label.className = 'scholia-anchor-text scholia-general-label';
+    label.textContent = 'Whole document';
+    header.appendChild(label);
+    form.appendChild(header);
+
+    var replyArea = document.createElement('div');
+    replyArea.className = 'scholia-reply-input';
+    var textarea = document.createElement('textarea');
+    textarea.placeholder = 'Comment on the whole document…';
+    textarea.rows = 1;
+    autoGrow(textarea);
+    replyArea.appendChild(textarea);
+
+    var actions = document.createElement('div');
+    actions.className = 'scholia-reply-buttons';
+    var submitBtn = document.createElement('button');
+    submitBtn.className = 'scholia-btn-primary';
+    submitBtn.textContent = 'Comment';
+    submitBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var text = textarea.value.trim();
+      if (!text) return;
+      wsSend({ type: 'new_comment', scope: 'document', body: text });
+      dismissCommentPrompt();
+    });
+    actions.appendChild(submitBtn);
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'scholia-btn-ghost';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.marginLeft = 'auto';
+    cancelBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      dismissCommentPrompt();
+    });
+    actions.appendChild(cancelBtn);
+    replyArea.appendChild(actions);
+    form.appendChild(replyArea);
+
+    // Insert at the very top of the sidebar.
+    sidebarEl.insertBefore(form, sidebarEl.firstChild);
+    pendingForm = form;
+    textarea.focus();
   }
 
   function dismissCommentPrompt() {
